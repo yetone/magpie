@@ -107,13 +107,18 @@
     for (var i = 0; i < threads.length; i++) if (threads[i].id === id) return threads[i];
     return null;
   }
+  // loading: the list on its way, so a thread the page has just heard of
+  // is waited for, not called missing
+  var loading = null;
   function load() {
-    return api("list").then(function (j) {
+    var p = api("list").then(function (j) {
       threads = j.threads || [];
       agent = j.agent || { can: "no_session" };
       me = j.me || "";
       render();
-    }, function () {});
+    }, function () {}).then(function () { if (loading === p) loading = null; });
+    loading = p;
+    return p;
   }
   function whoName(c) {
     if (c.agent) return agent.id === c.agent && agent.name ? agent.name : c.agent;
@@ -406,7 +411,9 @@
     var c = composerBox({
       placeholder: t("Add a comment"), submitWord: t("Comment"), title: true,
       onEsc: function () { closePop(); },
-      submit: function (text, toAgent) { return startThread(o, text, toAgent).then(function () { closePop(); }); }
+      // closed once the thread is made, not once the list is back: the
+      // page may ask again at once
+      submit: function (text, toAgent) { return startThread(o, text, toAgent, function () { if (pop && pop.node === node) closePop(); }); }
     });
     node.appendChild(c.node);
     close.addEventListener("click", closePop);
@@ -417,11 +424,14 @@
     if (o.send && c.send) c.send.focus();
     return true;
   }
-  function startThread(o, text, toAgent) {
+  // made: called once the thread is, after o.done (a composer closed
+  // first would tell the page it wasn't sent)
+  function startThread(o, text, toAgent, made) {
     var body = { anchor: o.anchor || null, label: o.label || "", quote: o.quote || "", text: text, version: latest };
     var go = function () {
       return api("create", Object.assign({ send: toAgent }, body)).then(function (j) {
         if (o.done) o.done(j, toAgent);
+        if (made) made();
         return load();
       });
     };
@@ -1222,6 +1232,9 @@
       submit: function (text, toAgent) {
         var go = function (send) {
           return api("reply", { thread: id, text: text, send: send }).then(function (j) {
+            // posted: the box empties now, not once the list is back, so
+            // the page's next ask finds nothing unsaved
+            c.set("");
             if (prefill) { var p = prefill; prefill = null; p.sent(j, send); }
             return load();
           });
@@ -1303,7 +1316,7 @@
   }
 
   // the page's sendToClaude: the composer, written, for the viewer to send
-  function sendFromPage(d) {
+  function sendFromPage(d, waited) {
     var answer = function (m) { m.type = "sent"; m.req = d.req; toPage(m); };
     if (agent.can !== "available") { answer({ error: "claude_unavailable" }); return; }
     var done = false;
@@ -1314,7 +1327,11 @@
       onClose: function () { if (!done) answer({ error: "consent_required" }); }
     };
     if (d.threadId) {
-      if (!byId(d.threadId)) { answer({ error: "not_found" }); return; }
+      if (!byId(d.threadId)) {
+        if (loading && !waited) loading.then(function () { sendFromPage(d, true); });
+        else answer({ error: "not_found" });
+        return;
+      }
       if (pop && pop.dirty && pop.dirty()) { answer({ error: "unavailable" }); return; }
       if (pop && pop.thread === d.threadId) closePop();
       openCard(d.threadId, null, {

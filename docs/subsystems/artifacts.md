@@ -459,7 +459,10 @@ The store and API:
   posted as a plain comment, it rejects `consent_required`. When the
   viewer sends, the page's `onSendToClaude` hears it first and may answer
   `{handled: true, reply}`: the comment is posted plain and the reply
-  shown.
+  shown. It resolves once the comment is posted, the composer already
+  closed (a reply's box emptied), not once the list is back, so the page
+  may ask again at once; a thread the shell doesn't list yet is waited
+  for while a list is on its way (`loading`), then `not_found`.
 
 Sending to the agent:
 

@@ -72,6 +72,8 @@ document.getElementById("own").addEventListener("click", () => out.clicks++);
 // a fake magpie: the shell, the page, the comments API and the shell's stream
 async function fakeMagpie(t, lang) {
   const threads = [], calls = [], streams = new Set(), dests = [];
+  // slow.ms holds each list's answer back, as a busy magpie does
+  const slow = { ms: 0 };
   let n = 0;
   const now = () => new Date().toISOString();
   const find = (id) => threads.find((th) => th.id === id);
@@ -115,7 +117,10 @@ async function fakeMagpie(t, lang) {
         const comment = (text, sent) => ({ id: "c" + ++n, author, text, at: now(), sent: !!sent });
         const th = find(c.thread);
         switch (c.op) {
-          case "list": return ok({ threads, version: 1, agent, me: author });
+          case "list": {
+            const v = { threads, version: 1, agent, me: author };
+            return slow.ms ? setTimeout(() => ok(v), slow.ms) : ok(v);
+          }
           case "can": return ok({ can: "available" });
           case "create": {
             const t2 = { id: "t" + ++n, anchor: c.anchor || undefined, label: c.label, quote: c.quote, version: c.version, author, created: now(), comments: [comment(c.text, c.send)] };
@@ -153,7 +158,7 @@ async function fakeMagpie(t, lang) {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   return {
     base: `http://127.0.0.1:${server.address().port}`,
-    threads, calls, dests,
+    threads, calls, dests, slow,
     // the agent's answer, as artifacts_send posts it
     finish(id, text) {
       const th = find(id);
@@ -242,7 +247,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     // Escape leaves comment mode, and the page's clicks are its own again
     await page.keyboard.press("Escape");
-    assert.equal(await mode.getAttribute("aria-pressed"), "false");
+    // an Escape in the frame reaches the shell by postMessage
+    await page.waitForFunction(() => document.querySelector('button[aria-label="Add comments"]').getAttribute("aria-pressed") === "false");
     // (its corner: the pin's tip marks the middle, where the comment was made)
     await frame.locator("#own").click({ position: { x: 3, y: 3 } });
     assert.equal(await frame.evaluate(() => window.out.clicks), 1);
@@ -386,6 +392,42 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
     await page.waitForTimeout(500);
     assert.equal(await page.locator(".pop.in").count(), 0, "a nested frame opened no composer");
+    assert.deepEqual(errors, []);
+  });
+
+  test(`the page's next sendToClaude opens at once, while the list is still loading (${engine})`, async (t) => {
+    const { site, page, frame, errors } = await open(t, engine);
+    const send = () => pop(page).getByRole("button", { name: "Send to Claude Code" });
+    const ask = (text, threadId) => frame.evaluate(([text, threadId]) => {
+      window.sent = (threadId ? Promise.resolve({ threadId }) : window.cm.anchorFor(document.getElementById("top")).then((anchor) => ({ anchor })))
+        .then((o) => window.cm.sendToClaude(Object.assign(o, { text }))).then((r) => r, (e) => ({ code: e.code }));
+    }, [text, threadId]);
+    // a composer holding text, open now
+    const holds = (text, timeout) => page.waitForFunction((text) => [...document.querySelectorAll(".pop.in textarea")].some((ta) => ta.value === text), text, { timeout: timeout || 1500 });
+    site.slow.ms = 4000;
+
+    await ask("First");
+    await holds("First");
+    await send().click();
+    const first = await frame.evaluate(() => window.sent);
+    assert.match(first.threadId, /^t/);
+    // sent, its list not back yet: the next one is asked, not refused
+    await ask("Second");
+    await holds("Second");
+    await pop(page).getByRole("button", { name: "Close" }).click();
+    assert.deepEqual(await frame.evaluate(() => window.sent), { code: "consent_required" });
+
+    // a reply in the thread the shell doesn't know yet: it waits for the
+    // list, then asks; then a new one, the reply's list not back
+    await ask("Again", first.threadId);
+    await holds("Again", 10000);
+    await send().click();
+    assert.ok((await frame.evaluate(() => window.sent)).commentId);
+    await ask("Third");
+    await holds("Third");
+    await pop(page).getByRole("button", { name: "Close" }).click();
+    assert.deepEqual(await frame.evaluate(() => window.sent), { code: "consent_required" });
+    site.slow.ms = 0;
     assert.deepEqual(errors, []);
   });
 
