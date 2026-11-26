@@ -30,7 +30,7 @@ func ToldRouting(cs []SubscriptionQuota) []SubscriptionQuota {
 		if len(q.Windows) > 0 {
 			q.Routing = make([]lastWindow, len(q.Windows))
 			for j, w := range q.Windows {
-				q.Routing[j] = lastWindow{w.Span, w.Model, w.Aside}
+				q.Routing[j] = lastWindow{Span: w.Span, Model: w.Model, Aside: w.Aside}
 			}
 		}
 		out[i] = q

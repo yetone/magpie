@@ -35,6 +35,13 @@ password, escaped and non-UTF-8 credentials, a login saved in the address
 before loading into the fields, masked addresses/status, clearing
 authentication, Tab and Escape, mode switches, and narrow windows in all
 five languages on Chromium and WebKit.
+
+`agy-usage-reason.test.cjs` checks that agy-cli's own reasons for no quota
+reading this time (sign-in due to be renewed, still reading, too slow, no
+agy, too old) are said in the user's words on the account's row, the Usage
+card and the tray card, and beside a kept reading's "As of" line, in all five
+languages on Chromium and WebKit. The API is faked.
+
 ## Installed desktop fonts
 
 `fonts.test.cjs` exercises the interface/code font controls with installed

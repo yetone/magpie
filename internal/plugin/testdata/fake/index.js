@@ -341,6 +341,9 @@ export const FakePlugin = async ({ client }) => ({
       if (process.env.FAKE_WINDOWS) {
         const fs = await import("node:fs")
         const ws = JSON.parse(fs.readFileSync(process.env.FAKE_WINDOWS, "utf8"))[a.accountId]
+        // a string: why no reading was made this time, as agy-cli says
+        // it (its sign-in due to be renewed, agy still reading)
+        if (typeof ws === "string") return { windows: [], error: ws, signIn: "kept" }
         if (ws) return { plan: "Fake Pro", windows: ws, user: iam }
       }
       const full = a.accountId === "full@fake"

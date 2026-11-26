@@ -158,6 +158,10 @@ type QuotaWindow struct {
 	HeldBy string `json:"heldBy,omitempty"`
 	// matches further scopes pools whose membership isn't one model word.
 	matches func(string) bool
+	// models and notModels are the lists a plugin's window named matches
+	// by (quotaOfPlugin), so the reading is kept on disk with them
+	// (keepLast) and matches made again from them when it is read back.
+	models, notModels []string
 	// partial is set on the windows of a reading that may leave some out:
 	// a Claude account only heard of as Claude Code answered (its
 	// rate_limit_event names one window at a time), never read whole by

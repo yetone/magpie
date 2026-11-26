@@ -37,6 +37,10 @@ type lastWindow struct {
 	Span  time.Duration `json:"span,omitempty"`
 	Model string        `json:"model,omitempty"`
 	Aside bool          `json:"aside,omitempty"`
+	// the models a plugin's window counts, or those it doesn't: agy-cli's
+	// pools ("Claude & GPT"), so one is kept and read back as it was told
+	Models    []string `json:"models,omitempty"`
+	NotModels []string `json:"notModels,omitempty"`
 }
 
 func lastQuotasPath() string { return filepath.Join(filepath.Dir(Path()), "quotas.json") }
@@ -45,8 +49,13 @@ func lastQuotasPath() string { return filepath.Join(filepath.Dir(Path()), "quota
 // rate limiting, failing or out of reach, or a Claude account's usage not
 // read this time (errClaudeNotAsked, errClaudeSaved), or one a setup-token
 // can't read at all (errClaudeSetupToken). A sign-in gone bad
-// is not one.
-var passing = lazyre.New(`(?i)not read yet|a setup-token can't read|doesn't read a saved account|rate.?limit|too many requests|429|internal server error|bad gateway|service unavailable|gateway timeout|deadline exceeded|timeout|timed out|connection (refused|reset)|no such host|network is unreachable|EOF|asks again|fetch failed|unable to connect|ECONN[A-Z]+|ENOTFOUND|EAI_AGAIN|socket hang up|HTTP 5\d\d`)
+// is not one. agy-cli reads its quota through agy alone and says three of
+// its own: agy isn't run while its sign-in is due to be renewed (an hour
+// after agy last ran), agy is still reading past magpie's wait, and agy's
+// read ran out of time and is asked again (usage.mjs's DUE_FOR_RENEWAL,
+// STILL_READING and its timeouts). Its quota showed nothing at all an
+// hour after a chat (punk2sang on X).
+var passing = lazyre.New(`(?i)is due to be renewed|is still reading|asked again in a minute|not read yet|a setup-token can't read|doesn't read a saved account|rate.?limit|too many requests|429|internal server error|bad gateway|service unavailable|gateway timeout|deadline exceeded|timeout|timed out|connection (refused|reset)|no such host|network is unreachable|EOF|asks again|fetch failed|unable to connect|ECONN[A-Z]+|ENOTFOUND|EAI_AGAIN|socket hang up|HTTP 5\d\d`)
 
 // keyTag names a key's card among the last readings, by what it is (a
 // plan's windows, a balance) and a digest of the key, never the key: a
@@ -80,10 +89,10 @@ func keepLast(q SubscriptionQuota, user string) SubscriptionQuota {
 		}
 		e := lastQuota{At: time.Now(), Q: q}
 		for _, w := range q.Windows {
-			if w.matches != nil {
+			if w.matches != nil && w.models == nil && w.notModels == nil {
 				return q // a pool that can't be written down isn't kept
 			}
-			e.Spans = append(e.Spans, lastWindow{w.Span, w.Model, w.Aside})
+			e.Spans = append(e.Spans, lastWindow{w.Span, w.Model, w.Aside, w.models, w.notModels})
 		}
 		e.Q.Error = ""
 		e.Q.AsOf = nil
@@ -201,7 +210,9 @@ func (c *lastQuotasT) reported(key string) (SubscriptionQuota, bool) {
 	copy(out.Windows, e.Q.Windows)
 	for i := range out.Windows {
 		if i < len(e.Spans) {
-			out.Windows[i].Span, out.Windows[i].Model, out.Windows[i].Aside = e.Spans[i].Span, e.Spans[i].Model, e.Spans[i].Aside
+			sp := e.Spans[i]
+			out.Windows[i].Span, out.Windows[i].Model, out.Windows[i].Aside = sp.Span, sp.Model, sp.Aside
+			out.Windows[i].matches, out.Windows[i].models, out.Windows[i].notModels = windowMatches(sp.Models, sp.NotModels)
 		}
 	}
 	at := e.At

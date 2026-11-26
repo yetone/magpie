@@ -14376,12 +14376,27 @@ function quotaError(err, q) {
   if (/^not read yet: this subscription is switched off/.test(err)) return t("Switched off, so no allowance is read — switch it on and refresh");
   const bal = balanceError(err);
   if (bal) return bal;
+  const agy = agyReason(err);
+  if (agy) return agy;
   // a plugin's own usage read failed: its first line (aqiu817/magpie-sensenova#1)
   if (q?.pluginError) {
     const why = String(err).split("\n")[0].trim();
     if (why) return t("Allowance unavailable: {why}", { why: why.length > 160 ? why.slice(0, 159) + "…" : why });
   }
   return t("Allowance unavailable — hover for why");
+}
+
+// agyReason: why agy-cli's plugin has no reading this time, in its own
+// words (its usage.mjs), said in the user's language; "" for any other.
+// Antigravity's quota showed only this English line, or nothing, an hour
+// after the account's last chat (punk2sang on X)
+function agyReason(err) {
+  if (/^agy's sign-in is due to be renewed/.test(err)) return t("agy renews this account's sign-in on its next chat, and reads its allowance after that");
+  if (/^agy is still reading this account's quota/.test(err)) return t("agy is still reading this allowance — it shows on the next refresh");
+  if (/^agy(?:'s own usage read didn't finish| didn't say its version) in/.test(err)) return t("agy took too long to read its usage — it is asked again soon; if this stays, check agy's network or proxy");
+  if (/^agy CLI not found/.test(err)) return t("agy isn't installed — sign in to this account again in magpie to install it");
+  if (/^agy usage reports require a verified agy version/.test(err)) return t("agy is too old to tell its usage — update Antigravity CLI");
+  return "";
 }
 
 // the Balance field's placeholder (balancePathOf in balance.go)
@@ -18079,7 +18094,7 @@ function panelBalances(bals) {
 function asOfText(q, short = false) {
   const text = short ? t("As of {when}", { when: stamp(q.asOf) })
     : t(q.readDeferred ? "As of {when} — not refreshed this time" : "As of {when} — couldn't be read just now", { when: new Date(q.asOf).toLocaleString(intlLang()) })
-      + (!q.readDeferred && q.readError ? " · " + q.readError : "");
+      + (!q.readDeferred && q.readError ? " · " + (agyReason(q.readError) || q.readError) : "");
   return q.windows?.some((w) => w.resetsAt && new Date(w.resetsAt).getTime() <= Date.now())
     ? text + " · " + t("A cached window has expired; current allowance is unknown") : text;
 }
