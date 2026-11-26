@@ -16,10 +16,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/yetone/magpie/internal/tuidrive"
 )
 
 // The test binary is also the shim (MAGPIE_TUI_TEST=shim) and a fake
@@ -895,8 +896,7 @@ func TestShimSeesPastesOnAPromptDrawnInPart(t *testing.T) {
 	// enough to be a "[Pasted text", 33 marks in all
 	var images, texts, inPart int
 	for i := 1; i < len(clears); i++ {
-		s := &shim{screen: b[clears[i-1]:clears[i]], grid: newGrid(screenSize())}
-		s.grid.write(b[:clears[i]])
+		s := drawn(b[:clears[i]], clears[i-1])
 		on := s.prompt()
 		img, txt := lastMark(imageShown, on), lastMark(textLast, on)
 		switch {
@@ -905,7 +905,7 @@ func TestShimSeesPastesOnAPromptDrawnInPart(t *testing.T) {
 			if n := s.imageTaken(img - 1); n != img {
 				t.Errorf("the paste before %d: image %d not seen taken (%d) on %q", clears[i], img, n, on)
 			}
-			if !strings.Contains(s.plain(), fmt.Sprintf("[Image #%d]", img)) {
+			if !strings.Contains(s.Plain(), fmt.Sprintf("[Image #%d]", img)) {
 				inPart++
 			}
 		case txt > 0:
@@ -913,7 +913,7 @@ func TestShimSeesPastesOnAPromptDrawnInPart(t *testing.T) {
 			if n, ok := s.textTaken("", txt-1); !ok || n != txt {
 				t.Errorf("the paste before %d: text %d not seen taken (%d, %v) on %q", clears[i], txt, n, ok, on)
 			}
-			if !textShown.MatchString(s.plain()) {
+			if !textShown.MatchString(s.Plain()) {
 				inPart++
 			}
 		}
@@ -925,8 +925,7 @@ func TestShimSeesPastesOnAPromptDrawnInPart(t *testing.T) {
 	if inPart == 0 {
 		t.Fatal("every mark was drawn whole: the fixture no longer shows #5654")
 	}
-	s := &shim{screen: b[8871:], grid: newGrid(screenSize())}
-	s.grid.write(b)
+	s := drawn(b, 8871)
 	if n := s.imageTaken(32); n != 33 {
 		t.Fatalf("the last image was seen as %d, want 33, on %q", n, s.prompt())
 	}
@@ -1198,10 +1197,9 @@ func TestShimDeclinesChromeOffer(t *testing.T) {
 // the folder waited out readyWait on it, 502 on every account
 // (@ahz2ygnhjmIJ0E0 on X).
 func TestTrustQuestionOf2_1_329(t *testing.T) {
-	s := &shim{screen: trustScreen, grid: newGrid(screenSize())}
-	s.grid.write(trustScreen)
+	s := drawn(trustScreen, 0)
 	now, _ := s.looks()
-	for name, p := range map[string]string{"drawn": s.plain(), "screen": now} {
+	for name, p := range map[string]string{"drawn": s.Plain(), "screen": now} {
 		words := strings.Join(strings.Fields(p), " ")
 		if !optionDialog(words, trustAsk, trustRow) {
 			t.Errorf("%s: not the trust question: %q", name, words)
@@ -1210,7 +1208,7 @@ func TestTrustQuestionOf2_1_329(t *testing.T) {
 			t.Errorf("%s: read as the Bypass Permissions disclaimer", name)
 		}
 	}
-	if p := s.plain(); lastAt(trustNo, p) < 0 || lastAt(trustYes, p) >= 0 {
+	if p := s.Plain(); tuidrive.LastAt(trustNo, p) < 0 || tuidrive.LastAt(trustYes, p) >= 0 {
 		t.Errorf("No isn't the choice drawn: %q", p)
 	}
 }
@@ -1518,7 +1516,7 @@ func TestUsageDrawn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !usageDrawn(ansi.ReplaceAllString(string(b), " ")) {
+	if !usageDrawn(tuidrive.ANSI.ReplaceAllString(string(b), " ")) {
 		t.Fatal("2.1.316's panel isn't taken as drawn")
 	}
 	for screen, want := range map[string]bool{
@@ -1634,7 +1632,7 @@ func TestUsageText(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "Current session: 0% used · resets 12am (Asia/Shanghai)\nCurrent week (all models): 81% used · resets Nov 4 at 6am (Asia/Shanghai)"
-	if got := usageText(ansi.ReplaceAllString(string(b), " ")); got != want {
+	if got := usageText(tuidrive.ANSI.ReplaceAllString(string(b), " ")); got != want {
 		t.Fatalf("usageText = %q, want %q", got, want)
 	}
 	for screen, want := range map[string]string{
@@ -1664,75 +1662,14 @@ func TestShownWaitGrowsWithThePaste(t *testing.T) {
 	}
 }
 
-// Claude Code's exit is seen only once what it wrote before it is read:
-// seen first, the reason it gave was left out of the error, which had an
-// empty screen (#5283, ubuntu CI). Here the reader is given the last
-// words late, as a loaded machine schedules it, on a terminal that ends
-// (Unix) and on one that stays open (Windows' pseudo console).
-func TestShimEndedAfterLastWordsRead(t *testing.T) {
-	for _, closes := range []bool{true, false} {
-		t.Run(fmt.Sprintf("terminal ends %v", closes), func(t *testing.T) {
-			r, w := io.Pipe()
-			t.Cleanup(func() { _ = w.Close() })
-			s := &shim{changed: make(chan struct{}, 1), exited: make(chan struct{}), readDone: make(chan struct{}),
-				pty: struct {
-					io.Reader
-					io.Writer
-				}{r, io.Discard}}
-			go s.read()
-			go s.ended(fmt.Errorf("exit status 3"), !closes)
-			go func() {
-				time.Sleep(300 * time.Millisecond)
-				_, _ = io.WriteString(w, "something went wrong\r\n")
-				if closes {
-					_ = w.Close()
-				}
-			}()
-			select {
-			case <-s.exited:
-			case <-time.After(10 * time.Second):
-				t.Fatal("the exit was never recorded")
-			}
-			if got := s.lastScreen(); !strings.Contains(got, "something went wrong") {
-				t.Fatalf("the exit was recorded with the screen %q", got)
-			}
-		})
+// drawn is a shim whose Claude Code drew all, the screen last cleared
+// before all[from:].
+func drawn(all []byte, from int) *shim {
+	s := &shim{Term: tuidrive.New()}
+	if from > 0 {
+		s.Feed(all[:from])
+		s.ClearScreen()
 	}
-}
-
-// eagainOnce answers EAGAIN before its bytes, as a non-blocking terminal
-// with nothing written yet does.
-type eagainOnce struct {
-	again int
-	data  []byte
-}
-
-func (e *eagainOnce) Read(p []byte) (int, error) {
-	if e.again > 0 {
-		e.again--
-		return 0, syscall.EAGAIN
-	}
-	if len(e.data) == 0 {
-		return 0, io.EOF
-	}
-	n := copy(p, e.data)
-	e.data = e.data[n:]
-	return n, nil
-}
-
-func (e *eagainOnce) Write(p []byte) (int, error) { return len(p), nil }
-
-// TestReadPastEAGAIN: EAGAIN is not the terminal's end; read keeps
-// reading what Claude Code draws after it (#4834).
-func TestReadPastEAGAIN(t *testing.T) {
-	s := &shim{pty: &eagainOnce{again: 3, data: []byte("Welcome")}, changed: make(chan struct{}, 1), readDone: make(chan struct{})}
-	go s.read()
-	select {
-	case <-s.readDone:
-	case <-time.After(5 * time.Second):
-		t.Fatal("read never ended")
-	}
-	if got := string(s.screen); got != "Welcome" {
-		t.Fatalf("screen %q, want what was drawn after the EAGAIN", got)
-	}
+	s.Feed(all[from:])
+	return s
 }

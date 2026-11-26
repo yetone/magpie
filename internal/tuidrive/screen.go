@@ -1,4 +1,4 @@
-package claudetui
+package tuidrive
 
 import (
 	"strconv"
@@ -8,15 +8,15 @@ import (
 	"golang.org/x/text/width"
 )
 
-// grid is Claude Code's screen as a terminal shows it: what it draws is
+// Grid is an agent's screen as a terminal shows it: what it draws is
 // put in its cells, where the cursor is moved to. Read as a stream, with
-// its escapes taken out (plain), a screen drawn again only where it
+// its escapes taken out (Term.Plain), a screen drawn again only where it
 // changed is misread: Windows' pseudo console sends only the cells that
 // changed, a cell left as it was skipped by a move of the cursor
 // ("Settin\x1b[1Cs" for "Settings", whose g was there already), and a
 // number redrawn in place is a digit or two after the old one, which the
 // stream still holds. The grid holds the screen as it is.
-type grid struct {
+type Grid struct {
 	cells      [][]rune
 	cols, rows int
 	row, col   int
@@ -25,8 +25,9 @@ type grid struct {
 	pending []byte
 }
 
-func newGrid(cols, rows int) *grid {
-	g := &grid{cols: cols, rows: rows}
+// NewGrid is an empty screen of cols by rows.
+func NewGrid(cols, rows int) *Grid {
+	g := &Grid{cols: cols, rows: rows}
 	g.cells = make([][]rune, rows)
 	for i := range g.cells {
 		g.cells[i] = blankRow(cols)
@@ -42,8 +43,8 @@ func blankRow(cols int) []rune {
 	return r
 }
 
-// text is the screen, a line a row, each without its trailing spaces.
-func (g *grid) text() string {
+// Text is the screen, a line a row, each without its trailing spaces.
+func (g *Grid) Text() string {
 	var b strings.Builder
 	for i, r := range g.cells {
 		if i > 0 {
@@ -60,12 +61,12 @@ func (g *grid) text() string {
 	return b.String()
 }
 
-func (g *grid) clamp() {
+func (g *Grid) clamp() {
 	g.row = min(max(g.row, 0), g.rows-1)
 	g.col = min(max(g.col, 0), g.cols)
 }
 
-func (g *grid) lineFeed() {
+func (g *Grid) lineFeed() {
 	if g.row < g.rows-1 {
 		g.row++
 		return
@@ -74,7 +75,7 @@ func (g *grid) lineFeed() {
 	g.cells[g.rows-1] = blankRow(g.cols)
 }
 
-func (g *grid) put(r rune) {
+func (g *Grid) put(r rune) {
 	w := 1
 	if k := width.LookupRune(r).Kind(); k == width.EastAsianWide || k == width.EastAsianFullwidth {
 		w = 2
@@ -91,15 +92,15 @@ func (g *grid) put(r rune) {
 }
 
 // erase blanks the cells from..to (not included) of row.
-func (g *grid) erase(row, from, to int) {
+func (g *Grid) erase(row, from, to int) {
 	for i := max(from, 0); i < min(to, g.cols); i++ {
 		g.cells[row][i] = ' '
 	}
 }
 
-// write draws b. An escape or character cut off at its end is kept for
+// Draw draws b. An escape or character cut off at its end is kept for
 // the next write.
-func (g *grid) write(b []byte) {
+func (g *Grid) Draw(b []byte) {
 	if len(g.pending) > 0 {
 		b = append(g.pending, b...)
 		g.pending = nil
@@ -142,7 +143,7 @@ func (g *grid) write(b []byte) {
 
 // escape acts on the escape at the start of b and is its length, 0 when
 // b ends before it does.
-func (g *grid) escape(b []byte) int {
+func (g *Grid) escape(b []byte) int {
 	if len(b) < 2 {
 		return 0
 	}
@@ -188,7 +189,7 @@ func (g *grid) escape(b []byte) int {
 	return 2
 }
 
-func (g *grid) csi(params string, final byte) {
+func (g *Grid) csi(params string, final byte) {
 	if strings.HasPrefix(params, "?") || strings.HasPrefix(params, ">") || strings.HasPrefix(params, "<") || strings.HasPrefix(params, "=") {
 		return // modes, keyboard protocols: nothing drawn
 	}

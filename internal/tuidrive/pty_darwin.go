@@ -1,4 +1,4 @@
-package claudetui
+package tuidrive
 
 import (
 	"os"
@@ -14,7 +14,7 @@ import (
 // out of Go's kqueue poller. os.OpenFile puts a character device in the
 // poller, non-blocking, and on some Macs (macOS 14.8 on x86_64 and on
 // arm64) the first read of such a ptmx answered EAGAIN instead of
-// waiting: the read loop ended, Claude Code filled the terminal's 1024
+// waiting: the read loop ended, the agent (Claude Code) filled the terminal's 1024
 // bytes and hung, and the run said "showed no prompt" after 45s (#4834).
 // A blocking read in its own thread works on every Mac.
 func openPTY() (*os.File, string, error) {
@@ -42,7 +42,3 @@ func openPTY() (*os.File, string, error) {
 	}
 	return m, string(name[:n]), nil
 }
-
-// the requests that read and set a terminal's modes (the tests' fake
-// Claude Code sets its own raw, as the real one does)
-const ioctlGetTermios, ioctlSetTermios = unix.TIOCGETA, unix.TIOCSETA

@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/yetone/magpie/internal/tuidrive"
 )
 
 // A message is checked whole once Claude Code has it: the words its
@@ -287,6 +289,17 @@ func pathsIn(sent string, taken []string) int {
 	return n
 }
 
+// cutHint is what a message Claude Code didn't get whole is told of where
+// it was lost: on Windows 10's own pseudo console, how to use another
+// (#5205); nothing elsewhere.
+func cutHint() string {
+	if !tuidrive.OldConsole() {
+		return ""
+	}
+	// short, for the bridge's log line to hold it whole
+	return "; on Windows 10, a conpty folder beside magpie.exe fixes it (#5205)"
+}
+
 // checkWhole is wholeIn for a message just sent, given wholeWait for the
 // row that is its, and for what Claude Code says it took as images.
 func (s *shim) checkWhole(sent string, images int) error {
@@ -304,9 +317,9 @@ func (s *shim) checkWhole(sent string, images int) error {
 		case <-s.rowsCh:
 			continue
 		case <-by:
-		case <-s.exited:
+		case <-s.Exited():
 			if !errors.Is(err, errUnexplained) {
-				err = fmt.Errorf("%w; Claude Code ended (%v): %s", err, s.exit, s.lastScreen())
+				err = fmt.Errorf("%w; Claude Code ended (%v): %s", err, s.Exit(), s.LastScreen())
 			}
 		}
 		if errors.Is(err, errUnexplained) {

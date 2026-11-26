@@ -210,9 +210,12 @@ talks to it as it talks to `-p`: stream-json in and out. The helper:
   (and the web search `-p` was given) are allowed, and nothing else is
   offered (`--tools ""`). A new session is given `--session-id`;
 - starts Claude Code in a pseudo-terminal of its own (200x50), no tmux,
-  and answers what it asks of the terminal. On macOS and Linux it is a
-  pty in a session of its own (`child_unix.go`). On Windows it is a
-  pseudo console (ConPTY, `child_windows.go`): `CreatePseudoConsole` on
+  and answers what it asks of the terminal. The terminal is
+  [TUI driving](tui-driving.md)'s `tuidrive.Term`, the same for any
+  agent; what is Claude Code's own (its screens, the paste, the
+  transcript) stays in `internal/claudetui`. On macOS and Linux it is a
+  pty in a session of its own (`term_unix.go`). On Windows it is a
+  pseudo console (ConPTY, `term_windows.go`): `CreatePseudoConsole` on
   two pipes, and `CreateProcess` with the console as an attribute and
   `STARTF_USESTDHANDLES` with no handles, since without it a child
   took the helper's own standard handles (the bridge's pipes) and drew
@@ -535,7 +538,7 @@ an appeal and the request goes on to the next account or member
 drops the marks.
 
 On Windows 10 the helper doesn't use Windows' own ConPTY when it can
-avoid it (#5205; `console` in `child_windows.go`). In order: a `conpty`
+avoid it (#5205; `console` in `internal/tuidrive/term_windows.go`). In order: a `conpty`
 folder beside magpie.exe holding `conpty.dll` and `OpenConsole.exe`, the
 user's own; then, below build 22000 (`win11`), the pair a release carries
 (`internal/conptypair`): Microsoft.Windows.Console.ConPTY
@@ -862,10 +865,10 @@ last drawn (`TestShimWaitsPastTheBanner`, `TestUsageDrawn`). Its result (`local_
 do, "Current session: 99% used · resets 7pm (Asia/Shanghai)" (`usageText`,
 tested on the bytes Claude Code 2.1.316 drew, `testdata/usage-2.1.316.bin`),
 for `provider.parseClaudeUsage`.
-The helper reads the screen as a terminal shows it (`grid`,
-[`screen.go`](../../internal/claudetui/screen.go), 200 by 50, the size
+The helper reads the screen as a terminal shows it (`tuidrive.Grid`,
+[`screen.go`](../../internal/tuidrive/screen.go), 200 by 50, the size
 the pseudo-terminal and Windows' pseudo console are made, from one
-`screenCols`/`screenRows`; an 80 by 24 grid of the 200 by 50 Unix
+`tuidrive.Cols`/`tuidrive.Rows`; an 80 by 24 grid of the 200 by 50 Unix
 terminal drew the panel's rows over one another, #4988), beside the stream:
 Windows' pseudo console sends only the cells that changed, skipping one
 that holds the same letter ("Settin\x1b[1Cs"), and a window drawn only
@@ -2516,7 +2519,7 @@ go test -tags nogui ./internal/gateway/ -run 'TestClaudeSyntheticResume|TestClau
 go test -tags nogui ./internal/gateway/ -run '^TestClaudeClientCache' -count=1
 go test -tags nogui ./internal/gateway/ -run '^TestClaudeLeanPrompt' -count=1
 go test -tags nogui ./internal/gateway/ -run '^TestClaudeTUIChosen$' -count=1
-go test ./internal/claudetui/ -count=1
+go test ./internal/claudetui/ ./internal/tuidrive/ -count=1
 go test -tags nogui ./internal/claudecode/ -count=1
 go test -tags nogui ./internal/claudecode/ -run TestKeepCurrent -count=1
 go test -tags nogui ./internal/gateway/ -run '^TestClaudeCodeGivenTheBridgeForASOCKSProxy$' -count=1

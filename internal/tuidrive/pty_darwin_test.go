@@ -1,4 +1,4 @@
-package claudetui
+package tuidrive
 
 import (
 	"os"
@@ -11,7 +11,7 @@ import (
 )
 
 // TestPTYMasterBlocking: the master is a blocking descriptor outside Go's
-// poller, so a read waits for Claude Code's output instead of answering
+// poller, so a read waits for the agent's output instead of answering
 // EAGAIN (#4834), and a child's 4000 bytes, more than the terminal holds,
 // are all read (the reporter's reproduction).
 func TestPTYMasterBlocking(t *testing.T) {

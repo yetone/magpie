@@ -10,6 +10,7 @@ These pages describe current responsibilities, runtime paths, state, and contrac
 | Tools that plugins give, offered to every agent as an MCP server | [Plugin tools](plugin-tools.md) |
 | Plugins that await context recall and observe completed replies | [Asynchronous gateway request hooks](gateway-request-hooks.md) |
 | Claude subscription turns across Claude Code runs | [Claude subscription bridge](claude-subscription-bridge.md) |
+| Driving an agent's interactive terminal UI in a pseudo-terminal of magpie's own | [TUI driving](tui-driving.md) |
 | How the gateway picks a provider, key or account, and falls back | [Gateway routing and fallback](gateway-routing.md) |
 | Gateway Session Aggregation | [Gateway Session Aggregation](gateway-sessions.md) |
 | Connecting an agent's config to the gateway, drift, disconnect, WSL twins | [Agent wiring](agent-wiring.md) |

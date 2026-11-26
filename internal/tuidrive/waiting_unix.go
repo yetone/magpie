@@ -1,6 +1,6 @@
 //go:build darwin || linux
 
-package claudetui
+package tuidrive
 
 import (
 	"fmt"
@@ -12,23 +12,23 @@ import (
 	"github.com/yetone/magpie/internal/proc"
 )
 
-// waiting is what Claude Code is doing while it has drawn nothing: the
+// Waiting is what the agent is doing while it has drawn nothing: the
 // commands it runs (its descendants, the longest-running first) and how
 // much memory it holds, read from ps. ok is false when ps can't say.
-func (s *shim) waiting() (cmds []running, rssKiB int64, ok bool) {
-	if s.cmd == nil || s.cmd.Process == nil {
+func (t *Term) Waiting() (cmds []Running, rssKiB int64, ok bool) {
+	if t == nil || t.cmd == nil || t.cmd.Process == nil {
 		return nil, 0, false
 	}
 	out, err := proc.Command("ps", "-A", "-o", "pid=,ppid=,rss=,etime=,command=").Output()
 	if err != nil {
 		return nil, 0, false
 	}
-	return descendants(string(out), s.cmd.Process.Pid)
+	return descendants(string(out), t.cmd.Process.Pid)
 }
 
 // descendants reads ps's lines (pid, ppid, rss, etime, command) for root's
 // descendants and root's own rss.
-func descendants(ps string, root int) (cmds []running, rssKiB int64, ok bool) {
+func descendants(ps string, root int) (cmds []Running, rssKiB int64, ok bool) {
 	type row struct {
 		pid, ppid int
 		rss       int64
@@ -62,12 +62,12 @@ func descendants(ps string, root int) (cmds []running, rssKiB int64, ok bool) {
 		for _, r := range rows {
 			if in[r.ppid] && !in[r.pid] {
 				in[r.pid] = true
-				cmds = append(cmds, running{r.age, r.args})
+				cmds = append(cmds, Running{r.age, r.args})
 				grew = true
 			}
 		}
 	}
-	slices.SortStableFunc(cmds, func(a, b running) int { return int(b.age - a.age) })
+	slices.SortStableFunc(cmds, func(a, b Running) int { return int(b.Age - a.Age) })
 	return cmds, rssKiB, true
 }
 

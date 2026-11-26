@@ -1,4 +1,4 @@
-package claudetui
+package tuidrive
 
 import (
 	"os"
@@ -26,7 +26,3 @@ func openPTY() (*os.File, string, error) {
 	}
 	return m, "/dev/pts/" + strconv.Itoa(n), nil
 }
-
-// the requests that read and set a terminal's modes (the tests' fake
-// Claude Code sets its own raw, as the real one does)
-const ioctlGetTermios, ioctlSetTermios = unix.TCGETS, unix.TCSETS

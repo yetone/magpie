@@ -1,4 +1,4 @@
-package claudetui
+package tuidrive
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 	"github.com/yetone/magpie/internal/proc"
 )
 
-// child is Claude Code, started in a pseudo console (ConPTY): Windows' own
+// child is the agent, started in a pseudo console (ConPTY): Windows' own
 // terminal for a program that draws, as Windows Terminal runs one in.
 type child struct {
 	proc      windows.Handle
@@ -24,16 +24,16 @@ type child struct {
 	closeOnce sync.Once
 }
 
-// endSignals are what the helper ends on, its Claude Code with it: Ctrl+C,
-// and its console closed. The gateway ends a run by killing its job, which
-// no handler hears: the images folder is then left for another helper to
-// remove (dropLeft).
-var endSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
+// EndSignals are what a driver ends on, its agent with it: Ctrl+C, and
+// its console closed. The gateway ends a run by killing its job, which no
+// handler hears: what the driver keeps on disk is then left for another to
+// remove (claudetui's dropLeft).
+var EndSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
 
 // pseudoConsole is where CreatePseudoConsole and ClosePseudoConsole come
 // from. Windows 10's own (conhost 10.0.19041) drops a paste's bracketed
-// paste marks and loses 1024-byte blocks of a long write, so Claude Code
-// takes a long message as many pastes and gets a part of it
+// paste marks and loses 1024-byte blocks of a long write, so an agent
+// (Claude Code) takes a long message as many pastes and gets a part of it
 // (yetone/magpie#5205); the ConPTY Windows Terminal ships (conpty.dll,
 // which runs the OpenConsole.exe beside it) keeps them. In order:
 //   - dsh-cross: a conpty folder beside magpie's executable holding both,
@@ -83,15 +83,11 @@ func conptyIn(dir string) (pseudoConsole, bool) {
 	return pseudoConsole{create, closePC, false}, true
 }
 
-// cutHint is what a message Claude Code didn't get whole (whole.go) is
-// told of where it was lost: on Windows 10's own ConPTY, how to use
-// another (#5205).
-func cutHint() string {
-	if !console().system || windows.RtlGetVersion().BuildNumber >= win11 {
-		return ""
-	}
-	// short, for the bridge's log line to hold it whole
-	return "; on Windows 10, a conpty folder beside magpie.exe fixes it (#5205)"
+// OldConsole is whether the terminal is Windows 10's own pseudo console,
+// which drops a paste's bracketed-paste marks and loses blocks of a long
+// write (#5205): a conpty folder beside magpie.exe takes its place.
+func OldConsole() bool {
+	return console().system && windows.RtlGetVersion().BuildNumber < win11
 }
 
 func createPseudoConsole(size windows.Coord, in, out windows.Handle, h *windows.Handle) error {
@@ -104,13 +100,16 @@ func createPseudoConsole(size windows.Coord, in, out windows.Handle, h *windows.
 
 func closePseudoConsole(h windows.Handle) { _, _, _ = console().close.Call(uintptr(h)) }
 
-func (s *shim) start(path string, args []string) error {
+// Start runs the program at path with args and the environment env (its
+// whole environment, TERM included) in a pseudo console of its own, and
+// reads what it draws.
+func (t *Term) Start(path string, args, env []string) error {
 	// Windows 10 before 1809 has none, and x/sys panics calling it there
 	if err := console().create.Find(); err != nil {
 		return fmt.Errorf("no pseudo console on this Windows: %w", err)
 	}
 	// a .cmd (npm's shim) is run by cmd.exe, its arguments quoted as
-	// Claude Code is run with elsewhere (proc)
+	// every program magpie runs is (proc)
 	cmd := proc.Command(path, args...)
 	if cmd.Err != nil {
 		return cmd.Err
@@ -119,7 +118,7 @@ func (s *shim) start(path string, args []string) error {
 	if cmd.SysProcAttr != nil && cmd.SysProcAttr.CmdLine != "" {
 		line = cmd.SysProcAttr.CmdLine
 	}
-	// what is typed goes in at inW, what Claude Code draws comes out at
+	// what is typed goes in at inW, what the agent draws comes out at
 	// outR; the console holds the other ends
 	var inR, inW, outR, outW windows.Handle
 	if err := windows.CreatePipe(&inR, &inW, nil, 0); err != nil {
@@ -131,8 +130,8 @@ func (s *shim) start(path string, args []string) error {
 		return err
 	}
 	var pc windows.Handle
-	// wide, so a line of Claude Code's screen is a line
-	err := createPseudoConsole(windows.Coord{X: screenCols, Y: screenRows}, inR, outW, &pc)
+	// wide, so a line of the agent's screen is a line
+	err := createPseudoConsole(windows.Coord{X: Cols, Y: Rows}, inR, outW, &pc)
 	// the console has its own of these
 	windows.CloseHandle(inR)
 	windows.CloseHandle(outW)
@@ -142,15 +141,15 @@ func (s *shim) start(path string, args []string) error {
 		out.Close()
 		return fmt.Errorf("a pseudo console: %w", err)
 	}
-	h, err := startIn(pc, cmd.Path, line, childEnv(s.env...))
+	h, err := startIn(pc, cmd.Path, line, env)
 	if err != nil {
 		closePseudoConsole(pc)
 		in.Close()
 		out.Close()
 		return err
 	}
-	s.pty = conpty{in: in, out: out}
-	s.proc, s.console = h, pc
+	t.pty = conpty{in: in, out: out}
+	t.proc, t.console = h, pc
 	go func() {
 		_, _ = windows.WaitForSingleObject(h, windows.INFINITE)
 		var code uint32
@@ -160,9 +159,9 @@ func (s *shim) start(path string, args []string) error {
 		} else if code != 0 {
 			exit = fmt.Errorf("exit status %d", code)
 		}
-		s.ended(exit, true)
+		t.Ended(exit, true)
 	}()
-	go s.read()
+	go t.read()
 	return nil
 }
 
@@ -181,7 +180,7 @@ func startIn(console windows.Handle, app, line string, env []string) (windows.Ha
 	si := &windows.StartupInfoEx{ProcThreadAttributeList: attrs.List()}
 	si.Cb = uint32(unsafe.Sizeof(*si))
 	// standard handles of none: without this, the helper's own (the
-	// bridge's pipes) are Claude Code's, and it draws into them rather
+	// bridge's pipes) are the agent's, and it draws into them rather
 	// than the console (microsoft/terminal#11276)
 	si.Flags = windows.STARTF_USESTDHANDLES
 	appW, err := windows.UTF16PtrFromString(app)
@@ -225,30 +224,24 @@ type conpty struct{ in, out *os.File }
 func (c conpty) Read(p []byte) (int, error)  { return c.out.Read(p) }
 func (c conpty) Write(p []byte) (int, error) { return c.in.Write(p) }
 
-// closeConsole closes Claude Code's console, which tells it so, as closing
+// closeConsole closes the agent's console, which tells it so, as closing
 // a terminal window does (CTRL_CLOSE_EVENT). It returns at once: before
 // Windows 11 24H2, ClosePseudoConsole waits for its output to be read.
-func (s *shim) closeConsole() {
-	s.closeOnce.Do(func() {
-		go closePseudoConsole(s.console)
+func (t *Term) closeConsole() {
+	t.closeOnce.Do(func() {
+		go closePseudoConsole(t.console)
 	})
 }
 
-// stop ends Claude Code: its console closed, then killed.
-func (s *shim) stop() {
-	if s.proc == 0 {
+// Stop ends the agent: its console closed, then killed.
+func (t *Term) Stop() {
+	if t.proc == 0 {
 		return
 	}
-	s.closeConsole()
+	t.closeConsole()
 	select {
-	case <-s.exited:
+	case <-t.exited:
 	case <-time.After(3 * time.Second):
-		_ = windows.TerminateProcess(s.proc, 1)
+		_ = windows.TerminateProcess(t.proc, 1)
 	}
 }
-
-// imagePadOS: a pseudo console may drop the bracketed-paste marks, so an
-// image's path is sent as a read long enough to be a paste, over 800
-// characters and under the 1024 bytes Windows 10's conhost can lose
-// (imagePad).
-const imagePadOS = 900
