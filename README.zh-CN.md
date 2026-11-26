@@ -4,11 +4,11 @@
 
 # magpie
 
-### 所有 Agent 的模型，一处搞定。
+### 所有套餐，一池通用。
 
-**Claude Code 跑 Kimi，Codex 跑 DeepSeek，Gemini CLI 跑 GLM，OpenCode 用你的 ChatGPT 订阅。**<br>
-在菜单栏一点就能切换。所有 Agent 共用一个本地网关，<br>
-额度用完时，它会悄悄切到你的下一个账号。
+**Claude Code 用你的 ChatGPT Pro，Codex 用你的 Claude Max，Claude Desktop 用你的 GLM Coding Plan。**<br>
+买过的套餐加进 magpie 一次，所有 Agent 都能用。<br>
+套餐不再绑死在买它的那个 Agent 上，一个用完了，下一个自动接上。
 
 [![Release](https://img.shields.io/github/v/release/yetone/magpie-releases?label=release&color=111111)](https://github.com/yetone/magpie-releases/releases/latest) [![Stars](https://img.shields.io/github/stars/yetone/magpie?style=flat&color=111111)](https://github.com/yetone/magpie/stargazers) [![Discord](https://img.shields.io/badge/Discord-加入社区-5865F2?logo=discord&logoColor=white)](https://discord.gg/vGSnD3ZKQF) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white) ![Windows](https://img.shields.io/badge/Windows-0078D4?logo=windows&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black) ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white) ![Termux](https://img.shields.io/badge/Termux-000000?logo=android&logoColor=white)
@@ -38,8 +38,8 @@ Thanks to [Kimi](https://usemagpie.ai/go/kimi-cn/readme) for supporting magpie a
 
 每个 Agent 都把模型写在自己的配置文件里，格式各不相同，key 和 base URL 各管各的。花钱买的订阅只能在一个 Agent 里用。magpie 把这些收进一个应用和一个本地网关：
 
+- **买过的套餐汇成一池**：你登录着的 Claude、ChatGPT、Copilot、Gemini、Grok 订阅，按 key 卖的 Coding Plan（GLM、Kimi Code、火山方舟、百炼、阶跃星辰），按量付费的 key 和本地模型。每个 Agent 都能用其中任何一个。
 - **任意 Agent 用任意模型**，在一张表里选。magpie 只改 Agent 配置里该改的那一个键。
-- **一个 provider 处处能用**：API key、本地模型，或者你登录着的 Claude、ChatGPT、Copilot、Gemini、Grok 订阅。
 - **额度用完也不断**：同一个服务商的下一个账号自动接上，路由组还能换到别的模型或服务商，Agent 看不到报错。只有一个账号又没建路由组时，没有可换的，报错会原样回给 Agent。
 - **密钥不出你的电脑**：在 **设置 → 隐私** 打开脱敏后（默认关闭），提示词里的密钥、密码、邮箱，在请求离开电脑前就在本地脱敏，回复里再换回原值。
 

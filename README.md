@@ -4,11 +4,11 @@
 
 # magpie
 
-### Every agent's model. One place.
+### All your plans, one pool. Any agent.
 
-**Claude Code on Kimi. Codex on DeepSeek. Gemini CLI on GLM. OpenCode on your ChatGPT plan.**<br>
-Switch any of them from the menu bar. One local gateway serves them all,<br>
-and when a quota runs out, it quietly moves on to your next account.
+**Claude Code on your ChatGPT Pro. Codex on your Claude Max. Claude Desktop on your GLM Coding Plan.**<br>
+Add every plan you pay for once, and every agent can use all of them.<br>
+No plan stays locked to the agent you bought it for, and when one runs out, the next takes over.
 
 [![Release](https://img.shields.io/github/v/release/yetone/magpie-releases?label=release&color=111111)](https://github.com/yetone/magpie-releases/releases/latest) [![Stars](https://img.shields.io/github/stars/yetone/magpie?style=flat&color=111111)](https://github.com/yetone/magpie/stargazers) [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/vGSnD3ZKQF) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white) ![Windows](https://img.shields.io/badge/Windows-0078D4?logo=windows&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black) ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white) ![Termux](https://img.shields.io/badge/Termux-000000?logo=android&logoColor=white)
@@ -38,8 +38,8 @@ Thanks to [Kimi](https://usemagpie.ai/go/kimi/readme) for supporting magpie and 
 
 Each agent keeps its model in its own file, in its own format, with its own keys and base URLs. A subscription you pay for works in one agent and nowhere else. magpie puts all of that behind one app and one local gateway:
 
+- **Pool every plan you pay for**: the Claude, ChatGPT, Copilot, Gemini or Grok plan you're signed in to, a coding plan sold as a key (GLM, Kimi Code, Volcengine, Bailian, StepFun), pay-as-you-go keys and local models. Every agent can use every one of them.
 - **Pick any model for any agent** from one list. magpie edits the one key that matters in the agent's own config.
-- **Use one provider everywhere**: an API key, a local model, or the Claude, ChatGPT, Copilot, Gemini or Grok plan you're signed in to.
 - **Keep going when a quota runs out**: a provider's next account takes over, and a routing group moves on to another model or provider, so the agent never sees the error. With one account and no group there is nothing to move to, and the error reaches the agent.
 - **Keep your secrets off the vendor's servers**: once you turn masking on in **Settings → Privacy** (it's off by default), keys, passwords and emails in a prompt are masked on your computer before the request leaves it, and put back in the reply.
 
