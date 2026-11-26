@@ -3071,7 +3071,13 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	// the file there now is kept first, before anything below can make
 	// one: as the last good generation, or aside when it doesn't read
-	if err := lastgood.Keep(Path(), validSettings, 0o600); err != nil {
+	// one edited by hand that doesn't parse is the user's, left as it is:
+	// Load gave its last good generation, and saving that over it lost the
+	// edit (sarosaka1023 on X)
+	if err := lastgood.KeepEdited(Path(), validSettings, 0o600); err != nil {
+		if e := (*lastgood.EditedError)(nil); errors.As(err, &e) {
+			return fmt.Errorf("could not read settings at %s (%s); magpie left it unchanged and runs on its last good copy: repair or move that file aside before saving", Path(), e.Why)
+		}
 		return err
 	}
 	if err := os.MkdirAll(Dir(), 0o755); err != nil {

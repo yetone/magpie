@@ -277,7 +277,7 @@ func save(l List) error {
 	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
 		return err
 	}
-	if err := lastgood.Keep(listPath(), lastgood.JSON, 0o600); err != nil {
+	if err := lastgood.KeepEdited(listPath(), lastgood.JSON, 0o600); err != nil { // an edit by hand is theirs
 		return err
 	}
 	defer filememo.Forget() // what follows plugins.json looks again (Written)

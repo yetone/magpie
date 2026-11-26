@@ -140,7 +140,7 @@ func store(ps map[string]Profile) error {
 	if err != nil {
 		return err
 	}
-	if err := lastgood.Keep(Path(), validProfiles, 0o600); err != nil {
+	if err := lastgood.KeepEdited(Path(), validProfiles, 0o600); err != nil { // an edit by hand is theirs
 		return err
 	}
 	return edit.WriteAtomic(Path(), append(b, '\n'))

@@ -984,10 +984,16 @@ func store(f file) error {
 	if err != nil {
 		return err
 	}
-	if err := lastgood.Keep(p, validProviders, 0o600); err != nil {
+	// a file edited by hand that doesn't parse is the user's, left as it
+	// is: read gave its last good generation, and writing that with this
+	// change over it lost the edit (sarosaka1023 on X)
+	if err := lastgood.KeepEdited(p, validProviders, 0o600); err != nil {
+		if e := (*lastgood.EditedError)(nil); errors.As(err, &e) {
+			return &unreadableError{p, errors.New(e.Why)}
+		}
 		return err
 	}
-	if err := writePrivate(p, append(b, '\n')); err != nil {
+	if err := writeStored(p, append(b, '\n')); err != nil {
 		return err
 	}
 	pruneIcons(f)

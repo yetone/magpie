@@ -127,6 +127,63 @@ func Keep(path string, valid Valid, perm fs.FileMode) error {
 	return err
 }
 
+// ErrEdited is a file the user edits by hand that is there, not empty
+// and not left all zero by a crash, and doesn't parse: an edit made
+// outside magpie, half done, or saved with a slip in it. It is theirs,
+// never written over with what magpie had in memory.
+var ErrEdited = errors.New("edited outside magpie and doesn't parse")
+
+// EditedError says which file, and why it doesn't parse.
+type EditedError struct {
+	Path string
+	Why  string
+}
+
+func (e *EditedError) Error() string {
+	return fmt.Sprintf("%s doesn't parse (%s), as edited outside magpie; magpie left it as it is and runs on its last good copy until it is fixed: fix it, or move it aside", e.Path, e.Why)
+}
+
+func (e *EditedError) Unwrap() error { return ErrEdited }
+
+// KeepEdited is Keep for a file people edit by hand (providers.json,
+// settings.json): one there that isn't valid, and is neither empty nor
+// every byte zero, is an *EditedError and nothing is written; magpie's
+// own writes go through a renamed temp file, so a bad file it didn't
+// leave is someone's edit, and writing the last good generation and the
+// change over it lost that edit (sarosaka1023 on X). An empty or zeroed
+// one, which a crash leaves (#1505), is kept aside and written over as
+// Keep does.
+func KeepEdited(path string, valid Valid, perm fs.FileMode) error {
+	b, err := steady.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !valid(b) && Edited(b) {
+		return &EditedError{Path: path, Why: why(b)}
+	}
+	return Keep(path, valid, perm)
+}
+
+// Edited is whether b, a file's contents that aren't valid, are someone's
+// edit rather than what a crash leaves: not empty, not every byte zero,
+// nor only an editor's byte-order mark.
+func Edited(b []byte) bool {
+	b = bytes.TrimPrefix(bytes.Trim(b, " \t\r\n\x00"), []byte("\xef\xbb\xbf"))
+	return len(bytes.Trim(b, " \t\r\n\x00")) > 0
+}
+
+// why is what doesn't parse in b, as JSON's decoder says it.
+func why(b []byte) string {
+	var v any
+	if err := json.Unmarshal(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")), &v); err != nil {
+		return err.Error()
+	}
+	return describe(b)
+}
+
 // Into is a file that unmarshals into a T: what a reader that takes any
 // other file as empty can read. `[]` is valid JSON but not a map, so a
 // reader of a map would see nothing in it.
