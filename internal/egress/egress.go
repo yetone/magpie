@@ -2,14 +2,18 @@
 // through each proxy a Claude subscription's requests go through, and
 // says when it is in a region Anthropic doesn't list as supported
 // (Supported): a proxy that dropped, a VPN turned off, a node in the
-// wrong country (@alterxyz4 on X asked for this "canary").
+// wrong country (@alterxyz4 on X asked for this "canary"). The user can
+// name the ways out they allow instead, regions and addresses
+// (settings ClaudeWaysOut, mamba on Discord).
 //
 // The lookup asks Cloudflare's trace page (TraceURL) through the same
-// proxy, and reads its loc= line. It never touches Anthropic or the
-// user's account. It runs when magpie starts, when the network or a
-// proxy setting changes, and every Every, never per request (Keep). A
-// lookup that fails says nothing: its state is Unknown, which neither
-// warns nor holds.
+// proxy, and reads its ip= and loc= lines. It never touches Anthropic or
+// the user's account. It runs when magpie starts, when the network or a
+// proxy setting changes, and every Every (Keep); while the hold is on, a
+// request also looks again once the last lookup is older than Fresh
+// (Hold), as a node switched inside a proxy app changes nothing magpie
+// can watch. A lookup that fails says nothing: its state is Unknown,
+// which neither warns nor holds.
 package egress
 
 import (
@@ -19,6 +23,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -37,8 +42,12 @@ const (
 
 // Result is what the last lookup through one proxy choice found.
 type Result struct {
-	State string    `json:"state"`
-	Loc   string    `json:"loc,omitempty"` // ISO 3166-1 code, as Cloudflare names it
+	State string `json:"state"`
+	Loc   string `json:"loc,omitempty"` // ISO 3166-1 code, as Cloudflare names it
+	IP    string `json:"ip,omitempty"`  // the address the lookup came from
+	// Mine says the state was judged by the user's own ways out
+	// (ClaudeWaysOut), not by Anthropic's list.
+	Mine  bool      `json:"mine,omitempty"`
 	At    time.Time `json:"at,omitempty"`
 	Error string    `json:"error,omitempty"`
 	// Via is the proxy it went through, as magpie may show it
@@ -59,16 +68,22 @@ var Timeout = 10 * time.Second
 var (
 	// Every is how often each choice is looked up again with nothing
 	// changed; Poll how often Keep looks for a change of network or
-	// proxy; Fresh how old an Unsupported may be before Hold looks again.
-	Every = 15 * time.Minute
-	Poll  = 20 * time.Second
-	Fresh = 30 * time.Second
+	// proxy; Fresh how old a lookup may be before Hold looks again, and
+	// HoldTimeout how long that lookup, which a request waits on, may
+	// take.
+	Every       = 15 * time.Minute
+	Poll        = 20 * time.Second
+	Fresh       = 30 * time.Second
+	HoldTimeout = 5 * time.Second
 )
 
 var (
 	mu      sync.Mutex
 	results = map[string]Result{}
 	kick    = make(chan struct{}, 1)
+	// checking is, by choice, the lookup Hold waits on, which every
+	// request held on it shares
+	checking = map[string]chan struct{}{}
 	// changed is called after a lookup changes a state (the tray's
 	// tooltip draws again)
 	changed []func()
@@ -81,14 +96,26 @@ func OnChange(f func()) {
 	mu.Unlock()
 }
 
-// Of is the last lookup through choice; Unknown when there was none.
+// Of is the last lookup through choice, judged by the ways out allowed
+// now; Unknown when there was none.
 func Of(choice string) Result {
 	mu.Lock()
 	defer mu.Unlock()
 	if r, ok := results[strings.TrimSpace(choice)]; ok {
-		return r
+		return r.judged()
 	}
 	return Result{State: Unknown, Via: shown(choice)}
+}
+
+// judged is r judged again by the ways out allowed now, so a list the
+// user changed counts at once; a failed lookup stays as it was.
+func (r Result) judged() Result {
+	if r.Loc == "" && r.IP == "" {
+		return r
+	}
+	j := judge(r.Loc, r.IP, r.At)
+	j.Via = r.Via
+	return j
 }
 
 // Worst is the result of choices to show: the first Unsupported, else
@@ -121,15 +148,21 @@ func Worst(choices []string) Result {
 
 // Check looks up the way out through choice now, and keeps what it found.
 func Check(ctx context.Context, choice string) Result {
+	return check(ctx, choice, Timeout)
+}
+
+func check(ctx context.Context, choice string, within time.Duration) Result {
 	choice = strings.TrimSpace(choice)
-	r := lookup(ctx, choice)
+	r := lookup(ctx, choice, within)
 	r.Via = shown(choice)
 	mu.Lock()
 	was, had := results[choice]
 	results[choice] = r
 	fs := slices.Clone(changed)
 	mu.Unlock()
-	if !had || was.State != r.State || was.Loc != r.Loc {
+	// was is as it was judged then: a list changed since (Again after a
+	// save) draws the tray again here
+	if !had || was.State != r.State || was.Loc != r.Loc || was.IP != r.IP {
 		for _, f := range fs {
 			f()
 		}
@@ -163,8 +196,8 @@ func shown(choice string) string {
 	return netproxy.Redact(choice)
 }
 
-func lookup(ctx context.Context, choice string) Result {
-	ctx, cancel := context.WithTimeout(netproxy.With(ctx, choice), Timeout)
+func lookup(ctx context.Context, choice string, within time.Duration) Result {
+	ctx, cancel := context.WithTimeout(netproxy.With(ctx, choice), within)
 	defer cancel()
 	now := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, TraceURL, nil)
@@ -179,26 +212,66 @@ func lookup(ctx context.Context, choice string) Result {
 	if resp.StatusCode != http.StatusOK {
 		return Result{State: Unknown, At: now, Error: fmt.Sprintf("HTTP %d", resp.StatusCode)}
 	}
-	loc := ""
+	loc, ip := "", ""
 	sc := bufio.NewScanner(io.LimitReader(resp.Body, 16<<10))
 	for sc.Scan() {
-		if k, v, ok := strings.Cut(sc.Text(), "="); ok && k == "loc" {
+		k, v, ok := strings.Cut(sc.Text(), "=")
+		switch {
+		case ok && k == "loc":
 			loc = strings.ToUpper(strings.TrimSpace(v))
+		case ok && k == "ip":
+			if a, err := netip.ParseAddr(strings.TrimSpace(v)); err == nil {
+				ip = a.Unmap().String()
+			}
 		}
 	}
-	return judge(loc, now)
+	return judge(loc, ip, now)
 }
 
-// judge is the state a lookup's loc says. Cloudflare's XX (not known)
-// and T1 (Tor), and anything that isn't two letters, are Unknown.
-func judge(loc string, at time.Time) Result {
-	if len(loc) != 2 || loc[0] < 'A' || loc[0] > 'Z' || loc[1] < 'A' || loc[1] > 'Z' || loc == "XX" {
-		return Result{State: Unknown, Loc: loc, At: at, Error: "no region in the answer"}
+// judge is the state a lookup's loc and ip say. With no ways out of the
+// user's (ClaudeWaysOut), Anthropic's list decides by loc: Cloudflare's
+// XX (not known) and T1 (Tor), and anything that isn't two letters, are
+// Unknown. With some, a way out is fine when its region or its address
+// is one of them, and outside them when it can be told: an address
+// matched against the user's addresses alone needs no region, and a
+// region against their regions alone no address.
+func judge(loc, ip string, at time.Time) Result {
+	validLoc := len(loc) == 2 && loc[0] >= 'A' && loc[0] <= 'Z' && loc[1] >= 'A' && loc[1] <= 'Z' && loc != "XX"
+	ways := settings.Shared().ClaudeWaysOut
+	if len(ways) == 0 {
+		switch {
+		case !validLoc:
+			return Result{State: Unknown, Loc: loc, IP: ip, At: at, Error: "no region in the answer"}
+		case supportedLoc(loc):
+			return Result{State: OK, Loc: loc, IP: ip, At: at}
+		}
+		return Result{State: Unsupported, Loc: loc, IP: ip, At: at}
 	}
-	if supportedLoc(loc) {
-		return Result{State: OK, Loc: loc, At: at}
+	addr, addrErr := netip.ParseAddr(ip)
+	regions, addrs := false, false
+	for _, w := range ways {
+		if len(w) == 2 {
+			regions = true
+			if validLoc && w == loc {
+				return Result{State: OK, Loc: loc, IP: ip, At: at, Mine: true}
+			}
+			continue
+		}
+		addrs = true
+		if addrErr != nil {
+			continue
+		}
+		if a, err := netip.ParseAddr(w); err == nil && a.Unmap() == addr {
+			return Result{State: OK, Loc: loc, IP: ip, At: at, Mine: true}
+		}
+		if p, err := netip.ParsePrefix(w); err == nil && p.Contains(addr) {
+			return Result{State: OK, Loc: loc, IP: ip, At: at, Mine: true}
+		}
 	}
-	return Result{State: Unsupported, Loc: loc, At: at}
+	if regions && !validLoc || addrs && addrErr != nil {
+		return Result{State: Unknown, Loc: loc, IP: ip, At: at, Mine: true, Error: "no region or address in the answer"}
+	}
+	return Result{State: Unsupported, Loc: loc, IP: ip, At: at, Mine: true}
 }
 
 // redactErr takes a proxy's address, with its password, out of an error.
@@ -265,9 +338,12 @@ var fingerprint = func(choices []string) string {
 
 // Hold is the error a Claude subscription's request through choice is
 // held with: when the user turned the hold on (settings
-// ClaudeRegionHold) and the way out through choice is in an unsupported
-// region. An Unsupported older than Fresh is looked up again first, so a
-// proxy turned back on lets the next request go. Unknown holds nothing.
+// ClaudeRegionHold) and the way out through choice is outside the
+// supported regions, or the ways out the user allowed. A lookup older
+// than Fresh is made again first, within HoldTimeout and shared by the
+// requests that come meanwhile: a proxy turned back on lets the next
+// request go, and a node switched to another country inside a proxy app
+// holds it. Unknown holds nothing.
 func Hold(ctx context.Context, choice string) error {
 	if !settings.Shared().ClaudeRegionHold {
 		return nil
@@ -279,13 +355,40 @@ func Hold(ctx context.Context, choice string) error {
 		Again()
 		return nil
 	}
-	if r.State == Unsupported && time.Since(r.At) > Fresh {
-		r = Check(ctx, choice)
+	if time.Since(r.At) > Fresh {
+		r = recheck(ctx, choice)
 	}
 	if r.State != Unsupported {
 		return nil
 	}
 	return &HeldError{Result: r}
+}
+
+// recheck looks choice up again for Hold, once for every request that
+// asks meanwhile.
+func recheck(ctx context.Context, choice string) Result {
+	choice = strings.TrimSpace(choice)
+	mu.Lock()
+	wait, busy := checking[choice]
+	if !busy {
+		wait = make(chan struct{})
+		checking[choice] = wait
+	}
+	mu.Unlock()
+	if busy {
+		select {
+		case <-wait:
+		case <-ctx.Done():
+		}
+		return Of(choice)
+	}
+	defer func() {
+		mu.Lock()
+		delete(checking, choice)
+		mu.Unlock()
+		close(wait)
+	}()
+	return check(context.WithoutCancel(ctx), choice, HoldTimeout).judged()
 }
 
 // HeldError is a request Hold kept from going out.
@@ -304,5 +407,12 @@ func (e *HeldError) Error() string {
 	default:
 		via = "through " + e.Result.Via
 	}
-	return fmt.Sprintf("%s: this computer's way out to the internet, %s, is in region %s, which isn't on Anthropic's list of supported regions. Turn the proxy or VPN back on, or turn off \"Hold requests outside supported regions\" in Providers › Claude › Advanced", HeldWords, via, e.Result.Loc)
+	at := "in region " + e.Result.Loc
+	if e.Result.IP != "" {
+		at = e.Result.IP + " in region " + e.Result.Loc
+	}
+	if e.Result.Mine {
+		return fmt.Sprintf("%s: this computer's way out to the internet, %s, is %s, which isn't one of the ways out allowed for Claude. Switch the proxy or VPN back to one of them, or change them in Providers › Claude › Advanced", HeldWords, via, at)
+	}
+	return fmt.Sprintf("%s: this computer's way out to the internet, %s, is %s, which isn't on Anthropic's list of supported regions. Turn the proxy or VPN back on, or turn off \"Hold requests outside supported regions\" in Providers › Claude › Advanced", HeldWords, via, at)
 }

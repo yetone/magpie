@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"net/netip"
 	"net/url"
 	"os"
 	"reflect"
@@ -559,6 +560,13 @@ type Settings struct {
 	// (the lookup failed) holds nothing. Off, as by default, magpie only
 	// warns.
 	ClaudeRegionHold bool `json:"claudeRegionHold,omitempty"`
+	// ClaudeWaysOut are the ways out to the internet the user lets Claude
+	// subscription requests take: regions by ISO 3166-1 code (US), and
+	// addresses, an IP or a CIDR range (mamba on Discord). A way out in
+	// none of them is judged as one outside Anthropic's list: warned of,
+	// and held while ClaudeRegionHold is on. Empty, as by default,
+	// Anthropic's Supported Regions Policy decides (egress.Supported).
+	ClaudeWaysOut []string `json:"claudeWaysOut,omitempty"`
 	// ClaudePrintMode runs a Claude subscription's Claude Code as `claude
 	// -p` always. Off, as by default, a model request runs in Claude
 	// Code's interactive mode, as a person runs it, and never as -p: the
@@ -2753,6 +2761,11 @@ func saveOwn(s Settings, recording, reads bool) error {
 	if !slices.Contains(Langs, s.Lang) {
 		return fmt.Errorf("language must be one of %v, not %q", Langs, s.Lang)
 	}
+	for _, w := range s.ClaudeWaysOut {
+		if !WayOut(w) {
+			return fmt.Errorf("a way out for Claude must be a region code (US), an IP or a CIDR range, not %q", w)
+		}
+	}
 	if !slices.Contains(Trays, s.Tray) {
 		return fmt.Errorf("tray must be one of %v, not %q", Trays, s.Tray)
 	}
@@ -3114,6 +3127,7 @@ func saveOwn(s Settings, recording, reads bool) error {
 
 func (s Settings) normal() Settings {
 	s.Name = CleanName(s.Name)
+	s.ClaudeWaysOut = cleanWaysOut(s.ClaudeWaysOut)
 	if s.Theme == "" {
 		s.Theme = "system"
 	}
@@ -3405,4 +3419,32 @@ func ClientAgentsNow() map[string]string {
 		return clientAgents(load().ClientAgents)
 	}
 	return m
+}
+
+// WayOut says whether w is a way out ClaudeWaysOut can hold: a region's
+// two-letter code, an IP, or a CIDR range.
+func WayOut(w string) bool {
+	if len(w) == 2 && w[0] >= 'A' && w[0] <= 'Z' && w[1] >= 'A' && w[1] <= 'Z' {
+		return true
+	}
+	if _, err := netip.ParseAddr(w); err == nil {
+		return true
+	}
+	_, err := netip.ParsePrefix(w)
+	return err == nil
+}
+
+// cleanWaysOut trims each way out, writes a region's code in capitals,
+// and drops blanks and repeats; nil when none is left.
+func cleanWaysOut(ws []string) []string {
+	var out []string
+	for _, w := range ws {
+		if w = strings.TrimSpace(w); len(w) == 2 {
+			w = strings.ToUpper(w)
+		}
+		if w != "" && !slices.Contains(out, w) {
+			out = append(out, w)
+		}
+	}
+	return out
 }

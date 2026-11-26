@@ -2357,27 +2357,41 @@ Regions Policy, before Claude subscription requests go out from there.
   Gibraltar, Réunion, Greenland…). Hong Kong and Macao are China's, which
   isn't listed. Ukraine is listed except for five regions a country code
   can't tell apart, so a way out in Ukraine always reads as supported.
+- **The user's own list** (mamba on Discord; Claude editor → Advanced →
+  Allowed ways out, `claudeWaysOut`). Regions by ISO code, IPs and CIDR
+  ranges (`settings.WayOut`; saving anything else is refused, `us` is
+  kept as `US`). Empty, Anthropic's list judges. Set, it alone judges: a
+  way out is OK when its region or its address is in it, and the result
+  says `mine`. A region the list needs and the lookup couldn't tell, or
+  an address it needs and the trace didn't give, is Unknown. A stored
+  result is judged again against the list each time it is read
+  (`egress.Of`), so a list changed counts at once; the GUI looks again
+  after saving one too.
 - **The lookup.** `egress.Check` asks Cloudflare's
-  `https://www.cloudflare.com/cdn-cgi/trace` for its `loc=` through the
+  `https://www.cloudflare.com/cdn-cgi/trace` for its `loc=` and `ip=` through the
   same proxy choice the Claude accounts' requests use (`ProxyOfLogin` over
   the Claude logins, `provider.ClaudeProxies`; `""` is magpie's own proxy
   setting), once per distinct choice. `XX`, `T1` (Tor), an empty or
   malformed code, a non-200 or a failed request are **Unknown**, which is
   neither fine nor unsupported: it draws nothing and holds nothing.
-- **When.** Never per request. `egress.Keep` (started by the gateway's
+- **When.** `egress.Keep` (started by the gateway's
   `ListenAndServe`) looks up at the start, again when the network or the
   set of proxy choices changes (a fingerprint of the interfaces' addresses
   and the choices, polled every 20s), every 15 minutes otherwise, and
   when the GUI's Check again or a never-looked-up choice asks
   (`egress.Again`). No Claude account, no lookup. A node switched inside
-  a proxy app changes nothing magpie can see, so it shows at the next
-  15-minute lookup, or at once with Check again.
+  a proxy app changes nothing magpie can see: with the hold off it shows
+  at the next 15-minute lookup, or at once with Check; with the hold on,
+  a request looks again itself (below).
 - **What is shown.** `/api/providers` gives the Claude row `egress`, the
   worst result over its choices (`egress.Worst`: Unsupported over Unknown
   over OK). Unsupported draws a line over the Providers list
   (`egress.js`, imported only then) naming the region in the reader's
-  language, with Check again (`POST /api/egress/check`), and the tray's
-  tooltip begins with a warning (`trayEgressTip`). Neither says anything
+  language (with the address, and the user's list rather than
+  Anthropic's, when `mine`), with Check again (`POST /api/egress/check`),
+  and the tray's tooltip begins with a warning (`trayEgressTip`). The
+  Claude editor's Advanced shows the way out itself, address · region,
+  with Check (`wayOutRow`). Neither says anything
   of bans or of keeping an account safe: the policy is Anthropic's, and
   magpie can only say where the way out is.
 - **The hold** (Claude editor → Advanced → Hold requests outside supported
@@ -2385,9 +2399,13 @@ Regions Policy, before Claude subscription requests go out from there.
   a Claude subscription request whose choice last read Unsupported, before
   any Claude Code starts: in the gateway's `attempt` (a 502 whose text
   starts `magpie held this Claude request`, `egress.HeldWords`) and in
-  `proxied` (warm-ups and usage reads through Claude Code). An Unsupported
-  older than 30s is looked up again first, so a proxy turned back on lets
-  the request go. `failure` reads a held reply as `failProxy`: nobody
+  `proxied` (warm-ups and usage reads through Claude Code). A result of
+  any state older than 30s (`Fresh`) is looked up again first, within
+  5s (`HoldTimeout`), so a proxy turned back on lets the request go and
+  a node switched to another country is held. Requests that come while
+  such a lookup is under way wait on it (`recheck`): one lookup per
+  choice, not one each. A lookup that fails is Unknown and holds
+  nothing. `failure` reads a held reply as `failProxy`: nobody
   rests, and the next account or member is asked. A choice not looked up
   yet goes, and asks for a lookup.
   - It is off by default because Cloudflare's `loc` can differ from what

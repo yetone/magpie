@@ -108,7 +108,7 @@ func TestJudge(t *testing.T) {
 		"CN": Unsupported, "HK": Unsupported, "MO": Unsupported, "RU": Unsupported, "IR": Unsupported, "KP": Unsupported,
 		"": Unknown, "XX": Unknown, "T1": Unknown, "usa": Unknown, "1A": Unknown,
 	} {
-		if got := judge(loc, now).State; got != want {
+		if got := judge(loc, "", now).State; got != want {
 			t.Errorf("loc %q: %s, want %s", loc, got, want)
 		}
 	}

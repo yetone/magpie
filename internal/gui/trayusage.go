@@ -595,11 +595,19 @@ func trayTokens(lang string, t usage.Totals) string {
 }
 
 // trayEgressTip is the line the tooltip begins with while the Claude
-// accounts' way out to the internet is in a region Anthropic doesn't list
-// (internal/egress); "" otherwise, an unknown one too.
+// accounts' way out to the internet is in a region Anthropic doesn't list,
+// or outside the ways out the user allowed (internal/egress); "" otherwise,
+// an unknown one too.
 func trayEgressTip(lang string, r egress.Result) string {
 	if r.State != egress.Unsupported {
 		return ""
+	}
+	if r.Mine {
+		at := r.Loc
+		if r.IP != "" {
+			at = r.IP + " (" + r.Loc + ")"
+		}
+		return "⚠ " + trayText(lang, "Claude's way out to the internet is %s, outside the ways out you allowed", at)
 	}
 	return "⚠ " + trayText(lang, "Claude's way out to the internet is in %s, outside Anthropic's supported regions", r.Loc)
 }
