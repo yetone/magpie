@@ -488,9 +488,18 @@ type hermesMessage struct {
 	role, content, tools string
 	at                   float64
 	id                   int64
+	// toolName and displayKind are the row's; reasoning is read only for
+	// a transcript (eachMessageOf with words)
+	toolName, displayKind, reasoning string
 }
 
 func (h *hermesDB) eachMessage(q hermesQuery, sid string, fn func(hermesMessage)) error {
+	return h.eachMessageOf(q, sid, false, fn)
+}
+
+// eachMessageOf is eachMessage reading each assistant row's reasoning too
+// when words is set, for a transcript.
+func (h *hermesDB) eachMessageOf(q hermesQuery, sid string, words bool, fn func(hermesMessage)) error {
 	if !h.messages["session_id"] || !h.messages["role"] {
 		return nil
 	}
@@ -506,10 +515,23 @@ func (h *hermesDB) eachMessage(q hermesQuery, sid string, fn func(hermesMessage)
 		}
 		return "NULL"
 	}
+	reasoning := "NULL"
+	if words {
+		// Hermes keeps an assistant's reasoning in reasoning, or in
+		// reasoning_content where the provider named it so
+		switch {
+		case h.messages["reasoning"] && h.messages["reasoning_content"]:
+			reasoning = "COALESCE(NULLIF(reasoning, ''), reasoning_content)"
+		case h.messages["reasoning"]:
+			reasoning = "reasoning"
+		case h.messages["reasoning_content"]:
+			reasoning = "reasoning_content"
+		}
+	}
 	query := "SELECT " + strings.Join([]string{
 		column("role"), column("content"), column("tool_calls"),
 		column("tool_call_id"), column("tool_name"), column("display_kind"),
-	}, ", ") + ", " + hermesExpr(h.messages, "timestamp", "0") +
+	}, ", ") + ", " + reasoning + ", " + hermesExpr(h.messages, "timestamp", "0") +
 		", " + hermesExpr(h.messages, "active", "1") +
 		", " + hermesExpr(h.messages, "id", "rowid") +
 		" FROM messages WHERE session_id = ?"
@@ -540,12 +562,13 @@ func (h *hermesDB) eachMessage(q hermesQuery, sid string, fn func(hermesMessage)
 	for rows.Next() {
 		var key identity
 		var m hermesMessage
-		var displayKind sql.NullString
+		var displayKind, thought sql.NullString
 		var active int
-		if err := rows.Scan(&key.role, &key.content, &key.tools, &key.toolID, &key.toolName, &displayKind, &key.at, &active, &m.id); err != nil {
+		if err := rows.Scan(&key.role, &key.content, &key.tools, &key.toolID, &key.toolName, &displayKind, &thought, &key.at, &active, &m.id); err != nil {
 			return err
 		}
 		m.role, m.content, m.tools, m.at = key.role.String, key.content.String, key.tools.String, key.at
+		m.toolName, m.displayKind, m.reasoning = key.toolName.String, displayKind.String, thought.String
 		if m.role == "user" && key.content.Valid {
 			key.content.String = hermesDisplayContent(m.content, displayKind.String)
 		}

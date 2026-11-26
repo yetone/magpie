@@ -36,13 +36,12 @@ func listedAgents(t *testing.T) []string {
 // leaves this list when its reader is written, and may not be added to it
 // without one being filed.
 var noTranscriptYet = map[string]string{
-	"zcode":  "database rows",
-	"dsh":    "session.v3.jsonl not read as a transcript",
-	"cline":  "messages.json not read as a transcript",
-	"grok":   "updates.jsonl not read as a transcript",
-	"droid":  "not read as a transcript",
-	"hermes": "database rows",
-	"alma":   "database rows",
+	"zcode": "database rows",
+	"dsh":   "session.v3.jsonl not read as a transcript",
+	"cline": "messages.json not read as a transcript",
+	"grok":  "updates.jsonl not read as a transcript",
+	"droid": "not read as a transcript",
+	"alma":  "database rows",
 }
 
 // Every agent the Sessions page lists is read by memory learning, or is

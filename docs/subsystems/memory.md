@@ -265,6 +265,11 @@ further (`State.Since`), unless a range is picked.
   the gateway was never learnt from (bxgz233 on X: 1000+ WorkBuddy
   sessions; `TestGatewayOnlySessionsRead`, `TestReadOnlySessionsRead`). A
   gateway session with nothing recorded has no turns and is passed over.
+  A session counts only when its agent has a transcript reader
+  (`sessions.HasTranscript`); `noTranscriptYet` in sessions' tests names
+  the agents listed without one. Hermes Agent was one until its rows were
+  read (`hermesTranscript`, every profile's `state.db`; CFK on Discord,
+  `TestHermesSessionsRead`).
 - A turn counts by what the user said, a user `text` part. WorkBuddy
   (and WorkBuddy AI, CodeBuddy Code) writes each turn as one block, its
   `<system-reminder>` context and then the words in `<user_query>`, in

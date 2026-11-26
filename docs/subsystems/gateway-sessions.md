@@ -618,6 +618,25 @@ none for `defaultWorkspace`). Read only, no resume or delete. Tests:
 `TestCatPawSessions`, `TestCatPawTranscript` (rows made by CatPaw's own
 CREATE statements and message shapes; no signed-in conversation was had).
 
+Hermes Agent keeps its sessions as rows in each profile's `state.db`
+(SQLite in WAL mode): the home (`HERMES_HOME`, else `~/.hermes`, else
+`%LOCALAPPDATA%\hermes` on Windows) and each `profiles/<name>`
+(`HermesDirs`). A session's path is the database and `#` its id. What
+was said is read from the same rows its counts are (`hermesTranscript`,
+through `eachMessageOf`): a rewind's dropped rows and model-only
+scaffolding are left out, a compaction's archived turns are kept once,
+and a row Hermes never shows (`display_kind` `hidden`) is skipped. A
+row's content is Hermes's `_encode_content` (the text, or `\x00json:`
+and its parts); an assistant's `reasoning` (or `reasoning_content`) is
+its thinking, its OpenAI `tool_calls` its tool uses, and a `tool` row's
+answer is named by its `tool_name`. A compaction's handoff summary is
+context and the turn after its end marker is said (`hermesDisplayText`).
+Before, Hermes had no transcript, so Show conversation, search and
+memory learning passed every Hermes session over (CFK on Discord).
+Read only, no resume or delete. Tests: `TestHermesTranscript` (Hermes's
+own CREATE statements, schema 31, and row encodings; no real Hermes
+conversation was read), `TestHermesSessionsRead` in memdistill.
+
 ## Local Gateway Conversation Recording
 
 The Sessions page offers an explicit, default-off recording switch. Confirmation
