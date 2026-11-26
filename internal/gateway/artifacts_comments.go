@@ -39,8 +39,13 @@ type artifactCommentCall struct {
 }
 
 // commentPageOps are what a page's own token may do, with the full
-// declaration.
-var commentPageOps = []string{"create", "reply", "resolve", "delete", "can"}
+// declaration: ask whether the agent can take a comment. Its writes go
+// through the viewer's shell, which asks the viewer first and writes
+// with the shell's token.
+var commentPageOps = []string{"can"}
+
+// commentWrites are the calls that write as the viewer.
+var commentWrites = []string{"create", "reply", "resolve", "delete"}
 
 func (s *Server) artifactComments(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
@@ -87,13 +92,12 @@ func (s *Server) artifactComments(w http.ResponseWriter, r *http.Request) {
 			artifactAPIError(w, http.StatusForbidden, "not_granted", "the page declares comments as composer_only: it opens the composer, and writes nothing")
 			return
 		}
-		if !slices.Contains(commentPageOps, c.Op) {
-			artifactAPIError(w, http.StatusForbidden, "not_granted", "a page writes comments; the shell lists them")
+		if slices.Contains(commentWrites, c.Op) {
+			artifactAPIError(w, http.StatusForbidden, "consent_required", "a page's comments are written through magpie's viewer, which asks the viewer first")
 			return
 		}
-		if c.Send {
-			// the viewer sends to the agent, from the shell's composer
-			artifactAPIError(w, http.StatusForbidden, "consent_required", "a page doesn't send to the agent itself: sendToClaude opens the viewer's composer")
+		if !slices.Contains(commentPageOps, c.Op) {
+			artifactAPIError(w, http.StatusForbidden, "not_granted", "a page writes comments; the shell lists them")
 			return
 		}
 	}

@@ -148,8 +148,13 @@ func TestArtifactCommentsAPI(t *testing.T) {
 	if code != 200 || tid == "" {
 		t.Fatalf("create: %d %v", code, out)
 	}
-	if code, out := commentCall(h, id, map[string]any{"t": page, "op": "reply", "thread": tid, "text": "and bold"}, "Origin", "null"); code != 200 || out["commentId"] == nil {
-		t.Fatalf("a page's reply: %d %v", code, out)
+	if code, out := commentCall(h, id, map[string]any{"t": shell, "op": "reply", "thread": tid, "text": "and bold"}); code != 200 || out["commentId"] == nil {
+		t.Fatalf("reply: %d %v", code, out)
+	}
+	// the page asks whether the agent can take one; it writes nothing
+	// itself: its writes go through the shell, which asks the viewer
+	if code, out := commentCall(h, id, map[string]any{"t": page, "op": "can"}, "Origin", "null"); code != 200 || out["can"] != "no_session" {
+		t.Fatalf("a page's can: %d %v", code, out)
 	}
 	code, out = commentCall(h, id, map[string]any{"t": shell, "op": "list"})
 	ts, _ := out["threads"].([]any)
@@ -165,6 +170,10 @@ func TestArtifactCommentsAPI(t *testing.T) {
 		{"a page stops a run", map[string]any{"t": page, "op": "stop", "thread": tid}, "not_granted"},
 		{"a page sends", map[string]any{"t": page, "op": "send", "thread": tid}, "not_granted"},
 		{"a page writes and sends", map[string]any{"t": page, "op": "reply", "thread": tid, "text": "go", "send": true}, "consent_required"},
+		{"a page creates", map[string]any{"t": page, "op": "create", "anchor": map[string]any{"path": "#top", "x": 0.2, "y": 0.5}, "text": "hi"}, "consent_required"},
+		{"a page replies", map[string]any{"t": page, "op": "reply", "thread": tid, "text": "and bold"}, "consent_required"},
+		{"a page resolves", map[string]any{"t": page, "op": "resolve", "thread": tid, "resolved": true}, "consent_required"},
+		{"a page deletes", map[string]any{"t": page, "op": "delete", "thread": tid}, "consent_required"},
 		{"no token", map[string]any{"op": "list"}, "not_granted"},
 		{"another's token", map[string]any{"t": "x" + shell[1:], "op": "list"}, "not_granted"},
 		{"an empty comment", map[string]any{"t": shell, "op": "reply", "thread": tid, "text": "  "}, "invalid"},
@@ -181,7 +190,10 @@ func TestArtifactCommentsAPI(t *testing.T) {
 	if th, _ := artifact.GetThread(id, tid); !th.Resolved {
 		t.Fatalf("not resolved: %+v", th)
 	}
-	if _, out := commentCall(h, id, map[string]any{"t": page, "op": "delete", "thread": tid}, "Origin", "null"); errCode(out) != "" {
+	if ts, _ := artifact.Threads(id); len(ts) != 1 || len(ts[0].Comments) != 2 {
+		t.Fatalf("a page's refused writes wrote: %+v", ts)
+	}
+	if _, out := commentCall(h, id, map[string]any{"t": shell, "op": "delete", "thread": tid}); errCode(out) != "" {
 		t.Fatalf("delete: %v", out)
 	}
 	if ts, _ := artifact.Threads(id); len(ts) != 0 {

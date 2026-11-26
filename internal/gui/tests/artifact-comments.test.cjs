@@ -106,8 +106,9 @@ async function fakeMagpie(t, lang) {
         const shell = c.t === "stok", pg = c.t === "ptok";
         calls.push({ c, by: shell ? "shell" : pg ? "page" : "?", origin: req.headers.origin, type: req.headers["content-type"] });
         if (!shell && !pg) return err("not_granted");
-        if (pg && !["create", "reply", "resolve", "delete", "can"].includes(c.op)) return err("not_granted");
-        if (pg && c.send) return err("consent_required");
+        // as magpie: the page's token asks "can"; its writes go through the shell
+        if (pg && ["create", "reply", "resolve", "delete"].includes(c.op)) return err("consent_required");
+        if (pg && c.op !== "can") return err("not_granted");
         const ok = (v) => { res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }); res.end(JSON.stringify(v || {})); };
         const author = "u_0123456789abcdef01234567";
         const agent = { id: "claude", name: "Claude Code", can: "available" };
@@ -178,6 +179,9 @@ async function open(t, engine, opts) {
   return { site, page, frame, errors };
 }
 const pop = (page) => page.locator(".pop.in").last();
+const asked = (page) => page.locator(".pop.save.in[role=alertdialog]");
+// what the shell wrote for the page (the viewer's own posts have send set)
+const writes = (site) => site.calls.filter((c) => c.by === "shell" && c.c.send === undefined && ["create", "reply", "resolve", "delete"].includes(c.c.op));
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(`the viewer comments on the page in comment mode (${engine})`, async (t) => {
@@ -346,18 +350,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal(creates(), n2 + 1);
     assert.equal(site.calls.filter((c) => c.c.op === "create").at(-1).c.send, false);
 
-    // the page's own writes go with its token, never to the agent
+    // the page's own writes: the viewer is asked once, and they go with
+    // the shell's token, never to the agent; the page's token asks "can"
     await page.waitForFunction(() => !document.querySelector(".pop.in"));
-    const own = await frame.evaluate(async () => {
-      const anchor = await window.cm.anchorFor(document.getElementById("own"));
-      const t1 = await window.cm.create({ anchor, text: "By the page" });
-      await window.cm.reply(t1.threadId, "Again");
-      return { t1, can: await window.cm.canSendToClaude(), bad: await window.cm.create({ anchor, text: "" }).catch((e) => e.code) };
+    await frame.evaluate(() => {
+      window.own = (async () => {
+        const anchor = await window.cm.anchorFor(document.getElementById("own"));
+        const t1 = await window.cm.create({ anchor, text: "By the page" });
+        await window.cm.reply(t1.threadId, "Again");
+        return { t1, can: await window.cm.canSendToClaude(), bad: await window.cm.create({ anchor, text: "" }).catch((e) => e.code) };
+      })();
     });
+    await asked(page).waitFor();
+    assert.equal(await asked(page).locator(".ask").textContent(), "Let “Plan” comment as you?");
+    assert.equal(writes(site).length, 0, "nothing written before the viewer allowed it");
+    await page.waitForTimeout(450);
+    await asked(page).getByRole("button", { name: "Allow", exact: true }).click();
+    const own = await frame.evaluate(() => window.own);
+    assert.match(own.t1.threadId, /^t/);
     assert.equal(own.can, "available");
     assert.equal(own.bad, "invalid");
+    assert.equal(await asked(page).count(), 0, "asked once");
+    assert.deepEqual(writes(site).map((c) => [c.c.op, c.c.send, c.c.text]), [["create", undefined, "By the page"], ["reply", undefined, "Again"]]);
     const pageCalls = site.calls.filter((c) => c.by === "page");
-    assert.deepEqual(pageCalls.map((c) => c.c.op), ["create", "reply", "can"]);
+    assert.deepEqual(pageCalls.map((c) => c.c.op), ["can"]);
     for (const c of pageCalls) {
       assert.equal(c.origin, "null");
       assert.match(c.type, /^text\/plain/);
@@ -371,6 +387,62 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.waitForTimeout(500);
     assert.equal(await page.locator(".pop.in").count(), 0, "a nested frame opened no composer");
     assert.deepEqual(errors, []);
+  });
+
+  test(`a page's comment the viewer doesn't allow is not written, and Permissions changes it (${engine})`, async (t) => {
+    const { site, page, frame, errors } = await open(t, engine);
+    const create = () => frame.evaluate(() => {
+      window.r = undefined;
+      window.cm.anchorFor(document.getElementById("own")).then((anchor) => window.cm.create({ anchor, text: "Mine" })).then((r) => { window.r = { ok: !!r.threadId }; }, (e) => { window.r = { code: e.code, name: e.name }; });
+    });
+    const result = async () => (await frame.waitForFunction(() => window.r)).jsonValue();
+    await create();
+    await asked(page).waitFor();
+    await page.waitForTimeout(450);
+    await asked(page).getByRole("button", { name: "Don't allow", exact: true }).click();
+    assert.deepEqual(await result(), { code: "consent_required", name: "CommentsError" });
+    assert.equal(await frame.evaluate(() => claude.use("permissions").then((p) => p.state("comments"))), "denied");
+    await create();
+    assert.deepEqual(await result(), { code: "consent_required", name: "CommentsError" });
+    assert.equal(await asked(page).count(), 0, "a no is never asked again");
+    assert.deepEqual(writes(site), []);
+    // the panel has a Comments row
+    await frame.evaluate(() => {
+      const b = document.createElement("button");
+      b.id = "go";
+      b.textContent = "Permissions";
+      b.onclick = () => { window.managed = claude.use("permissions").then((p) => p.manage()).then(() => "closed"); };
+      document.body.prepend(b);
+    });
+    await frame.locator("#go").click();
+    const panel = page.locator(".pop.save.perms.in");
+    await panel.waitFor();
+    assert.deepEqual(await panel.locator(".perm > span").allTextContents(), ["Comments"]);
+    assert.equal(await panel.locator(".perm button.on").textContent(), "Don't allow");
+    await panel.getByRole("button", { name: "Allow", exact: true }).click();
+    await panel.getByRole("button", { name: "Close" }).click();
+    assert.equal(await frame.evaluate(() => window.managed), "closed");
+    assert.equal(await frame.evaluate(() => claude.use("permissions").then((p) => p.state("comments"))), "granted");
+    await create();
+    assert.deepEqual(await result(), { ok: true });
+    assert.equal(await asked(page).count(), 0);
+    assert.deepEqual(writes(site).map((c) => c.c.text), ["Mine"]);
+    assert.deepEqual(errors, []);
+  });
+
+  test(`Escape in the viewer closes the question unanswered (${engine})`, async (t) => {
+    const { site, page, frame } = await open(t, engine);
+    await frame.evaluate(() => {
+      window.r = undefined;
+      window.cm.anchorFor(document.getElementById("own")).then((anchor) => window.cm.create({ anchor, text: "Mine" })).then(() => { window.r = "ok"; }, (e) => { window.r = e.code; });
+    });
+    await asked(page).waitFor();
+    await page.locator(".bar").first().focus().catch(() => {});
+    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    assert.equal(await (await frame.waitForFunction(() => window.r)).jsonValue(), "consent_required");
+    assert.equal(await asked(page).count(), 0);
+    assert.equal(await frame.evaluate(() => claude.use("permissions").then((p) => p.state("comments"))), "prompt", "unanswered is not a no");
+    assert.deepEqual(writes(site), []);
   });
 
   test(`the composer fits a narrow window (${engine})`, async (t) => {

@@ -337,7 +337,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   });
 
   test(`a page without dictation gets null (${engine})`, async (t) => {
-    const { frame } = await open(t, engine, { caps: { comments: {} } });
+    // composer_only: nothing for the viewer to allow (full comments asks)
+    const { frame } = await open(t, engine, { caps: { comments: { composer_only: true } } });
     assert.equal(await frame.evaluate(() => window.out.served), false);
     assert.equal(await frame.evaluate(() => p.state("dictation")), "unavailable");
     assert.equal(await frame.evaluate(() => p.manage().then(() => "opened", (e) => e.code)), "unavailable");

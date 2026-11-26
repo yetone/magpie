@@ -1103,6 +1103,7 @@
         case "hi":
           if (d.grants && typeof d.grants.dictation === "string") dgrant = d.grants.dictation;
           if (d.grants && typeof d.grants.files === "string") fgrant = d.grants.files;
+          if (d.grants && typeof d.grants.comments === "string") cgrant = d.grants.comments;
           if (d.grants) mGrants(d.grants.mcp);
           shellUp = true;
           shellWait.splice(0).forEach(function (f) { f(true); });
@@ -1122,6 +1123,9 @@
           if (cwait[d.req]) cwait[d.req](d);
           break;
         case "sent":
+          if (cwait[d.req]) cwait[d.req](d);
+          break;
+        case "comment-done":
           if (cwait[d.req]) cwait[d.req](d);
           break;
         case "ask":
@@ -1148,6 +1152,7 @@
         case "grants":
           if (d.grants && typeof d.grants.dictation === "string") dgrant = d.grants.dictation;
           if (d.grants && typeof d.grants.files === "string") fgrant = d.grants.files;
+          if (d.grants && typeof d.grants.comments === "string") cgrant = d.grants.comments;
           if (d.grants) mGrants(d.grants.mcp);
           if (d.req && pwait[d.req]) pwait[d.req]();
           break;
@@ -1213,9 +1218,17 @@
     e.code = code;
     return e;
   }
-  var cdecl = C.caps.comments || {}, composerOnly = !!cdecl.composer_only;
+  var cdecl = C.caps.comments || {}, composerOnly = !!cdecl.composer_only, cgrant = "prompt";
   function ccall(op, body) {
     return post("comments", Object.assign({ t: C.token, op: op, version: version }, body), cErr, "unavailable");
+  }
+  // a write goes through the shell, which asks the viewer the first time
+  // and writes with its own token: the page's writes nothing
+  function cwrite(op, body) {
+    return shellAsk({ type: "comment", op: op, body: Object.assign({ version: version }, body) }).then(function (d) {
+      if (d.error) throw cErr(d.error.code || "unavailable", d.error.message);
+      return d.result || {};
+    });
   }
   function checkText(s) {
     if (typeof s !== "string" || !s.trim()) return Promise.reject(cErr("invalid", "a comment's text is a non-empty string"));
@@ -1296,7 +1309,7 @@
       if (bad) return bad;
       if (!checkAnchor(o.anchor)) return Promise.reject(cErr("invalid", "create takes the anchor anchorFor gave"));
       var e = find(o.anchor.path);
-      return ccall("create", { anchor: { path: o.anchor.path, x: o.anchor.x, y: o.anchor.y }, label: e ? labelOf(e) : "", text: o.text }).then(function (j) {
+      return cwrite("create", { anchor: { path: o.anchor.path, x: o.anchor.x, y: o.anchor.y }, label: e ? labelOf(e) : "", text: o.text }).then(function (j) {
         return freeze({ threadId: j.threadId, commentId: j.commentId });
       });
     };
@@ -1304,7 +1317,7 @@
       var bad = checkText(text);
       if (bad) return bad;
       if (typeof id !== "string" || !id) return Promise.reject(cErr("invalid", "reply takes a threadId"));
-      return ccall("reply", { thread: id, text: text }).then(function (j) { return freeze({ commentId: j.commentId }); });
+      return cwrite("reply", { thread: id, text: text }).then(function (j) { return freeze({ commentId: j.commentId }); });
     };
     // the viewer sends it from the shell's composer, written for them:
     // the page alone sends nothing to the agent
@@ -1328,10 +1341,10 @@
       return ccall("can", {}).then(function (j) { return j.can || "off"; }, function () { return "off"; });
     };
     comments.resolve = function (id, resolved) {
-      return ccall("resolve", { thread: String(id), resolved: !!resolved }).then(function () {});
+      return cwrite("resolve", { thread: String(id), resolved: !!resolved }).then(function () {});
     };
     comments["delete"] = function (id) {
-      return ccall("delete", { thread: String(id) }).then(function () {});
+      return cwrite("delete", { thread: String(id) }).then(function () {});
     };
   }
   if (cdecl.customAnchors) {
@@ -2207,10 +2220,12 @@
   var files = freeze({ list: filesList, read: filesRead, download: filesDownload, asSampleTools: filesTools });
 
   // -- permissions --------------------------------------------------------
-  // dictation and each MCP server ("mcp:<server>"; "mcp" for all of
-  // them) are the viewer's to allow, once for each artifact, in the
-  // shell; every other capability is granted with the page
-  var asksViewer = served.dictation || served.mcp || served.files;
+  // dictation, files, comments declared in full (the page writes as the
+  // viewer) and each MCP server ("mcp:<server>"; "mcp" for all of them)
+  // are the viewer's to allow, once for each artifact, in the shell;
+  // every other capability is granted with the page
+  var cAsks = served.comments && !composerOnly;
+  var asksViewer = served.dictation || served.mcp || served.files || cAsks;
   function mState(server) {
     if (!served.mcp || !shellUp) return "unavailable";
     if (server === null) {
@@ -2225,7 +2240,7 @@
     var all = names || Object.keys(C.caps).concat(served.mcp ? MAN.map(function (m) { return "mcp:" + m.server; }) : []);
     all.forEach(function (n) {
       if (n === "mcp" || n.indexOf("mcp:") === 0) out[n] = mState(n === "mcp" ? null : n.slice(4));
-      else if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = n === "dictation" ? (shellUp ? dgrant : "unavailable") : n === "files" ? (shellUp ? fgrant : "unavailable") : "granted";
+      else if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = n === "dictation" ? (shellUp ? dgrant : "unavailable") : n === "files" ? (shellUp ? fgrant : "unavailable") : n === "comments" && cAsks ? (shellUp ? cgrant : "unavailable") : "granted";
       else if (names) out[n] = "unavailable";
       if (!names && out[n] === "unavailable") delete out[n];
     });
@@ -2245,7 +2260,7 @@
         return one ? states([String(name)])[String(name)] : states(null);
       });
     },
-    // one question at a time: dictation, files, then the MCP servers asked for
+    // one question at a time: dictation, files, comments, then the MCP servers asked for
     request: function (names) {
       var list = names ? [].concat(names).map(String) : null;
       return (asksViewer ? whenShell() : Promise.resolve()).then(function () {
@@ -2254,6 +2269,9 @@
       }).then(function () {
         var ask = served.files && shellUp && fgrant === "prompt" && (!list || list.indexOf("files") >= 0);
         return ask ? viaShell("files-ask") : null;
+      }).then(function () {
+        var ask = cAsks && shellUp && cgrant === "prompt" && (!list || list.indexOf("comments") >= 0);
+        return ask ? viaShell("comments-ask") : null;
       }).then(function () {
         if (!served.mcp || !shellUp) return;
         var want = MAN.filter(function (m) { return !list || list.indexOf("mcp") >= 0 || list.indexOf("mcp:" + m.server) >= 0; }).filter(function (m) { return !mgrant[m.server]; });
@@ -2264,7 +2282,7 @@
       if (!asksViewer) return Promise.reject(dbError("unavailable", "this page has nothing for the viewer to allow: what it may do is set when it is published"));
       return whenShell().then(function (up) {
         if (!up) throw dbError("unavailable", "the Permissions panel is in magpie's viewer: open the page in its own tab");
-        return viaShell("perms", { serves: { dictation: !!served.dictation, mcp: !!served.mcp, files: !!served.files } });
+        return viaShell("perms", { serves: { dictation: !!served.dictation, mcp: !!served.mcp, files: !!served.files, comments: !!cAsks } });
       }).then(function () {});
     },
   });

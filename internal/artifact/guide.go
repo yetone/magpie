@@ -95,8 +95,8 @@ Declare {"comments": {"composer_only": true}} for openComposer and anchorFor alo
   await comments.canSendToClaude()               // "available", "no_session" or "off"
   await comments.resolve(threadId, true)
   await comments.delete(threadId)
-Call the writing calls on a viewer's click, never on load. Text is 1 to 4096 bytes of UTF-8, newlines and tabs but no other control characters. Mark parts that take no comments with data-uncommentable, and the element a comment should pin to with data-comment-target.
-Codes: invalid, not_granted, not_found, consent_required (the viewer didn't send it), claude_unavailable, unavailable, capability_disabled (customAnchors isn't served here).`},
+Call the writing calls on a viewer's click, never on load: the first one asks the viewer, and waits for their answer. Text is 1 to 4096 bytes of UTF-8, newlines and tabs but no other control characters. Mark parts that take no comments with data-uncommentable, and the element a comment should pin to with data-comment-target.
+Codes: invalid, not_granted, not_found, consent_required (the viewer didn't allow the page to comment as them, or didn't send it; keep the draft), claude_unavailable, unavailable, capability_disabled (customAnchors isn't served here).`},
 	{"downloads", `downloads: the page hands the viewer a file it made (an export, a CSV, a picture of a chart). magpie's viewer asks them first, one file at a time, and they may say no.
 Declare {"downloads": true}.
   const downloads = await claude.use("downloads")   // null in a shared copy: hide the button

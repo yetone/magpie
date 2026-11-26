@@ -443,15 +443,18 @@ The store and API:
   and `op`: list, create, reply, resolve, delete (a thread, or one
   comment), send, stop and can. Local callers at a loopback Host only.
 - A page's own token, from a version declaring `comments` in full, may
-  create, reply, resolve, delete and can. `{composer_only: true}` writes
-  nothing: it opens the shell's composer (`openComposer`) and makes
+  ask `can` only; a write with it is `consent_required`. The page's
+  create, reply, resolve and delete go to the shell (`comment`), which
+  asks the viewer once for each artifact ("Let “…” comment as you?",
+  kept in localStorage like files and changed in Permissions) and
+  writes with its own token, never with `send` (`commentOp` in
+  shell.js). `{composer_only: true}` writes nothing and asks nothing: it opens the shell's composer (`openComposer`) and makes
   anchors (`anchorFor`). Like a click, that composer (and
   `sendToClaude`'s) points at what the viewer sees: an element out of
   view is scrolled into it, and the point and the anchor are the middle
   of its visible part (`shown` in runtime.js). Nothing lists threads but the shell (the
   contract's WRITE-ONLY).
-- A page never sends to the agent: `send: true` with its token is
-  `consent_required`. `sendToClaude` opens the shell's composer filled
+- A page never sends to the agent. `sendToClaude` opens the shell's composer filled
   in, and nothing goes until the viewer presses Send; dismissed, or
   posted as a plain comment, it rejects `consent_required`. When the
   viewer sends, the page's `onSendToClaude` hears it first and may answer
