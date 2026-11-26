@@ -1,10 +1,13 @@
 package gateway
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,6 +37,28 @@ func TestOfflineRestsNobody(t *testing.T) {
 	t.Cleanup(up.Close)
 	deadA := deadAddr(t, up.Listener.Addr().String())
 	deadB := deadAddr(t, up.Listener.Addr().String(), deadA)
+	// the verdict's dials: a port this test freed can be handed to
+	// another process on the machine next, and a dial that reaches it
+	// says the network is up (#7871, red on macOS CI after 42c50c18c),
+	// so the dead ones are refused here; up is dialled as it is
+	wasDial := dialHost
+	t.Cleanup(func() { dialHost = wasDial })
+	var dialMu sync.Mutex
+	var dialled []string
+	dialHost = func(ctx context.Context, h string) error {
+		dialMu.Lock()
+		dialled = append(dialled, h)
+		dialMu.Unlock()
+		if h == deadA || h == deadB {
+			return errors.New("connection refused")
+		}
+		return wasDial(ctx, h)
+	}
+	asked := func() string {
+		dialMu.Lock()
+		defer dialMu.Unlock()
+		return strings.Join(dialled, ",")
+	}
 
 	resting := func() int {
 		restingUntil.Lock()
@@ -79,7 +104,7 @@ func TestOfflineRestsNobody(t *testing.T) {
 			t.Fatalf("tries %+v", r.Tries)
 		}
 		if f := r.Tries[0]; f.Fail != failOffline || f.Rest != nil || !strings.Contains(f.Error, deadA) {
-			t.Fatalf("a's try %+v", f)
+			t.Fatalf("a's try %+v (dialled %s)", f, asked())
 		}
 		if f := r.Tries[len(r.Tries)-1]; f.Fail != failOffline || f.Rest != nil && f.Rest.Until.After(time.Now()) {
 			t.Fatalf("b's try %+v", f)
@@ -97,7 +122,7 @@ func TestOfflineRestsNobody(t *testing.T) {
 		(&Server{}).network.heardNet()
 		_, _, r := ask(t, s)
 		if f := r.Tries[0]; f.Fail != failOffline || f.Rest != nil {
-			t.Fatalf("a's try %+v", f)
+			t.Fatalf("a's try %+v (dialled %s)", f, asked())
 		}
 	})
 
