@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -176,7 +177,7 @@ func carriedError(data string) (ev Event, ok bool) {
 		// the status the error names for itself (#4855)
 		status = cmp.Or(namedStatusOf(r.Error), namedStatusOf(v.Error))
 	}
-	return Event{Kind: KError, Text: streamErrorText(data, r.Error, v.Error), Code: code, Status: status, Said: said}, true
+	return Event{Kind: KError, Text: streamErrorText(data, r.Error, v.Error), Code: code, Status: status, Said: said, Resets: saidResets(data, time.Now())}, true
 }
 
 // streamErrorText is what an upstream's error event says: the message of
@@ -209,6 +210,44 @@ func streamErrorText(data string, errs ...json.RawMessage) string {
 		}
 	}
 	return provider.APIError([]byte(data), "the upstream reported an error")
+}
+
+// saidResets is when the limit an upstream's error event refused the
+// request for renews, as the event says it: resets_at (unix seconds) or
+// resets_in_seconds on its error, as ChatGPT's usage_limit_reached and
+// doubao-work's doubao_quota carry them. Zero when it says neither. Kept
+// as the event's Resets, the account rests till then (resetsOn), and the
+// error magpie writes in the client's own shape says it too (resetsSaid):
+// read from neither, doubao-work's monthly allowance, said in its stream
+// after reasoning, rested a quarter of an hour (aaron0x10 on X).
+func saidResets(data string, now time.Time) time.Time {
+	var v struct {
+		Error    json.RawMessage `json:"error"`
+		Response json.RawMessage `json:"response"`
+	}
+	if json.Unmarshal([]byte(data), &v) != nil {
+		return time.Time{}
+	}
+	var r struct {
+		Error json.RawMessage `json:"error"`
+	}
+	json.Unmarshal(v.Response, &r)
+	for _, raw := range []json.RawMessage{v.Error, r.Error} {
+		var e struct {
+			At int64 `json:"resets_at"`
+			In int64 `json:"resets_in_seconds"`
+		}
+		if !carries(raw) || json.Unmarshal(raw, &e) != nil {
+			continue
+		}
+		if t := time.Unix(e.At, 0); e.At > 0 && t.After(now) {
+			return t
+		}
+		if e.In > 0 {
+			return now.Add(time.Duration(e.In) * time.Second)
+		}
+	}
+	return time.Time{}
 }
 
 // carries says whether a JSON value is there and not null.

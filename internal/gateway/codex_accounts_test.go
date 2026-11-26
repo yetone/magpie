@@ -588,6 +588,10 @@ func TestResetsIn(t *testing.T) {
 		`{"error":{"resets_at":999000}}`:                                                     0,
 		`{"error":{"message":"quota"}}`:                                                      0,
 		`not json`:                                                                           0,
+		// a stream's error frame, kept as its error object alone
+		`{"message":"豆包工作：本月额度已用完","type":"doubao_quota","status":429,"resets_at":1003600}`: time.Hour,
+		`{"message":"quota","resets_in_seconds":90}`:                                        90 * time.Second,
+		`{"message":"quota","resets_at":999000}`:                                            0,
 	} {
 		if got := resetsIn([]byte(body), now); got != want {
 			t.Errorf("%s: %v, want %v", body, got, want)

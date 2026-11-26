@@ -1544,7 +1544,7 @@ func decodeAnthropic(data string, emit func(Event)) error {
 		emit(Event{Kind: KUsage, Usage: ev.Usage.usage(), SafeguardResults: review, StopDetails: stopDetails(ev.Delta.StopDetails)})
 	case "error":
 		code, status, said := filterRefused(data)
-		emit(Event{Kind: KError, Text: cmp.Or(ev.Error.Message, ev.Error.Type, streamErrorText(data)), Code: code, Status: status, Said: said})
+		emit(Event{Kind: KError, Text: cmp.Or(ev.Error.Message, ev.Error.Type, streamErrorText(data)), Code: code, Status: status, Said: said, Resets: saidResets(data, time.Now())})
 	}
 	return nil
 }
@@ -1960,6 +1960,7 @@ func (e *anthropicEncoder) event(ev Event) {
 			failed["code"] = ev.Code // preserve the upstream error type, including refusals
 		}
 		saidError(failed, ev.Said)
+		resetsSaid(failed, ev.Resets)
 		e.w.event("error", map[string]any{"type": "error", "error": failed})
 	}
 	e.col.add(ev)

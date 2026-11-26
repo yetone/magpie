@@ -33,6 +33,11 @@ func TestPluginFailover(t *testing.T) {
 	allowances = provider.Allowances
 	t.Cleanup(func() { allowances = old })
 
+	// 豆包工作's notice, as doubao-work 0.1.14 passes it on, and the start
+	// of next month it names, well past every shorter rest
+	const doubaoSpent = "豆包工作：本月额度已用完，下个月恢复为你服务。 升级到标准套餐畅享更多额度。 升级正式订阅"
+	doubaoBack := time.Now().Add(20 * 24 * time.Hour).Truncate(time.Second)
+
 	var mu sync.Mutex
 	var tried []string          // each request's account, as its token names it
 	fail := map[string]string{} // account → how it fails
@@ -41,7 +46,7 @@ func TestPluginFailover(t *testing.T) {
 		who := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer fresh-r-")
 		mu.Lock()
 		tried = append(tried, who)
-		how := fail[who]
+		how, _, _ := strings.Cut(fail[who], "/") // "/sse", "/claude": the client asks for a stream, Anthropic's
 		mu.Unlock()
 		switch how {
 		case "quota":
@@ -58,6 +63,23 @@ func TestPluginFailover(t *testing.T) {
 			// the vendor says it only in the stream, before any content
 			w.Header().Set("Content-Type", "text/event-stream")
 			fmt.Fprint(w, `data: {"error":{"message":"You have exceeded your monthly quota"}}`+"\n\n")
+			return
+		case "doubao":
+			// doubao-work's answer to 豆包工作's spent allowance, which the
+			// app words as a reply (aaron0x10 on X): a 429 in Doubao's
+			// words, with when it is back
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", fmt.Sprint(int64(time.Until(doubaoBack).Seconds())))
+			w.WriteHeader(429)
+			fmt.Fprintf(w, `{"error":{"message":%q,"type":"doubao_quota","status":429,"resets_at":%d}}`, doubaoSpent, doubaoBack.Unix())
+			return
+		case "doubao-stream":
+			// the same after the reply had begun with reasoning: the
+			// stream ends in an error frame naming its status
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, `data: {"id":"c","object":"chat.completion.chunk","model":"fake-1","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}`+"\n\n")
+			fmt.Fprint(w, `data: {"id":"c","object":"chat.completion.chunk","model":"fake-1","choices":[{"index":0,"delta":{"reasoning_content":"想一想"},"finish_reason":null}]}`+"\n\n")
+			fmt.Fprintf(w, `data: {"error":{"message":%q,"type":"doubao_quota","status":429,"resets_at":%d}}`+"\n\n", doubaoSpent, doubaoBack.Unix())
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -123,9 +145,18 @@ func TestPluginFailover(t *testing.T) {
 		sticks.m = map[string]stick{}
 		sticks.Unlock()
 	}
+	streamed, claude := false, false // the client asks for a stream; Anthropic's Messages
 	ask := func(model string) (int, string, []string) {
 		t.Helper()
-		code, body := postAs(t, s, "", `{"model":"`+model+`","messages":[{"role":"user","content":"hello"}]}`)
+		var code int
+		var body string
+		if claude {
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"`+model+`","max_tokens":64,"stream":true,"messages":[{"role":"user","content":"hello"}]}`)))
+			code, body = rec.Code, rec.Body.String()
+		} else {
+			code, body = postAs(t, s, "", `{"model":"`+model+`","stream":`+fmt.Sprint(streamed)+`,"messages":[{"role":"user","content":"hello"}]}`)
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		return code, body, append([]string(nil), tried...)
@@ -141,7 +172,8 @@ func TestPluginFailover(t *testing.T) {
 
 	// an account out of its allowance: the request goes on to another,
 	// and the next one doesn't try it again
-	for _, how := range []string{"quota", "stream", "gone"} {
+	for _, how := range []string{"quota", "stream", "gone", "doubao", "doubao-stream", "doubao/sse", "doubao-stream/sse", "doubao-stream/claude"} {
+		streamed, claude = strings.HasSuffix(how, "/sse"), strings.HasSuffix(how, "/claude")
 		hit := false
 		for _, first := range []string{"a", "b", "full"} {
 			reset(map[string]string{first: how})
@@ -163,6 +195,20 @@ func TestPluginFailover(t *testing.T) {
 			}
 			hit = true
 			t.Logf("%s: %s failed, served by %s, tried %v", how, first, servedBy(body), seen)
+			if strings.HasPrefix(how, "doubao") {
+				// out until the month Doubao names turns, not an hour's guess
+				restingUntil.Lock()
+				var longest time.Time
+				for _, until := range restingUntil.m {
+					if until.After(longest) {
+						longest = until
+					}
+				}
+				restingUntil.Unlock()
+				if d := longest.Sub(doubaoBack); d < -time.Minute || d > time.Minute {
+					t.Fatalf("%s: %s rests until %v, not %v", how, first, longest, doubaoBack)
+				}
+			}
 			mu.Lock()
 			tried = nil
 			mu.Unlock()
@@ -210,6 +256,7 @@ func TestPluginFailover(t *testing.T) {
 			t.Fatalf("%s: no failing account was ever tried", how)
 		}
 	}
+	streamed, claude = false, false
 
 	// full@fake, switched to, is the account in use
 	if err := provider.SwitchLogin("fakeco", "full@fake"); err != nil {

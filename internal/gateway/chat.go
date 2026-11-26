@@ -1550,7 +1550,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 	}
 	if ch.Error != nil {
 		code, status, said := filterRefused(data)
-		emit(Event{Kind: KError, Text: cmp.Or(ch.Error.Message, streamErrorText(data)), Code: code, Status: status, Said: said})
+		emit(Event{Kind: KError, Text: cmp.Or(ch.Error.Message, streamErrorText(data)), Code: code, Status: status, Said: said, Resets: saidResets(data, time.Now())})
 		return nil
 	}
 	if !d.started {
@@ -1828,6 +1828,7 @@ func (e *chatEncoder) event(ev Event) {
 			failed["code"] = ev.Code // preserve the upstream error type, including refusals
 		}
 		saidError(failed, ev.Said)
+		resetsSaid(failed, ev.Resets)
 		e.w.event("", map[string]any{"error": failed})
 	}
 	e.col.add(ev)

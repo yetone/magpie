@@ -1255,21 +1255,33 @@ func restrictedHeld(c candidate) (int, string, bool) {
 
 // resetsIn is how long until a used-up ChatGPT account is back, as its
 // refusal says: {"error":{"type":"usage_limit_reached","resets_at":<unix>,
-// "resets_in_seconds":<n>}}. Zero when it doesn't say.
+// "resets_in_seconds":<n>}}. A stream's error frame is kept as its error
+// object alone (holdWriter.errBody), so the same members on the body
+// itself count too: doubao-work ends a stream begun with reasoning with
+// {"error":{"status":429,"resets_at":<the 1st of next month>}}, and read
+// only under "error" that rest was the 15 minutes guessed for no word of
+// a reset (aaron0x10 on X). Zero when it doesn't say.
 func resetsIn(body []byte, now time.Time) time.Duration {
+	type said struct {
+		At int64 `json:"resets_at"`
+		In int64 `json:"resets_in_seconds"`
+	}
 	var e struct {
-		Error struct {
-			At int64 `json:"resets_at"`
-			In int64 `json:"resets_in_seconds"`
-		} `json:"error"`
+		Error said `json:"error"`
+		said
 	}
 	if json.Unmarshal(body, &e) != nil {
 		return 0
 	}
-	if t := time.Unix(e.Error.At, 0); e.Error.At > 0 && t.After(now) {
-		return t.Sub(now)
+	for _, s := range []said{e.Error, e.said} {
+		if t := time.Unix(s.At, 0); s.At > 0 && t.After(now) {
+			return t.Sub(now)
+		}
+		if s.In > 0 {
+			return time.Duration(s.In) * time.Second
+		}
 	}
-	return time.Duration(max(e.Error.In, 0)) * time.Second
+	return 0
 }
 
 // resetsAt is how long until a used-up subscription is back, as its
