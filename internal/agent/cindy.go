@@ -196,14 +196,32 @@ func trueFirst(a, b bool) int {
 // apps/desktop/src/main/agent-binaries, Cindy 0.1.146). It runs with the
 // user's ~/.claude and ~/.claude.json, as Claude Code does, and makes them
 // on its first run (T_t__biu on X, #7872).
-func cindyClaudeHere() bool {
+func cindyClaudeHere() bool { return cindyBundled("claude-code", exe("claude")) }
+
+// cindyCodexHere reports whether Cindy has its own Codex here:
+// <its data folder>/codex-package/<version>/bin/codex, codex.exe on
+// Windows (the codex kind's installSubdir and binaryName in
+// apps/desktop/src/main/agent-binaries/binaryStatus.ts, Cindy 0.1.148).
+// Cindy runs it with CODEX_HOME at its own codex-home, but Codex makes
+// <CODEX_HOME>/tmp/arg0-<os> on any run (codex-rs/arg0), so a run of it
+// without that variable makes ~/.codex (Cindy 0.1.148 gives even its
+// version read a temporary one so as not to, binary-version-probe.ts),
+// and Cindy installs skills into ~/.codex/skills. It reads
+// ~/.codex/AGENTS.md (copied into codex-home, codex-global-rules.ts) and
+// ~/.codex/skills (linked, codex-global-skills.ts).
+func cindyCodexHere() bool { return cindyBundled("codex-package", "bin", exe("codex")) }
+
+// cindyBundled reports whether either of Cindy's data folders has its own
+// copy of an agent: <folder>/<kind>/<version>/<rel…>, the program itself
+// and not only its version folder (a download not finished).
+func cindyBundled(kind string, rel ...string) bool {
 	for _, d := range cindyDirs() {
-		vs, err := os.ReadDir(filepath.Join(d, "claude-code"))
+		vs, err := os.ReadDir(filepath.Join(d, kind))
 		if err != nil {
 			continue
 		}
 		for _, v := range vs {
-			if v.IsDir() && isFile(filepath.Join(d, "claude-code", v.Name(), exe("claude"))) {
+			if v.IsDir() && isFile(filepath.Join(append([]string{d, kind, v.Name()}, rel...)...)) {
 				return true
 			}
 		}

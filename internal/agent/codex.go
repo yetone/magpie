@@ -89,7 +89,18 @@ func codexStandIn(path string) string {
 	return m
 }
 
-func codex(home string) *Agent { return codexIn(here(home)) }
+// codex is Codex on this machine. Cindy's bundled copy leaves files in
+// ~/.codex (its runs' tmp/arg0, the skills it links), so with only that
+// copy here the folder is Cindy's, no Codex to list (otherCopy, T_t__biu
+// on X); its row in the Library stays, as Cindy's copy reads ~/.codex's
+// AGENTS.md and skills (shared, sharedApp).
+func codex(home string) *Agent {
+	a := codexIn(here(home))
+	a.otherCopy = func() bool { return codexOnlyCindys(a, home) }
+	a.shared = a.Name
+	a.sharedApp = cindyCodexHere
+	return a
+}
 
 // The two notices magpie's multi-agent V1 setting (#141) can carry: Codex's
 // own features.multi_agent_v2 is on in the config magpie routes and takes the

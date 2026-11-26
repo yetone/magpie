@@ -44,14 +44,15 @@ func TestCursorFolderFromTheEditorIsNotTheCLI(t *testing.T) {
 		t.Error("SharedHere with no ~/.cursor")
 	}
 	// only Cursor CLI, Copilot CLI (~/.copilot, which VS Code's and the
-	// JetBrains plugin's Copilot read) and Claude Code (~/.claude, which
-	// Cindy's bundled copy reads, under Claude Code's own name, #7872)
+	// JetBrains plugin's Copilot read), Claude Code (~/.claude, which
+	// Cindy's bundled copy reads, under Claude Code's own name, #7872) and
+	// Codex (~/.codex, which Cindy's bundled Codex reads, the same way)
 	// share their folders
 	for _, b := range All() {
-		if b.ID == "claude" && b.shared != b.Name {
-			t.Errorf("claude shares its folder as %q", b.shared)
+		if (b.ID == "claude" || b.ID == "codex") && b.shared != b.Name {
+			t.Errorf("%s shares its folder as %q", b.ID, b.shared)
 		}
-		if b.ID != "cursor" && b.ID != "copilot" && b.ID != "claude" && b.shared != "" {
+		if b.ID != "cursor" && b.ID != "copilot" && b.ID != "claude" && b.ID != "codex" && b.shared != "" {
 			t.Errorf("%s shares its folder too: %q", b.ID, b.shared)
 		}
 	}

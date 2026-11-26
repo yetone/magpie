@@ -174,6 +174,37 @@ func claudeOnlyCindys(a *Agent, home string) bool {
 	return !jetBrainsHere(home) && !zedAgentsHere(home)
 }
 
+// codexOnlyCindys reports whether a's folder, the default ~/.codex, is
+// there for Cindy's bundled Codex alone: Cindy's copy is here and nothing
+// else that is Codex or reads the folder as it does (as cliHeld looks for
+// them): no codex command where magpie or a terminal finds one, no copy
+// from Codex's own installer (~/.codex/packages/standalone), no Codex or
+// ChatGPT app, no editor extension, no JetBrains or Zed agent. A folder
+// CODEX_HOME names is the user's own Codex's: a is then at that folder,
+// and nothing is hidden.
+func codexOnlyCindys(a *Agent, home string) bool {
+	if home == "" {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		home = h
+	}
+	if a.WSL != "" || filepath.Clean(a.Dir) != filepath.Join(home, ".codex") || !cindyCodexHere() {
+		return false
+	}
+	if a.binsOwn(binAt(a.Bin)) || a.binsOwn(proc.FindTool(a.Bin)) {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "packages", "standalone")); err == nil {
+		return false
+	}
+	if a.HasApp() || extensionHere(home, "openai.chatgpt") {
+		return false
+	}
+	return !jetBrainsHere(home) && !zedAgentsHere(home)
+}
+
 // extensionHere reports whether an editor here has the extension id
 // installed: VS Code's ~/.vscode/extensions/<id>-<version>, and the same
 // in each fork's (~/.cursor, ~/.windsurf, ~/.vscode-oss, ~/.trae, …) and
