@@ -57,9 +57,31 @@ func claudeDirIsClaude(dir string) bool {
 // row's, each an agent of its own. None while the folder has no Claude
 // Code's files: a leftover is no agent.
 func claudeDirAgents(home string) []*Agent {
+	names, byName := claudeDirsIn(home)
+	var out []*Agent
+	for _, name := range names {
+		dir := byName[name]
+		id := "claude#" + name
+		a := claudeIn(place{home: home, id: id, dir: dir})
+		a.ID, a.Name = id, "Claude Code · "+name
+		// the isolated Claude Desktop's Code tab's (#6459), by its app's name
+		if dir == desktopIsolatedClaudeDir(home) {
+			a.Name = "Claude Code · " + desktopiso.Name
+		}
+		// the claude row keeps the command, the names and the requests
+		a.Aliases, a.UA, a.Bin = nil, nil, ""
+		a.detect = func() bool { return claudeDirIsClaude(dir) }
+		out = append(out, a)
+	}
+	return out
+}
+
+// claudeDirsIn are the Claude Code config folders beside the claude row's
+// (claudeDirAgents), by name in order, and each one's folder by its name.
+func claudeDirsIn(home string) ([]string, map[string]string) {
 	es, err := os.ReadDir(home)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	main := appdir.ClaudeDirIn(home)
 	var names []string
@@ -82,20 +104,5 @@ func claudeDirAgents(home string) []*Agent {
 		names = append(names, "default")
 	}
 	sort.Strings(names)
-	var out []*Agent
-	for _, name := range names {
-		dir := byName[name]
-		id := "claude#" + name
-		a := claudeIn(place{home: home, id: id, dir: dir})
-		a.ID, a.Name = id, "Claude Code · "+name
-		// the isolated Claude Desktop's Code tab's (#6459), by its app's name
-		if dir == desktopIsolatedClaudeDir(home) {
-			a.Name = "Claude Code · " + desktopiso.Name
-		}
-		// the claude row keeps the command, the names and the requests
-		a.Aliases, a.UA, a.Bin = nil, nil, ""
-		a.detect = func() bool { return claudeDirIsClaude(dir) }
-		out = append(out, a)
-	}
-	return out
+	return names, byName
 }

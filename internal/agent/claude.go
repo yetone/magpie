@@ -146,20 +146,10 @@ func claudeCloud(at place, path string) string {
 // given ("" for the shell): one in path itself is what connecting Claude
 // Code takes out (dropClouds), so Check's, and one elsewhere Outside's.
 func claudeCloudAt(at place, path string) (string, string) {
-	managed := claudeManagedAt(at)
-	global := claudeGlobal(at, filepath.Dir(path))
 	for _, k := range agentenv.ClaudeProviders {
-		set := false
-		for _, f := range []string{managed, path, global} {
-			v, has := edit.GetJSON(f, "env."+k)
-			if !has {
-				continue
-			}
-			if claudeSwitchOn(v) {
-				return f, noticeClaudeCloudFile.say("file", at.native(f), "var", k, "cloud", claudeClouds[k])
-			}
-			set = true
-			break
+		v, f, set := claudeEnvAt(at, path, k)
+		if set && claudeSwitchOn(v) {
+			return f, noticeClaudeCloudFile.say("file", at.native(f), "var", k, "cloud", claudeClouds[k])
 		}
 		// a distro's environment magpie can't read
 		if !set && at.spell == nil && claudeSwitchOn(claudeShellEnv(k)) {
@@ -167,6 +157,22 @@ func claudeCloudAt(at place, path string) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+// claudeEnvAt is the value of the variable k that the Claude Code whose
+// settings.json is at path goes by from its settings files, and the file
+// it is set in, as given: Claude Code puts the env of .claude.json, then
+// of the user's settings, then of an administrator's managed settings over
+// the environment it was started in, so the first of managed, path and
+// .claude.json that has k is the one. set is false when none has it (or
+// can be read), and the environment it was started in decides.
+func claudeEnvAt(at place, path, k string) (v, file string, set bool) {
+	for _, f := range []string{claudeManagedAt(at), path, claudeGlobal(at, filepath.Dir(path))} {
+		if v, has := edit.GetJSON(f, "env."+k); has {
+			return v, f, true
+		}
+	}
+	return "", "", false
 }
 
 // claudeManagedAt is the managed settings file (an administrator's) of

@@ -23,7 +23,8 @@ import (
 // them as xd:// devices named in a catalog, and Antigravity and agy, which
 // list an MCP tool by name only and read its schema file when it is called
 // for. Any other agent sends every
-// tool it is given, with its whole inputSchema, on every request, so past
+// tool it is given, with its whole inputSchema, on every request, and so
+// does one of those whose search the user turned off (HubSearchOff), so past
 // hubOnDemandOver tools it is given two in their place: find_tools, which
 // gives the tools that match what the model looks for with their
 // parameters, and call_tool, which runs one by name. find_tools' own
@@ -83,8 +84,11 @@ var hubSearchesItself = func() map[string]bool {
 
 // HubFindsItself is the agents given every tool whole because they search
 // their MCP tools themselves (hubSearchesItself), by id, in the order the
-// Library names them.
-func HubFindsItself() []string { return slices.Clone(hubSearchers) }
+// Library names them: one whose search the user turned off
+// (HubSearchOff) is given its tools on demand and isn't named.
+func HubFindsItself() []string {
+	return slices.DeleteFunc(slices.Clone(hubSearchers), hubSearchOff)
+}
 
 // HubOnDemandOver is hubOnDemandOver, for the Library to say.
 const HubOnDemandOver = hubOnDemandOver
@@ -124,11 +128,24 @@ func hubOnDemand(agent string, n int, asked bool) bool {
 	if (agent == "" && !asked) || n <= hubOnDemandOver {
 		return false
 	}
-	if hubSearchesItself[hubKindOf(agent)] {
+	if hubSearchesItself[hubKindOf(agent)] && !hubSearchOff(HubAgentOf(agent)) {
 		return false
 	}
 	return !settings.Shared().RouterAllTools
 }
+
+// HubSearchOff says whether an agent that searches its MCP tools itself
+// (hubSearchesItself), by its id, has that search turned off by the
+// user's own settings: a Claude Code with ENABLE_TOOL_SEARCH=false sends
+// every tool it is given whole on every request, as any other agent does,
+// so it is given them on demand (jjaychen1e on X, #7349: 89 tools, ~38K
+// tokens, on each request, and a Claude Code past 50 deferred tools on a
+// route that doesn't take them, whose loads change the tools mid-session,
+// is one the user can turn search off for). agent.HubSearchOff, set by
+// the cli; nil, every such agent searches.
+var HubSearchOff func(agent string) bool
+
+func hubSearchOff(agent string) bool { return HubSearchOff != nil && HubSearchOff(agent) }
 
 // hubKindOf is the agent a hub address's agent is one of: its id without
 // a project's key, a WSL distro or a profile. A profile is the same

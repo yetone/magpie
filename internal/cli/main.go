@@ -543,6 +543,9 @@ func run(args []string) error {
 	// a Codex that reaches magpie for account failover alone is handed
 	// only its own models (#1385)
 	gateway.CodexOwnOnly = agent.CodexOwnOnly
+	// a Claude Code or Claude Desktop whose user turned its tool search
+	// off is given the router's tools on demand (#7349)
+	gateway.HubSearchOff = agent.HubSearchOff
 	// what magpie writes into an agent's TOML, YAML or dotenv config says
 	// so in a comment, for whoever reads it once magpie is gone
 	agent.MarkWritten()

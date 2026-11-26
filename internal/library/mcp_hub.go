@@ -1251,18 +1251,25 @@ var (
 // hubFindsItself is the names of the agents the router gives every tool
 // whole, as they search their MCP tools themselves (gateway.HubFindsItself),
 // for the Tools on demand row to say: its words named four of the six
-// (11-18). An agent's name doesn't change while magpie runs, so they are
-// looked up once; one not found is said by its id.
-var hubFindsItself = sync.OnceValue(func() []string {
+// (11-18). Which they are is asked each time, as the user can turn an
+// agent's search off (#7349); an agent's name doesn't change while magpie
+// runs, so the names are looked up once, and one not found is said by its
+// id.
+func hubFindsItself() []string {
+	names := hubAgentNames()
+	var out []string
+	for _, id := range gateway.HubFindsItself() {
+		out = append(out, cmp.Or(names[id], id))
+	}
+	return out
+}
+
+var hubAgentNames = sync.OnceValue(func() map[string]string {
 	names := map[string]string{}
 	for _, a := range append(apps(), agent.All()...) {
 		if _, ok := names[a.ID]; !ok && a.WSL == "" {
 			names[a.ID] = a.Name
 		}
 	}
-	var out []string
-	for _, id := range gateway.HubFindsItself() {
-		out = append(out, cmp.Or(names[id], id))
-	}
-	return out
+	return names
 })
