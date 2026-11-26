@@ -93,6 +93,7 @@ async function fakeMagpie(t, lang, caps) {
         if (url.pathname.endsWith("/comments")) return json(200, { threads: [], version: 1, agent: { can: "no_session" }, me: "u_0123456789abcdef01234567" });
         const b = JSON.parse(Buffer.concat(chunks).toString());
         if (b.op === "list") {
+          if (site.off) return json(200, { manifest: MANIFEST.servers, servers: [], off: site.off });
           return json(200, { manifest: MANIFEST.servers, servers: [{ server: "github", kind: "connector", authStatus: "connected", tools: [
             { name: "list_issues", description: "Lists issues.", annotations: { readOnlyHint: true } },
             { name: "create_issue", description: "Opens an issue.", annotations: { readOnlyHint: false } },
@@ -316,6 +317,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal((await cancelled).code, "cancelled");
     go();
     site.hold = null;
+  });
+
+  test(`with magpie's hub off the page hears so, and nobody is asked (${engine})`, async (t) => {
+    const { page, frame, site } = await open(t, engine);
+    site.off = "magpie's MCP hub is off, so it runs no server's tools: turn it on in magpie's Library → MCP";
+    const r = await frame.evaluate(() => m.callTool("github", "list_issues", { q: "a" }).then(() => ({}), (e) => ({ code: e.code, message: e.message })));
+    assert.equal(r.code, "server_not_connected");
+    assert.equal(r.message, site.off);
+    assert.equal(await ask(page).count(), 0);
+    assert.equal(site.calls.length, 0);
   });
 
   test(`a page without mcp gets null (${engine})`, async (t) => {

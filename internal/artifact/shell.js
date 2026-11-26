@@ -810,7 +810,7 @@
         if (g === "granted" && on[m.server]) out.push(on[m.server]);
         else if (g === "prompt") out.push({ server: m.server, kind: "connector", authStatus: "unknown", tools: (m.tools || []).map(function (n) { return { name: n, description: "" }; }) });
       });
-      return { servers: out, manifest: j.manifest || [], connected: on };
+      return { servers: out, manifest: j.manifest || [], connected: on, off: j.off };
     });
   }
   // the question, for one or more servers: "granted", "denied", or
@@ -891,7 +891,8 @@
         if (j.error) return j;
         var m = (j.manifest || []).filter(function (x) { return x.server === server; })[0];
         if (!m) return mErr("not_in_manifest", server + " isn't in the page's manifest", { server: server });
-        if (!j.connected[server]) return mErr("server_not_connected", "no MCP server named " + server + " is in magpie's Library on this computer", { server: server });
+        // magpie's hub off runs no server: the page hears that, not a missing name
+        if (!j.connected[server]) return mErr("server_not_connected", j.off || "no MCP server named " + server + " is in magpie's Library on this computer", { server: server });
         return askMCP([m]).then(function (a) {
           if (a === "granted") return a;
           if (a === "denied") return mErr("not_in_manifest", "the viewer didn't allow " + server + " for this page", { server: server });
