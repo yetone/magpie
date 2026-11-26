@@ -1536,6 +1536,10 @@ func piDir(at place) string {
 	return at.join(".pi", "agent")
 }
 
+// PiDir is Pi's agent folder on this machine under home, as piDir finds
+// it: PI_CODING_AGENT_DIR's when set, else ~/.pi/agent.
+func PiDir(home string) string { return piDir(here(home)) }
+
 // homeDir is the folder an agent's variable names, "~" and "~/…" expanded
 // to home as Pi does; "" when it is empty or relative.
 func homeDir(home, d string) string {
