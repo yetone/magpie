@@ -8828,10 +8828,20 @@ func cutMidReply(name string, err error) string {
 
 // noteSaidStatus carries the status a relayed stream's error frame named
 // for itself onto the try's writer (#4855), for the routing loop and
-// restAfter to read (namedStatusHeader); the client never sees it.
+// restAfter to read (namedStatusHeader); the client never sees it. A
+// try the holdWriter failed on the error event, as the agent's protocol
+// says it (with no status: read from its words, 502 for most), fails as
+// that status: agy-cli's 403 for an account Google suspended was a 502
+// that passes, and every account was asked again round after round
+// (plugins#1563).
 func noteSaidStatus(w http.ResponseWriter, status int) {
 	if h, ok := w.(*holdWriter); ok {
 		h.note(namedStatusHeader, strconv.Itoa(status))
+		h.mu.Lock()
+		if h.failure != 0 && !h.refused {
+			h.failure = status
+		}
+		h.mu.Unlock()
 	}
 }
 

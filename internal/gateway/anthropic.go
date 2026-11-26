@@ -1544,6 +1544,9 @@ func decodeAnthropic(data string, emit func(Event)) error {
 		emit(Event{Kind: KUsage, Usage: ev.Usage.usage(), SafeguardResults: review, StopDetails: stopDetails(ev.Delta.StopDetails)})
 	case "error":
 		code, status, said := filterRefused(data)
+		if status == 0 {
+			status = namedEventStatus(data)
+		}
 		emit(Event{Kind: KError, Text: cmp.Or(ev.Error.Message, ev.Error.Type, streamErrorText(data)), Code: code, Status: status, Said: said, Resets: saidResets(data, time.Now())})
 	}
 	return nil

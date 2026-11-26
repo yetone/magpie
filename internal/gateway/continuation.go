@@ -868,12 +868,17 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			failed += " — " + hint
 		}
 		u.ErrType = turnedAwayErrType
-	} else if errNamed >= 400 && errNamed < 600 && serr == nil {
+	} else if errNamed >= 400 && errNamed < 600 && (serr == nil || errSent) {
 		// the upstream's error event named its own status (Google's 400
 		// INVALID_ARGUMENT in a 200 stream): the failure is booked and
 		// rested as it, a request's fault as one, as a relayed stream's
 		// is (namedStatusHeader, #4855). Antigravity's turning a prompt
-		// away is its own, above
+		// away is its own, above. An error the agent was sent is the
+		// try's last word: the holdWriter that read it stops the
+		// upstream, and the read's "context canceled" after it is not
+		// how the try failed (plugins#1563: agy-cli's 403 for an account
+		// Google suspended was booked as a 502, so the account was asked
+		// again and again)
 		noteSaidStatus(w, errNamed)
 	}
 	if !errSent {

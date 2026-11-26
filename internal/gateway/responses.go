@@ -2054,6 +2054,9 @@ func (d *responsesDecoder) decode(data string, emit func(Event)) error {
 			if status == 0 {
 				status, said = fs, fsaid
 			}
+			if status == 0 {
+				status = namedEventStatus(data)
+			}
 			emit(Event{Kind: KError, Text: cmp.Or(msg, streamErrorText(data)), Code: code, Status: status, Said: said, Resets: saidResets(data, time.Now())})
 			return nil
 		}
@@ -2089,6 +2092,9 @@ func (d *responsesDecoder) decode(data string, emit func(Event)) error {
 		code, fs, fsaid := filterRefused(data)
 		if status == 0 {
 			status, said = fs, fsaid
+		}
+		if status == 0 {
+			status = namedEventStatus(data)
 		}
 		emit(Event{Kind: KError, Text: cmp.Or(msg, streamErrorText(data)), Code: code, Status: status, Said: said, Resets: saidResets(data, time.Now())})
 	}

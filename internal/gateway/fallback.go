@@ -5041,6 +5041,28 @@ func namedStatus(body []byte) int {
 	return textStatus(string(body))
 }
 
+// namedEventStatus is the status a well-formed stream error event names
+// for itself (namedStatusOf), its response's error's first, else its own
+// error's; 0 when it names none. Only carriedError read it, for an error
+// in a shape its protocol's decoder can't read: an Anthropic event's
+// {"type":"error","error":{"type":"permission_error","status":403,…}},
+// as the agy-cli plugin ends a stream for an account Google suspended,
+// was read by its words as a 502, so the account was not set aside as
+// suspended and the request was sent to it again and again (plugins#1563:
+// tries=10 in a minute, each a new agy session at Google).
+func namedEventStatus(data string) int {
+	var v struct {
+		Error    json.RawMessage `json:"error"`
+		Response struct {
+			Error json.RawMessage `json:"error"`
+		} `json:"response"`
+	}
+	if json.Unmarshal([]byte(data), &v) != nil {
+		return 0
+	}
+	return cmp.Or(namedStatusOf(v.Response.Error), namedStatusOf(v.Error))
+}
+
 // namedStatusOf is the status an error object names for itself (#4855):
 // a plugin that ends an OpenAI-compatible stream after its 200 can only
 // say what went wrong in the frame, and the status it names there is the

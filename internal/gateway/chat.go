@@ -1550,6 +1550,9 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 	}
 	if ch.Error != nil {
 		code, status, said := filterRefused(data)
+		if status == 0 {
+			status = namedEventStatus(data)
+		}
 		emit(Event{Kind: KError, Text: cmp.Or(ch.Error.Message, streamErrorText(data)), Code: code, Status: status, Said: said, Resets: saidResets(data, time.Now())})
 		return nil
 	}
