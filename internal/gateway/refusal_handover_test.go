@@ -3,6 +3,7 @@ package gateway
 import (
 	"bufio"
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -97,8 +98,9 @@ func TestRefusalAfterShownThinkingGoesToTheNext(t *testing.T) {
 				if !strings.Contains(body, "first thought") || !strings.Contains(body, " second thought") || !strings.Contains(body, "from b") {
 					t.Fatalf("not the reasoning and then the next member's answer: %s", body)
 				}
+				said := withoutMinted(body)
 				for _, w := range []string{"sensitive", "content_filter", "refusal", "1301", "safety filter"} {
-					if strings.Contains(body, w) {
+					if strings.Contains(said, w) {
 						t.Fatalf("the refusal (%s) reached the agent: %s", w, body)
 					}
 				}
@@ -386,6 +388,34 @@ func TestTrustedThinkingFailsOverOnEveryPath(t *testing.T) {
 					}
 				})
 			}
+		}
+	}
+}
+
+// minted is a value the gateway makes up for a reply: its ids and its
+// times. A random id or a Unix second can spell a refusal's code
+// ("created":1795713014 has 1301 in it, #5761).
+var minted = regexp.MustCompile(`"(id|[a-z_]*_id|created|created_at)":\s*("[^"]*"|\d+)`)
+
+// withoutMinted is a reply with every minted value blanked, for a check
+// that a word the upstream said is gone from it.
+func withoutMinted(body string) string { return minted.ReplaceAllString(body, `"$1":_`) }
+
+// The check looks past what the gateway mints and still sees a refusal:
+// a time or an id that spells 1301 is blanked, the upstream's code and
+// words are not (#5761).
+func TestWithoutMintedKeepsTheRefusal(t *testing.T) {
+	minted := `data: {"id":"msg_9a1301f","created":1795713014,"response":{"created_at":1795713014,"item_id":"rs_1301"}}`
+	if got := withoutMinted(minted); strings.Contains(got, "1301") {
+		t.Errorf("a minted value kept: %s", got)
+	}
+	for _, said := range []string{
+		`data: {"error":{"code":"1301","message":"系统检测到输入或生成内容可能包含不安全或敏感内容"}}`,
+		`data: {"choices":[{"finish_reason":"sensitive"}]}`,
+		`{"type":"refusal","refusal":"no"}`,
+	} {
+		if withoutMinted(said) != said {
+			t.Errorf("the upstream's words changed: %s → %s", said, withoutMinted(said))
 		}
 	}
 }
