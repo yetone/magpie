@@ -48,6 +48,35 @@ window.navFoldRows = (at, folds, shut) => {
     r.setAttribute("aria-expanded", String(!shut));
   }
 };
+// the list's rows changed while it unrolls: it unrolls on to their height
+// now, not the one it had when it began. Library's tabs drop from a dozen
+// to three once the library is read with no agent here, and the list held
+// the dozen's height, empty, until it was done (chen on Discord). Rows gone
+// fold it at once, so no frame of it is taller than its rows. Watched here,
+// since the lists are drawn again (app.js navSubs) once this file has come
+const navSubOpening = (a) => a.playState === "running" && (a.id === "nav-sub-open" || a.effect?.getKeyframes()[0]?.height === "0px");
+window.navSubRefit = (box) => {
+  const a = box.getAnimations().find(navSubOpening);
+  if (!a) return;
+  const cs = getComputedStyle(box), keys = a.effect.getKeyframes();
+  const from = { height: box.getBoundingClientRect().height + "px", marginTop: cs.marginTop, marginBottom: cs.marginBottom, opacity: cs.opacity };
+  const d = a.effect.getComputedTiming().duration || 0, at = a.currentTime || 0;
+  a.cancel();
+  const end = getComputedStyle(box), h = box.offsetHeight;
+  if (h <= parseFloat(from.height) || d - at < 16) { box.classList.remove("moving"); return; }
+  // the same rows' height: it goes on as it was; else on from here to theirs
+  const same = keys.at(-1)?.height === h + "px";
+  const n = same ? box.animate(keys, { id: "nav-sub-open", duration: d, easing: NAV_EASE })
+    : box.animate([from, { height: h + "px", marginTop: end.marginTop, marginBottom: end.marginBottom, opacity: 1 }], { id: "nav-sub-open", duration: d - at, easing: NAV_EASE });
+  if (same) n.currentTime = at;
+  n.finished.then(() => box.classList.remove("moving"), () => {});
+};
+{
+  const side = document.getElementById("side");
+  if (side) new MutationObserver((recs) => {
+    for (const box of new Set(recs.map((r) => r.target).filter((x) => x.classList?.contains("nav-sub") && !x.classList.contains("leaving")))) window.navSubRefit(box);
+  }).observe(side, { childList: true, subtree: true });
+}
 // v's row clicked: folded or unfolded when its list is the one there, else false
 window.navFold = (v) => {
   const r = v === "settings" ? $("#prefs") : $(`#nav button[data-view="${v}"]`);

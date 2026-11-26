@@ -100,6 +100,12 @@ magpie.plugin("library", (ctx) => {
   // (fenglian980510 on X: a magpie in Docker had no Skills).
   const gatewayPage = () => typeof gatewayMode !== "undefined" && !!gatewayMode;
   const agentless = () => !!lib && (gatewayPage() || !lib.agents.some((a) => !a.remote));
+  // Until the library comes, its tabs are those it had last time: a page
+  // with no agent here drew all a dozen, then three, and the sidebar's list
+  // of them stood a dozen rows tall, empty, a moment (chen on Discord)
+  let wasAgentless = false;
+  try { wasAgentless = localStorage.getItem("magpie.libAgentless") === "1"; } catch {}
+  const tabsAgentless = () => lib ? agentless() : gatewayPage() || wasAgentless;
   const AGENTLESS_TABS = ["instructions", "mcp", "skills"];
   const withGone = (all, on) => [...all, ...lib.agents.filter((a) => (a.gone || a.unseen && !isHidden(a)) && (on || []).includes(a.id) && !all.some((x) => x.id === a.id))];
   const mcpAgents = () => [...shownAgents().filter((a) => a.mcp)
@@ -613,6 +619,10 @@ magpie.plugin("library", (ctx) => {
     const was = lib && shelf();
     lib = v;
     taken++;
+    if (agentless() !== wasAgentless) {
+      wasAgentless = agentless();
+      try { localStorage.setItem("magpie.libAgentless", wasAgentless ? "1" : "0"); } catch {}
+    }
     for (const w of writing.values()) {
       const x = lib[w.list].find((y) => y.name === w.name);
       if (x) x.agents = w.want;
@@ -941,8 +951,11 @@ magpie.plugin("library", (ctx) => {
   function renderLoading() {
     page.replaceChildren();
     shown = "";
-    shownTab();
-    page.append(libHead(null), skeleton(tab));
+    // on the tab render will open (it opens on MCP with no agent), which
+    // isn't kept: the library may have an agent now
+    let on = tabsAgentless() && (!tabPicked || !AGENTLESS_TABS.includes(tab)) ? "mcp" : "";
+    if (!on) { shownTab(); on = tab; }
+    page.append(libHead(null, on), skeleton(on));
   }
 
   function skeleton(which) {
@@ -1020,7 +1033,7 @@ magpie.plugin("library", (ctx) => {
   // library gives agents what a hidden tab holds as before. One tab always
   // shows, and one opened from another page (server) shows while it is open.
   function allTabs(n = () => "") {
-    return agentless() ? [
+    return tabsAgentless() ? [
       ["instructions", t("Instructions")],
       ["mcp", t("MCP servers") + n("mcp")],
       ["skills", t("Skills") + n("skills")],
@@ -1056,10 +1069,10 @@ magpie.plugin("library", (ctx) => {
 
   // the tabs and the Library folder; without the library yet (lib is null
   // while it loads) the tabs have no counts and the folder waits
-  function libHead(counts) {
+  function libHead(counts, on = tab) {
     const head = el("div", "lib-head");
     const n = (k) => (counts?.[k] ? " · " + counts[k] : "");
-    const tabs = segs(shownTabs(n), tab, openTab);
+    const tabs = segs(shownTabs(n), on, openTab);
     tabs.classList.add("lib-tabs");
     head.append(tabs);
     // the buttons keep together at the end, on a line of their own when the
