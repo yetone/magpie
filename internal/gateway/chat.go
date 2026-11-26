@@ -1223,6 +1223,14 @@ type cUsage struct {
 }
 
 func (u cUsage) usage() Usage {
+	out, _ := u.counted()
+	return out
+}
+
+// counted is the usage, and whether prompt_tokens took in what was read
+// from the cache and written to it (OpenAI's way, and every other's but
+// a relay's in Anthropic's names that counts less than its cache).
+func (u cUsage) counted() (Usage, bool) {
 	out := Usage{Output: u.CompletionTokens, cacheUnknown: u.MagpieCacheUnknown}
 	if d := u.PromptTokensDetails; d != nil {
 		out.CacheRead, out.CacheWrite = d.CachedTokens, d.CacheWriteTokens
@@ -1256,7 +1264,17 @@ func (u cUsage) usage() Usage {
 		out.Deferred = &Usage{Input: max(d.PromptTokens-d.CachedTokens-d.CacheWriteTokens, 0), Output: d.CompletionTokens,
 			CacheRead: d.CachedTokens, CacheWrite: d.CacheWriteTokens}
 	}
-	return out
+	return out, whole
+}
+
+// streamed is a chunk's usage as the reply's so far: a stream that counts
+// its prompt on more than one chunk tells it once (promptCount).
+func (u cUsage) streamed(p *promptCount) Usage {
+	out, whole := u.counted()
+	if !whole {
+		return out
+	}
+	return p.fit(out, u.PromptTokens)
 }
 
 func (u Usage) chat() map[string]any {
@@ -1284,6 +1302,7 @@ type chatDecoder struct {
 	toolDone  bool      // they are whole JSON: a call that starts now comes after it
 	held      []*heldCall
 	choice    string // index of the first choice seen; an empty string means none yet
+	prompt    promptCount
 	// Gemini's OpenAI-compatible API, asked for thoughts, may give them
 	// in the text as a leading <thought>…</thought>, and MiniMax's Chat
 	// API (#1267), like the open models served without a reasoning
@@ -1541,7 +1560,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		// Anthropic's message_start does (#1887)
 		var prompt Usage
 		if ch.Usage != nil && ch.Usage.PromptTokens > 0 {
-			u := ch.Usage.usage()
+			u := ch.Usage.streamed(&d.prompt)
 			prompt = Usage{Input: u.Input, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}
 		}
 		emit(Event{Kind: KStart, MsgID: ch.ID, Model: ch.Model, Usage: prompt})
@@ -1603,7 +1622,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		}
 	}
 	if ch.Usage != nil && (ch.Usage.PromptTokens > 0 || ch.Usage.CompletionTokens > 0 || ch.Usage.MagpieDeferred != nil || ch.Usage.Credit != nil) {
-		emit(Event{Kind: KUsage, Usage: ch.Usage.usage()})
+		emit(Event{Kind: KUsage, Usage: ch.Usage.streamed(&d.prompt)})
 	}
 	return nil
 }

@@ -1641,6 +1641,7 @@ type codeAssistDecoder struct {
 	// again with each chunk after it
 	searched bool
 	usage    *Usage
+	prompt   promptCount
 	// held is text that may be the start of a call the model wrote out as
 	// text (see textCall), kept back until it is one or isn't
 	held string
@@ -1674,8 +1675,8 @@ func (d *codeAssistDecoder) decode(data string, emit func(Event)) error {
 	}
 	if c.UsageMetadata != nil {
 		u := c.UsageMetadata
-		d.usage = &Usage{Input: max(u.Prompt-u.Cached, 0), CacheRead: u.Cached,
-			Output: u.Candidates + u.Thoughts, Reasoning: u.Thoughts}
+		fit := d.prompt.fit(Usage{CacheRead: u.Cached, Output: u.Candidates + u.Thoughts, Reasoning: u.Thoughts}, u.Prompt)
+		d.usage = &fit
 	}
 	if !d.started {
 		d.started = true

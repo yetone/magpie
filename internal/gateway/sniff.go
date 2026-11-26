@@ -36,6 +36,9 @@ type usageSniffer struct {
 	// resp: the Responses stream's own response, as far as it went: what
 	// a response.failed magpie ends it with carries (streamFailure)
 	resp respTail
+	// prompt: the reply's prompt as one count, on a wire that counts it
+	// on more than one chunk (promptCount)
+	prompt promptCount
 }
 
 // respTail is what a Responses stream said of its response before it
@@ -180,8 +183,7 @@ func (s *usageSniffer) parse(b []byte) {
 			s.saw(v.ModelVersion)
 			s.u.add(Usage{ResponseID: v.ResponseID})
 			if u := v.UsageMetadata; u != nil {
-				s.u.add(Usage{Input: max(u.Prompt-u.Cached, 0), CacheRead: u.Cached,
-					Output: u.Candidates + u.Thoughts, Reasoning: u.Thoughts})
+				s.u.add(s.prompt.fit(Usage{CacheRead: u.Cached, Output: u.Candidates + u.Thoughts, Reasoning: u.Thoughts}, u.Prompt))
 			}
 		}
 	case provider.Chat:
@@ -198,7 +200,7 @@ func (s *usageSniffer) parse(b []byte) {
 				s.u.add(Usage{ResponseID: v.ID})
 			}
 			if v.Usage != nil {
-				s.u.add(v.Usage.usage())
+				s.u.add(v.Usage.streamed(&s.prompt))
 			}
 		}
 	case provider.Responses:

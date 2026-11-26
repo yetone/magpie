@@ -663,6 +663,35 @@ func (u Usage) prompt() int {
 	return u.Input + u.CacheRead + u.CacheWrite
 }
 
+// promptCount is a stream's prompt as one count, for a wire whose prompt
+// count takes in what was read from the cache and written to it (Chat's
+// prompt_tokens, Gemini's promptTokenCount), when its chunks count it
+// more than once. A chunk naming the prompt but not its cache, after one
+// that named both, left Input the whole prompt beside the cache read
+// still held from before: the whole reply's usage (Usage.add keeps each
+// field's last non-zero) told the cache twice, and a Responses client's
+// input_tokens was the prompt and the cache together, its hit rate under
+// half (cyberestro on X). So the prompt, the cache read and the cache
+// write are each the last the reply named, and Input is what they leave.
+type promptCount struct{ prompt, read, write int }
+
+// fit is u, a chunk's usage whose whole prompt is prompt (0 if the chunk
+// didn't count it), with its prompt counts as the reply's so far.
+func (p *promptCount) fit(u Usage, prompt int) Usage {
+	if prompt > 0 {
+		p.prompt = prompt
+	}
+	if u.CacheRead > 0 {
+		p.read = u.CacheRead
+	}
+	if u.CacheWrite > 0 {
+		p.write = u.CacheWrite
+	}
+	u.Input = max(p.prompt-p.read-p.write, 0)
+	u.CacheRead, u.CacheWrite = p.read, p.write
+	return u
+}
+
 func (u *Usage) add(v Usage) {
 	if v.restart {
 		u.Input, u.CacheRead, u.CacheWrite, u.CacheWrite1h = v.Input, v.CacheRead, v.CacheWrite, v.CacheWrite1h
