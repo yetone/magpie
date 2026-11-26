@@ -63,7 +63,7 @@ const words = {
     en: "In Smart, turn 3 matches rule 2, which sends it to b/light, but the conversation is cached on a/strong and b/light is no step up from it, so it stays on a/strong.",
     zh: "在 Smart 中，第 3 轮命中规则 2，本应换到 b/light；但会话在 a/strong 上有缓存，b/light 也不比它强，所以留在 a/strong。",
     "zh-TW": "在 Smart 中，第 3 輪命中規則 2，本應換到 b/light；但會話在 a/strong 上有快取，b/light 也不比它強，所以留在 a/strong。",
-    ja: "Smart で、ターン 3 はルール 2 に一致し、b/light に送られるところですが、会話は a/strong にキャッシュされており、b/light は a/strong より上ではないため、a/strong にとどまります。",
+    ja: "Smart で、ターン 3 はルール 2 に一致し、b/light に送られるところですが、会話は a/strong にキャッシュされており、b/light もそれより上ではないため、a/strong にとどまります。",
     de: "In Smart trifft Runde 3 Regel 2 zu, die sie an b/light schickt, aber die Unterhaltung ist bei a/strong im Cache und b/light ist keine Stufe höher, daher bleibt sie bei a/strong.",
   },
 };
