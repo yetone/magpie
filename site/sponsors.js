@@ -20,7 +20,7 @@ export const SPONSORS = [
   { id: "apikeyfan", readme: "https://apikey.fan/?aff=mg_readme" },
   { id: "wandapi", readme: "https://wandapi.ai/r/magpierepo" },
   { id: "fastai", home: "https://www.fastaitoken.com/register?aff=MAGPIE&utm=official", homeEnded: "2026-11-26" },
-  { id: "soleapi", home: "https://soleapi.com/r/magpie" },
+  { id: "soleapi", home: "https://soleapi.com/r/magpie", homeEnded: "2026-11-27" },
   { id: "aigocode", home: "https://www.aigocode.net/invite/MAGPIE?utm_source=magpie&utm_medium=home", readme: "https://www.aigocode.net/invite/MAGPIE?utm_source=magpie&utm_medium=readme" },
   { id: "modelgo", readme: "https://modelgo.ai/?utm_source=magpie&utm_medium=sponsorship&utm_content=readme&campaign_id=magpie&ad_group_id=readme" },
   { id: "x6ai", readme: "https://console.x6.ai/register?code=gkSc9RGu" },
