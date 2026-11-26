@@ -208,16 +208,24 @@ func TestArtifactPageOpensAwayReadOnly(t *testing.T) {
 	if tok == "" || strings.Contains(body, tok) || !strings.Contains(body, `"shared":true`) {
 		t.Fatalf("the page away carries a token or the full runtime: %s", body)
 	}
+	// a tab there, as a browser asks for one, reads the page alone: no
+	// viewer shell, whose token writes comments and sends to the agent
+	shell, _ := artifact.ShellToken(a.ID)
+	if d := get(http.MethodGet, page, "Sec-Fetch-Dest", "document"); d.Code != 200 || !strings.Contains(d.Body.String(), "<p>hi") ||
+		!strings.Contains(d.Body.String(), `"shared":true`) || !strings.HasPrefix(d.Header().Get("Content-Security-Policy"), "sandbox ") ||
+		shell == "" || strings.Contains(d.Body.String(), shell) || strings.Contains(d.Body.String(), tok) {
+		t.Fatalf("a tab away: %d %s", d.Code, d.Body)
+	}
 	if f := get(http.MethodGet, page+"d.json", "Origin", "null", "Sec-Fetch-Mode", "cors"); f.Code != 200 || f.Body.String() != "[]" {
 		t.Errorf("its file away: %d %s", f.Code, f.Body)
 	}
 	// its store and assets: not without a key, nor with the page's token
-	for _, p := range []string{page + artifactAPIDir + "events", artifactBlobPath + "x"} {
+	for _, p := range []string{page + artifactAPIDir + "events", page + artifactAPIDir + "shell", page + artifactAPIDir + "live", page + artifactAPIDir + "app.webmanifest", artifactBlobPath + "x"} {
 		if w := get(http.MethodGet, p, "Origin", "null", "Sec-Fetch-Mode", "cors"); w.Code < 400 {
 			t.Errorf("GET %s away: %d", p, w.Code)
 		}
 	}
-	for _, p := range []string{"db", "publish", "meta", "upload", "assets"} {
+	for _, p := range []string{"db", "publish", "meta", "upload", "assets", "comments", "sample", "tts", "dictation", "mcp", "files"} {
 		r := httptest.NewRequest(http.MethodPost, page+artifactAPIDir+p, strings.NewReader(`{}`))
 		r.RemoteAddr, r.Host = "192.0.2.7:4000", "magpie:3425"
 		r.Header.Set("Origin", "null")
