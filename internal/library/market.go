@@ -104,6 +104,7 @@ var featured = []MarketServer{
 	artifactsServer(),
 	evermeServer(),
 	nowledgeServer(),
+	hindsightServer(),
 	remoteServer("context7", "Context7", "Upstash", gh("upstash"), "https://mcp.context7.com/mcp",
 		"Up-to-date documentation and code examples for any library, straight into the prompt.", false,
 		Input{Key: "CONTEXT7_API_KEY", Where: "header", Label: "API key", Description: "Optional — raises the rate limit. From context7.com/dashboard", Secret: true, format: "{}"}),
@@ -302,6 +303,20 @@ func nowledgeServer() MarketServer {
 		Input{Key: "Authorization", Where: "header", Label: "API key", Description: "Optional — only for a Mem reached over Access Anywhere", Placeholder: "nmem_…", Secret: true, format: "Bearer {}"})
 }
 
+// hindsightServer is Hindsight's own MCP endpoint (vectorize-io/hindsight,
+// hindsight-api's MCPMiddleware): Streamable HTTP at /mcp on its API port,
+// 8888 in its Docker image. On /mcp the bank comes from the X-Bank-Id
+// header, Hindsight's default bank when there is none; a key is asked for
+// only when its tenant extension is set, as Authorization: Bearer. Its
+// own LLM is any OpenAI-compatible endpoint (HINDSIGHT_API_LLM_BASE_URL),
+// so it can be magpie's gateway (zysicyj on X).
+func hindsightServer() MarketServer {
+	return remoteServer("hindsight", "Hindsight", "Vectorize", gh("vectorize-io"), "http://localhost:8888/mcp",
+		"Hindsight's memory banks, as a second memory beside Magpie Memory. Hindsight must be running (port 8888). Its own LLM can be Magpie's gateway: point HINDSIGHT_API_LLM_BASE_URL at it.", false,
+		Input{Key: "X-Bank-Id", Where: "header", Label: "Bank ID", Description: "Empty uses Hindsight's default bank", Placeholder: "default"},
+		Input{Key: "Authorization", Where: "header", Label: "API key", Description: "Only when Hindsight asks for one (HINDSIGHT_API_TENANT_API_KEY)", Secret: true, format: "Bearer {}"})
+}
+
 // figmaServer is Figma's remote MCP server. Its sign-in admits only the
 // clients Figma lists (dynamic client registration answers any other 403,
 // #1619), so magpie can't sign in to it and neither can the MCP router:
@@ -363,6 +378,7 @@ var homepages = map[string]string{
 	"microsoft-learn": "https://github.com/MicrosoftDocs/mcp",
 	"huggingface":     "https://huggingface.co/settings/mcp",
 	"nowledge-mem":    "https://mem.nowledge.co/docs/integrations",
+	"hindsight":       "https://hindsight.vectorize.io/developer/mcp-server",
 	"figma":           "https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/",
 	"figma-desktop":   "https://developers.figma.com/docs/figma-mcp-server/local-server-installation/",
 }

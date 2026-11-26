@@ -137,18 +137,25 @@ one Settings lists, are turned away (`TestMemoryMCPGuarded`).
 
 ### Other memory services
 
-EverMe and Nowledge Mem are not built in: both publish an MCP server, so the
-Library's market offers them as servers (`evermeServer`, `nowledgeServer` in
+EverMe, Nowledge Mem and Hindsight are not built in: each publishes an MCP
+server, so the Library's market offers them as servers (`evermeServer`,
+`nowledgeServer`, `hindsightServer` in
 [market.go](../../internal/library/market.go)), added in one step beside
 Magpie Memory and given to the agents like any server
-(`TestThirdPartyMemoryServers`). Their memories live in their own service;
+(`TestThirdPartyMemoryServers`, `TestHindsightServer`). Their memories live in their own service;
 magpie's digest, Memory tab, distillation and search don't read or write them.
 EverMe runs `npx -y @everme/memory-mcp` with the agent id and `evt_` token
 its console or `evercli auth login` gives (`EVERME_API_BASE` defaults to the
 managed backend, editable for a self-hosted one). Nowledge Mem is its
 Streamable HTTP endpoint on `127.0.0.1:14242/mcp`; a Mem reached through
 Access Anywhere takes its address and an `Authorization: Bearer` key, edited
-after adding.
+after adding. Hindsight (vectorize-io/hindsight) is its API's Streamable
+HTTP endpoint on `localhost:8888/mcp`, where the bank comes from the
+`X-Bank-Id` header (Hindsight's default bank without one) and a key, needed
+only when Hindsight's tenant extension asks for one, goes as
+`Authorization: Bearer`; both are asked for when it is added. Hindsight runs
+an LLM of its own, any OpenAI-compatible endpoint
+(`HINDSIGHT_API_LLM_BASE_URL`), which can be magpie's gateway.
 
 ### Digest in the instructions
 
