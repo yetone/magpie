@@ -720,6 +720,7 @@ magpie gateway-key limit <id> reset    # count its usage from 0 again (reset 2: 
 magpie gateway-key limit <id> off      # no limit
 magpie gateway-key models <id> openai/gpt-5 anthropic/*   # only these models
 magpie gateway-key models <id> all     # every model
+magpie gateway-key models <id> none    # no model: a key for MCP servers only
 magpie gateway-key accounts <id> codex/me@example.com   # only these accounts
 magpie gateway-key accounts <id> codex/!me@example.com  # every account but these, later ones too
 magpie gateway-key accounts <id> all    # every account
@@ -871,6 +872,30 @@ under a held key is held to its issuer's list too. `GET /v1/magpie/limit`
 tells a held key its list as `mcp`. A model's own web search, which magpie
 serves through its search when the provider has none, is not an MCP call
 and is not held by this list.
+
+A key's two surfaces, the models and the MCP servers, are chosen on their
+own (ifitscolorful on X): **No model** at the top of the key's models menu,
+or `magpie gateway-key models <id> none`, makes a key for MCP servers only,
+and **No MCP server** (`gateway-key mcp <id> none`) one for models only. A
+key with neither choice, as every key made before, has both. The gateway
+refuses a key for MCP servers only every route that uses a model or tells
+of them, by the route the request is sent to before anything is read or
+sent upstream (`keySurfaceGuard`): chat completions, responses (its
+WebSocket too), messages and count_tokens, embeddings, rerank, images,
+audio, video, realtime, `/v1/decisions` and `/v1/systemone`, Gemini's,
+Ollama's and Codex's routes, a vendor's own API, the chat page, every
+model list, the quotas, the accounts and routing behind them. The answer
+is a 403 with `gateway_key_mcp_only`. A key for models only is refused
+every MCP route the same way, with `gateway_key_no_mcp`: the hub,
+`/mcp/<name>`, `/mcp/run/<name>`, magpie's own servers and
+`/v1/magpie/mcp` (before, it reached them and was given no tool). A key
+issued under either is held to the same. From another computer, a key for
+MCP servers only is given the Library's servers that run as programs on
+this computer, as a key with every model is: its MCP list, not a model
+limit, is what holds it, so hold it to the servers it needs. magpie's own
+servers that ask a model (`magpie-vision`, `magpie-image`) still work for
+it, with the model magpie is set to use for them; leave them out of its
+MCP list to keep it off them.
 
 A gateway key can also be held to some **accounts** (#905): the accounts
 and keys its requests may use, picked in the same menu right after their

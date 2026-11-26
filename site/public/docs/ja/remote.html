@@ -160,7 +160,7 @@
     <h2 id="share"><a class="anchor" href="#share">1. メインの magpie を共有する</a></h2>
     <ol class="steps">
       <li><b>共有をオンにする</b>プロバイダを保存しているコンピューターで <span class="ui">設定</span> → <span class="ui">ネットワークと共有</span> → <span class="ui">ローカルネットワークで共有</span> → <span class="ui">オン</span>。magpie はローカルネットワークで待ち受け、<span class="ui">Magpie</span> という名前のゲートウェイキーを作ります。スイッチの下の <span class="ui">アドレス</span> の行に、ほかのコンピューターから届くアドレス（例：<code>http://192.168.1.20:3425</code>）が表示されます。</li>
-      <li><b>コンピューターごとにキーを作る</b><span class="ui">ゲートウェイ</span> → <span class="ui">ゲートウェイキー</span>、または <code>magpie gateway-key add "Laptop"</code>。<code>sk-magpie-key-…</code> が表示されます。キーごとに日・週・月の上限と使えるモデルを決められ、呼び出しはその名前で集計されます。</li>
+      <li><b>コンピューターごとにキーを作る</b><span class="ui">ゲートウェイ</span> → <span class="ui">ゲートウェイキー</span>、または <code>magpie gateway-key add "Laptop"</code>。<code>sk-magpie-key-…</code> が表示されます。キーごとに日・週・月の上限と使えるモデルを決められ、呼び出しはその名前で集計されます。MCP ゲートウェイ用のキーには<b>モデルなし</b>（<code>magpie gateway-key models &lt;id&gt; none</code>）を選べます。MCP サーバーだけを使え、モデルは使えません。</li>
     </ol>
     <p>共有がオフの間、デスクトップの magpie は自分のコンピューターでしか待ち受けず、ほかのコンピューターからは届きません。Docker の magpie は公開したポートから届き、共有のオン・オフにかかわらず、コンテナの外からの呼び出しすべてにゲートウェイキーを求めます。<a href="/docs/ja/docker#share">Docker</a> を参照してください。</p>
 

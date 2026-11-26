@@ -128,7 +128,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | routing <id> [follow | smart | order | drain | pace-drain | rotate | usage | pace | weight | free | fast | cheap | expiring | fit | <plugin>/<name>] | redact <id> [follow | on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | none | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | routing <id> [follow | smart | order | drain | pace-drain | rotate | usage | pace | weight | free | fast | cheap | expiring | fit | <plugin>/<name>] | redact <id> [follow | on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -164,7 +164,9 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 			// a key that names accounts and no model may use only its
 			// accounts' providers' models (access.HeldModels)
 			models := "all"
-			if ms := access.HeldModels(k.Models, access.ExpandGroups(k.Accounts)); len(ms) > 0 {
+			if ms := access.HeldModels(k.Models, access.ExpandGroups(k.Accounts)); slices.Equal(ms, []string{access.NoModels}) {
+				models = "none" // MCP servers only
+			} else if len(ms) > 0 {
 				models = strings.Join(ms, ",")
 			}
 			accounts := "all"
@@ -510,16 +512,24 @@ func parseKeyLimit(window string, rest []string, usage error) (*access.Limit, er
 //
 //	magpie gateway-key models <id>                          the models it may use
 //	magpie gateway-key models <id> all                      every model
+//	magpie gateway-key models <id> none                     no model: MCP servers only
 //	magpie gateway-key models <id> openai/gpt-5 anthropic/*  only these
 func gatewayKeyModels(out io.Writer, args []string) error {
+	usage := fmt.Errorf("usage: magpie gateway-key models <id> [all | none | <provider>/<model>|<provider>/*|re:<regexp> ...]")
 	if len(args) == 0 {
-		return fmt.Errorf("usage: magpie gateway-key models <id> [all | <provider>/<model>|<provider>/* ...]")
+		return usage
 	}
 	id := args[0]
 	if len(args) > 1 {
 		ms := args[1:]
-		if len(ms) == 1 && ms[0] == "all" {
+		switch {
+		case len(ms) == 1 && ms[0] == "all":
 			ms = nil
+		case len(ms) == 1 && ms[0] == "none":
+			ms = []string{access.NoModels}
+		case slices.ContainsFunc(ms, func(m string) bool { return strings.HasPrefix(m, "-") }):
+			// a flag, or the list's own mark, is never taken as a model
+			return usage
 		}
 		if _, err := access.Update("models-key", access.Change{Key: id, Models: ms}); err != nil {
 			return err
@@ -540,6 +550,10 @@ func gatewayKeyModels(out io.Writer, args []string) error {
 	}
 	if len(k.Models) == 0 {
 		_, err = fmt.Fprintf(out, "%s: every model\n", k.Name)
+		return err
+	}
+	if slices.Equal(k.Models, []string{access.NoModels}) {
+		_, err = fmt.Fprintf(out, "%s: no model, MCP servers only\n", k.Name)
 		return err
 	}
 	_, err = fmt.Fprintf(out, "%s: only %s\n", k.Name, strings.Join(k.Models, ", "))

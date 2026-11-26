@@ -19,8 +19,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.route("**/*", fixture(lang, "light", events, { lan: true, groups: true, limits: { server: { models: ["group/fast"] } } }));
       const zh = lang === "zh";
       const w = zh
-        ? { label: "此密钥可用的模型", all: "全部模型", groups: "全部路由组", relay: "Relay 的全部模型" }
-        : { label: "Models this key may use", all: "All models", groups: "Every routing group", relay: "Every Relay model" };
+        ? { label: "此密钥可用的模型", all: "全部模型", none: "无模型", groups: "全部路由组", relay: "Relay 的全部模型" }
+        : { label: "Models this key may use", all: "All models", none: "No model", groups: "Every routing group", relay: "Every Relay model" };
       await page.goto("http://magpie.test/?view=gateway");
       await page.locator("#gatewayKeys .acc[data-key]").last().waitFor();
       const row = (id) => page.locator(`#gatewayKeys .acc[data-key="${id}"]`);
@@ -35,11 +35,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const menu = page.locator(".proto-menu");
       await menu.waitFor();
       assert.equal(await page.locator("select").count(), 0, "no native select");
-      // the groups come first, after All models, then each provider's models
+      // the groups come first, after All models and No model, then each
+      // provider's models
       const names = (await menu.locator(".pm-item").allTextContents()).map((s) => s.trim());
       const at0 = (s) => names.findIndex((n) => n.startsWith(s));
       assert(at0(w.all) === 0, names.join(" | "));
-      assert(at0(w.groups) === 1, names.join(" | "));
+      assert(at0(w.none) === 1, names.join(" | "));
+      assert(at0(w.groups) === 2, names.join(" | "));
       assert(at0("Coding") > at0(w.groups) && at0("Fast") > at0("Coding"), names.join(" | "));
       assert(at0(w.relay) > at0("Fast"), names.join(" | "));
       assert.match(await menu.locator(".pm-item", { hasText: "Coding" }).textContent(), /group\/coding/);

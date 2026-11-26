@@ -154,7 +154,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie log [--path] [-n N] [-f]  where magpie's logs are, to send with a report: the app's (app.log), the service's; -n prints the app log's last N lines, -f follows it
   magpie gateway-key list|add <name> [--read-only]|rotate <id> [--key -]|remove <id>   manage the keys clients use to call a shared gateway
   magpie gateway-key limit <id> [list|off|reset [n]|remove <n>|[add] day|week|month|<N>d|<N>h --tokens N --cost USD --cache-reads --model openai/*]   a key's own limits, and what it used; --model counts only those models
-  magpie gateway-key models <id> [all|<provider>/<model>|<provider>/* ...]   the models a key may use, every one unless it names some
+  magpie gateway-key models <id> [all|none|<provider>/<model>|<provider>/* ...]   the models a key may use, every one unless it names some; none: MCP servers only
   magpie gateway-key accounts <id> [all|<provider>/<account>|<provider>/!<account>|@<group>|!@<group> ...]   the accounts a key may use, or keeps out
   magpie gateway-key groups [add <name> <account>...|set <group> <account>...|rename <group> <name>|remove <group>]   named account groups a key's accounts can name
   magpie gateway-key quotas <id> [on|off]   whether a key held to a budget, models or accounts is told the quotas of what it may use

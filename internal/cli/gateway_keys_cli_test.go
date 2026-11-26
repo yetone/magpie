@@ -263,6 +263,22 @@ func TestGatewayKeyModelsCLI(t *testing.T) {
 			t.Error("accepted", args)
 		}
 	}
+	// none: a key for MCP servers only (ifitscolorful on X); "-" itself,
+	// or beside a model, is no model's name
+	if got, err := call("models", id, "none"); err != nil || got != "Phone: no model, MCP servers only\n" {
+		t.Fatal(got, err)
+	}
+	if keys, _ = access.List(); !slices.Equal(keys[0].Models, []string{access.NoModels}) {
+		t.Fatal("none kept", keys[0].Models)
+	}
+	if got, _ := call("list"); !strings.Contains(got, "none") {
+		t.Fatal(got)
+	}
+	for _, args := range [][]string{{"models", id, "-"}, {"models", id, "-", "openai/gpt-5"}, {"models", id, "--help"}} {
+		if _, err := call(args...); err == nil {
+			t.Error("accepted", args)
+		}
+	}
 	if got, err := call("models", id, "all"); err != nil || got != "Phone: every model\n" {
 		t.Fatal(got, err)
 	}

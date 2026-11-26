@@ -213,6 +213,8 @@
       <tr><th>エラー</th><th>原因</th><th>直し方</th></tr>
       <tr><td>model disabled</td><td>magpie でそのモデルをオフにしています。</td><td>プロバイダでオンに戻します。</td></tr>
       <tr><td>model not allowed for the gateway key</td><td>ゲートウェイキーが一部のモデルに限られています。</td><td><code>magpie gateway-key models &lt;id&gt;</code> で確認・変更します。</td></tr>
+      <tr><td>gateway_key_mcp_only</td><td>ゲートウェイキーが MCP サーバー専用で、モデルを使えません。</td><td><code>magpie gateway-key models &lt;id&gt; all</code>、または <span class="ui">ゲートウェイ</span> › <span class="ui">ゲートウェイキー</span> でモデルを選びます。</td></tr>
+      <tr><td>gateway_key_no_mcp</td><td>ゲートウェイキーがモデル専用で、MCP サーバーを使えません。</td><td><code>magpie gateway-key mcp &lt;id&gt; all</code>、またはキーの ⋯ メニューで MCP サーバーを選びます。</td></tr>
       <tr><td>magpie doesn’t answer the web page …</td><td>Web ページがブラウザからゲートウェイを呼びました。</td><td><span class="ui">設定</span> › <span class="ui">ネットワークと共有</span> › <span class="ui">Web ページ</span> に追加し、ゲートウェイキーを送ります。</td></tr>
     </table></div>
 

@@ -164,7 +164,8 @@ type HubServer struct {
 	// Program: the server is a program run on this computer, with the
 	// user's rights (a command, or a tools plugin), not an HTTP server
 	// elsewhere. A gateway key held to some models, accounts or a spend
-	// limit isn't given it from another computer.
+	// limit isn't given it from another computer; a key for MCP servers
+	// only, held to no model, is (hubVisitor).
 	Program bool
 	// Keyed: the server is Magpie Browser, whose browsers are each this
 	// computer's or a gateway key's (browser.go): given to this computer
@@ -224,7 +225,14 @@ func HubVisitorOf(ctx context.Context) HubVisitor {
 // hubVisitor is who r is from (HubVisitor).
 func hubVisitor(r *http.Request) HubVisitor {
 	away := !local(r) || hubFromPage(r)
-	v := HubVisitor{Away: away, Held: away && nativeHeld(access.Caller(r.Context()))}
+	held := access.Caller(r.Context())
+	if held.ModelsOff() {
+		// a key for MCP servers only (ifitscolorful on X) is held to no
+		// model, not to some: no limit of its models is there for a
+		// program to slip past, and its MCP list holds it to servers
+		held.Models = nil
+	}
+	v := HubVisitor{Away: away, Held: away && nativeHeld(held)}
 	if !local(r) && !hubFromPage(r) {
 		v.Key = access.Caller(r.Context()).KeyID
 		v.Memory = access.Caller(r.Context()).Memory

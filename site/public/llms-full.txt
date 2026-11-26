@@ -8727,6 +8727,8 @@ Every request is listed on magpie’s Routing page, with which provider and acco
 | --- | --- | --- |
 | model disabled | You turned the model off in magpie. | Turn it on again on its provider. |
 | model not allowed for the gateway key | The gateway key is held to some models. | `magpie gateway-key models <id>` lists or changes them. |
+| gateway_key_mcp_only | The gateway key is for MCP servers only: it may use no model. | `magpie gateway-key models <id> all`, or pick its models in Gateway › Gateway keys. |
+| gateway_key_no_mcp | The gateway key is for models only: it may use no MCP server. | `magpie gateway-key mcp <id> all`, or pick its MCP servers in the key’s ⋯ menu. |
 | magpie doesn’t answer the web page … | A web page called the gateway from a browser. | List it in Settings › Network and sharing › Web pages, and send a gateway key. |
 
 ## 429 and rest periods
@@ -10647,7 +10649,7 @@ The computer you sit at still runs magpie: it wires that computer’s agents, pi
 ## 1. Share the main magpie
 
 1. **Turn on sharing.** On the computer that keeps your providers: Settings → Network and sharing → Share on local network → On. magpie then listens on the local network and makes a gateway key named Magpie. The Address row below the switch shows where other computers reach it, such as `http://192.168.1.20:3425`.
-2. **Make a key for each computer.** Gateway → Gateway keys, or `magpie gateway-key add "Laptop"`, which prints its `sk-magpie-key-…`. Each key can have its own daily, weekly or monthly limit and its own models, and its calls are counted under its name.
+2. **Make a key for each computer.** Gateway → Gateway keys, or `magpie gateway-key add "Laptop"`, which prints its `sk-magpie-key-…`. Each key can have its own daily, weekly or monthly limit and its own models, and its calls are counted under its name. A key for an MCP gateway can be given **No model** (`magpie gateway-key models <id> none`): it reaches the MCP servers and no model.
 
 While sharing is off, a desktop magpie listens on its own computer only, and other computers can’t reach it. A magpie in Docker is reached through its published port instead, and asks every caller outside its container for a gateway key, shared or not; see [Docker](https://usemagpie.ai/docs/docker#share).
 

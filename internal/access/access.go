@@ -144,6 +144,7 @@ type Key struct {
 	// Models are the models the key may use (#882): "<provider>/<model>",
 	// "<provider>/*" or a group's "group/<name>"; none for every model,
 	// unless it lists accounts: then its accounts' providers' (HeldModels).
+	// NoModels alone is no model: a key for MCP servers only.
 	Models []string `json:"models,omitempty"`
 	// Aliases are the names the key gives models (tsingchao on X): a name
 	// its client asks by, the model "<provider>/<model>" it stands for.
@@ -532,7 +533,8 @@ type Change struct {
 	// resets every one. For "move-key" it is the place in the list the key
 	// goes to, counted from 0.
 	Index *int `json:"index,omitempty"`
-	// Models is what "models-key" sets; none lets the key use every model.
+	// Models is what "models-key" sets; none lets the key use every model,
+	// NoModels alone none.
 	Models []string `json:"models,omitempty"`
 	// Aliases is what "aliases-key" sets; none takes the names away.
 	Aliases map[string]string `json:"aliases,omitempty"`

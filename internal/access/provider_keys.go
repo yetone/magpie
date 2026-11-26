@@ -91,10 +91,11 @@ func keptGroups(gs []GroupRef, among func(GroupRef) bool) []string {
 }
 
 // modelKeys are the keys a provider's editor lists: those that may use
-// a model. A read-only key, the Magpie Browser extension's and a key
-// issued under another (bounded by it, short-lived) are left out.
+// a model. A read-only key, the Magpie Browser extension's, a key for
+// MCP servers only (NoModels) and a key issued under another (bounded by
+// it, short-lived) are left out.
 func modelKey(k Key) bool {
-	return !k.ReadOnly && !k.Browser && k.Issuer == "" && k.Expires.IsZero()
+	return !k.ReadOnly && !k.Browser && k.Issuer == "" && k.Expires.IsZero() && !slices.Equal(k.Models, []string{NoModels})
 }
 
 // ownEntry: the model entry names provider pid by its id, "<pid>/…".

@@ -213,6 +213,8 @@
       <tr><th>报错</th><th>原因</th><th>解决</th></tr>
       <tr><td>model disabled</td><td>你在 magpie 里关掉了这个模型。</td><td>在它的供应商里重新打开。</td></tr>
       <tr><td>model not allowed for the gateway key</td><td>这个网关密钥限定了可用的模型。</td><td>用 <code>magpie gateway-key models &lt;id&gt;</code> 查看或修改。</td></tr>
+      <tr><td>gateway_key_mcp_only</td><td>这个网关密钥只能用 MCP 服务器，不能用模型。</td><td><code>magpie gateway-key models &lt;id&gt; all</code>，或在 <span class="ui">网关</span> › <span class="ui">网关密钥</span> 里选它的模型。</td></tr>
+      <tr><td>gateway_key_no_mcp</td><td>这个网关密钥只能用模型，不能用 MCP 服务器。</td><td><code>magpie gateway-key mcp &lt;id&gt; all</code>，或在密钥的 ⋯ 菜单里选它的 MCP 服务器。</td></tr>
       <tr><td>magpie doesn’t answer the web page …</td><td>有网页在浏览器里调用网关。</td><td>把它加到 <span class="ui">设置</span> › <span class="ui">网络与共享</span> › <span class="ui">网页</span>，并发送网关密钥。</td></tr>
     </table></div>
 

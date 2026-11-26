@@ -213,6 +213,8 @@
       <tr><th>Error</th><th>Cause</th><th>Fix</th></tr>
       <tr><td>model disabled</td><td>You turned the model off in magpie.</td><td>Turn it on again on its provider.</td></tr>
       <tr><td>model not allowed for the gateway key</td><td>The gateway key is held to some models.</td><td><code>magpie gateway-key models &lt;id&gt;</code> lists or changes them.</td></tr>
+      <tr><td>gateway_key_mcp_only</td><td>The gateway key is for MCP servers only: it may use no model.</td><td><code>magpie gateway-key models &lt;id&gt; all</code>, or pick its models in <span class="ui">Gateway</span> › <span class="ui">Gateway keys</span>.</td></tr>
+      <tr><td>gateway_key_no_mcp</td><td>The gateway key is for models only: it may use no MCP server.</td><td><code>magpie gateway-key mcp &lt;id&gt; all</code>, or pick its MCP servers in the key’s ⋯ menu.</td></tr>
       <tr><td>magpie doesn’t answer the web page …</td><td>A web page called the gateway from a browser.</td><td>List it in <span class="ui">Settings</span> › <span class="ui">Network and sharing</span> › <span class="ui">Web pages</span>, and send a gateway key.</td></tr>
     </table></div>
 

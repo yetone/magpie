@@ -698,13 +698,16 @@ function gatewayModelsBadge(k) {
   const as = (k.accounts || []).filter((a) => !isKeptOut(a));
   const b = el("button", "amodels key-models" + (ms.length || as.length ? " set" : ""));
   b.type = "button";
-  b.textContent = !ms.length && !as.length ? t("All models")
+  // a key held to no model (access.NoModels, "-") is for MCP servers
+  // only (ifitscolorful on X)
+  const none = ms[0] === "-";
+  b.textContent = none ? t("No model") : !ms.length && !as.length ? t("All models")
     : ms.length ? (ms.length === 1 && !as.length ? ms[0] : t("{n} models", { n: ms.length }))
       : (as.length === 1 ? accountShown(as[0]) : t("{n} accounts", { n: as.length }));
   // an account picked and no model holds the key to the accounts'
   // providers' models (access.HeldModels, Linka on Discord): it is not
   // let off to every other provider's
-  b.title = (ms.length ? t("Only these models: {list}", { list: ms.join(", ") }) : t("Pick the models this key may use"))
+  b.title = none ? t("This key may use no model, only MCP servers") : (ms.length ? t("Only these models: {list}", { list: ms.join(", ") }) : t("Pick the models this key may use"))
     + (as.length ? "\n" + t("Only these accounts: {list}", { list: as.map(accountShown).join(", ") })
       + "\n" + (ms.length ? t("A provider with no account picked is used on every account; to keep the key off it, pick only other providers' models")
         : t("No model is picked, so this key may use only the picked accounts' providers' models")) : "");
@@ -713,7 +716,7 @@ function gatewayModelsBadge(k) {
   b.setAttribute("aria-expanded", "false");
   const open = (models, accounts, groups, bare) => {
     if (!b.isConnected) return;
-    const opts = [{ v: "", name: "All models", note: "Any model and any account, now and later" }];
+    const opts = [{ v: "", name: "All models", note: "Any model and any account, now and later" }, { v: "-", name: "No model", note: "MCP servers only" }];
     const seen = new Set();
     // the accounts and keys the key may be held to (#905), each right
     // after its provider's models, not one block at the end: an account
@@ -801,11 +804,14 @@ function gatewayModelsBadge(k) {
       // The accounts are sent only when they changed: a model picked says
       // nothing of the key's accounts.
       (async () => {
-        const pickedModels = picked.filter((v) => !accountsSet.has(v));
+        let pickedModels = picked.filter((v) => !accountsSet.has(v));
         const pickedAccounts = picked.filter((v) => accountsSet.has(v));
+        // "No model" just ticked is none; left ticked beside a model
+        // ticked since, the model (as gatewayMCPPick's "No MCP server")
+        if (pickedModels.includes("-")) pickedModels = !none ? ["-"] : pickedModels.length > 1 ? pickedModels.filter((v) => v !== "-") : pickedModels;
         const out = await gatewayKeyAction("models-key", { key: k.id, models: pickedModels });
         if (out) {
-          status(t(pickedModels.length ? "{name} may use only the models picked"
+          status(t(pickedModels[0] === "-" ? "{name} may use no model, only MCP servers" : pickedModels.length ? "{name} may use only the models picked"
             : pickedAccounts.length ? "{name} may use only the picked accounts' models" : "{name} may use every model", { name: k.name }), "ok");
         }
         if (pickedAccounts.length !== as.length || pickedAccounts.some((v) => !as.includes(v))) {

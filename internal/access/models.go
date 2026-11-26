@@ -11,14 +11,29 @@ import (
 	"unicode"
 )
 
+// NoModels is the model list of a key held to no model at all, one for
+// MCP servers only (ifitscolorful on X: an MCP gateway's key that can't
+// spend the subscriptions), as NoMCP is the MCP list of one for models
+// only. It matches no model, so every check of a key's models refuses
+// it, and the gateway refuses it every model route besides
+// (keySurfaceGuard). A magpie from before it reads it as a model no
+// provider has, so the key still reaches none.
+const NoModels = "-"
+
 // CleanModels is a key's model list as kept (#882): each pattern trimmed,
 // empty and repeated ones dropped. A pattern names a provider and a model,
 // "<provider>/<model>", every model of one, "<provider>/*", or a routing
-// group, "group/<name>".
+// group, "group/<name>"; NoModels alone holds the key to none, and is
+// dropped beside any model.
 func CleanModels(in []string) ([]string, error) {
 	var out []string
+	none := false
 	for _, m := range in {
 		m = strings.TrimSpace(m)
+		if m == NoModels {
+			none = true
+			continue
+		}
 		if m == "" || slices.ContainsFunc(out, func(o string) bool { return strings.EqualFold(o, m) }) {
 			continue
 		}
@@ -41,7 +56,24 @@ func CleanModels(in []string) ([]string, error) {
 	if len(out) > 500 {
 		return nil, errors.New("A key can list at most 500 models")
 	}
+	if len(out) == 0 && none {
+		return []string{NoModels}, nil
+	}
 	return out, nil
+}
+
+// ModelsOff is whether the key is held to no model at all (NoModels):
+// a key for MCP servers only. An issued key's Models are folded with its
+// issuer's already (identityOf).
+func (who Identity) ModelsOff() bool {
+	return len(who.Models) == 1 && who.Models[0] == NoModels
+}
+
+// MCPOff is whether the key, or the key it was issued under, is held to
+// no MCP server at all (NoMCP): a key for models only.
+func (who Identity) MCPOff() bool {
+	off := func(l []string) bool { return len(l) == 1 && l[0] == NoMCP }
+	return off(who.MCP) || who.Issuer != nil && off(who.Issuer.MCP)
 }
 
 // HeldModels is the models a key that lists models and accounts may
@@ -104,6 +136,9 @@ func ModelAllowed(patterns []string, id string) bool {
 		return true
 	}
 	for _, p := range patterns {
+		if p == NoModels {
+			continue // matches no model, "-" itself neither
+		}
 		if IsPattern(p) {
 			if patternMatches(p, id) {
 				return true

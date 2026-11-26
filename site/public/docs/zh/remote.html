@@ -160,7 +160,7 @@
     <h2 id="share"><a class="anchor" href="#share">1. 共享主 magpie</a></h2>
     <ol class="steps">
       <li><b>打开共享</b>在保存供应商的电脑上：<span class="ui">设置</span> → <span class="ui">网络与共享</span> → <span class="ui">局域网共享</span> → <span class="ui">开启</span>。magpie 随即在局域网上监听，并生成一个名为 <span class="ui">Magpie</span> 的网关密钥。开关下方的 <span class="ui">地址</span> 一行显示其他电脑访问它的地址，例如 <code>http://192.168.1.20:3425</code>。</li>
-      <li><b>给每台电脑一个密钥</b><span class="ui">网关</span> → <span class="ui">网关密钥</span>，或 <code>magpie gateway-key add "Laptop"</code>，它会打印 <code>sk-magpie-key-…</code>。每个密钥可以有自己的每日、每周或每月上限和可用模型，它的调用按它的名字统计。</li>
+      <li><b>给每台电脑一个密钥</b><span class="ui">网关</span> → <span class="ui">网关密钥</span>，或 <code>magpie gateway-key add "Laptop"</code>，它会打印 <code>sk-magpie-key-…</code>。每个密钥可以有自己的每日、每周或每月上限和可用模型，它的调用按它的名字统计。给 MCP 网关用的密钥可以选<b>无模型</b>（<code>magpie gateway-key models &lt;id&gt; none</code>）：它只能用 MCP 服务器，不能用模型。</li>
     </ol>
     <p>共享关闭时，桌面版 magpie 只在本机监听，其他电脑访问不到。Docker 里的 magpie 则通过发布的端口访问，不论是否共享，都会向容器外的每个调用方要网关密钥；见 <a href="/docs/zh/docker#share">Docker</a>。</p>
 

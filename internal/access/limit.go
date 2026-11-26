@@ -213,6 +213,10 @@ func (l *Limit) Valid() (*Limit, error) {
 		return nil, err
 	}
 	for _, m := range ms {
+		if m == NoModels {
+			// a key's "no model" counts nothing: a limit names what it counts
+			return nil, errors.New("A limit counts models or providers, like openai/* or openai/gpt-5: " + m)
+		}
 		if strings.HasPrefix(strings.ToLower(m), "group/") || strings.HasPrefix(strings.ToLower(m), "auto/") {
 			return nil, errors.New("A limit counts models or providers, like openai/* or openai/gpt-5, not a routing group: " + m)
 		}

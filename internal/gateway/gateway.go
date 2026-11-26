@@ -1146,7 +1146,7 @@ func (s *Server) Handler() http.Handler {
 	// on (dumpFirst)
 	// a socket's turns go through all of it again (socketEntry); the
 	// agent's Retry-After is bounded on the way out (retryCapped)
-	return socketEntry(s.dumpFirst(retryCapped(s.counted(headerLogged(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, withCaller(keptBodyRequests(keyLimited(s.keySlots(mux, mux)))))))))))))
+	return socketEntry(s.dumpFirst(retryCapped(s.counted(headerLogged(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, keySurfaceGuard(mux, withCaller(keptBodyRequests(keyLimited(s.keySlots(mux, mux))))))))))))))
 }
 
 // routes are the client APIs, each by its pattern: readOnlyGuard reads

@@ -160,7 +160,7 @@
     <h2 id="share"><a class="anchor" href="#share">1. Share the main magpie</a></h2>
     <ol class="steps">
       <li><b>Turn on sharing</b>On the computer that keeps your providers: <span class="ui">Settings</span> → <span class="ui">Network and sharing</span> → <span class="ui">Share on local network</span> → <span class="ui">On</span>. magpie then listens on the local network and makes a gateway key named <span class="ui">Magpie</span>. The <span class="ui">Address</span> row below the switch shows where other computers reach it, such as <code>http://192.168.1.20:3425</code>.</li>
-      <li><b>Make a key for each computer</b><span class="ui">Gateway</span> → <span class="ui">Gateway keys</span>, or <code>magpie gateway-key add "Laptop"</code>, which prints its <code>sk-magpie-key-…</code>. Each key can have its own daily, weekly or monthly limit and its own models, and its calls are counted under its name.</li>
+      <li><b>Make a key for each computer</b><span class="ui">Gateway</span> → <span class="ui">Gateway keys</span>, or <code>magpie gateway-key add "Laptop"</code>, which prints its <code>sk-magpie-key-…</code>. Each key can have its own daily, weekly or monthly limit and its own models, and its calls are counted under its name. A key for an MCP gateway can be given <b>No model</b> (<code>magpie gateway-key models &lt;id&gt; none</code>): it reaches the MCP servers and no model.</li>
     </ol>
     <p>While sharing is off, a desktop magpie listens on its own computer only, and other computers can’t reach it. A magpie in Docker is reached through its published port instead, and asks every caller outside its container for a gateway key, shared or not; see <a href="/docs/docker#share">Docker</a>.</p>
 

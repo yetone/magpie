@@ -893,6 +893,34 @@ route the router has is in neither `readOnlyRoutes` nor its refused list,
 and sends each refused pattern, by each method it takes, from loopback and
 from the network.
 
+A key's two surfaces, the models and the MCP servers, are chosen on their
+own (ifitscolorful on X: an MCP gateway's key must not spend the
+subscriptions). `access.NoModels` (`"-"`) alone in `Key.Models` is a key
+for MCP servers only (`Identity.ModelsOff`), as `access.NoMCP` alone in
+`Key.MCP` is one for models only (`Identity.MCPOff`, its issuer's too).
+`keySurfaceGuard` in [`key_surface.go`](../../internal/gateway/key_surface.go)
+sits right after `readOnlyGuard`, before anything is read, reserved or
+sent, and judges the same routed pattern: a key for MCP servers only is
+refused every pattern of `keyModelRoutes` (every model route and its
+spellings, the WebSocket upgrade, `count_tokens`, decisions, the chat
+page, the model lists, the quotas, accounts, cards and routing) with 403
+`gateway_key_mcp_only`, and a key for models only every pattern of
+`keyMCPRoutes` (the hub, `/mcp/{name}`, `/mcp/run/{name}`, magpie's own
+servers, `GET /v1/magpie/mcp`) with 403 `gateway_key_no_mcp`. A key with
+neither has both, as every key made before. `identityOf` keeps an issued
+key under a no-model issuer at no model whatever it asks, and `covered`
+lets any issuer hand out "no model". `hubVisitor` doesn't count no model
+as a model limit (`nativeHeld`), so from another computer such a key is
+given the Library's program servers as a key with every model is; its MCP
+list holds it. magpie's own servers that ask a model (`magpie-vision`)
+call `serve` directly under `magpieChose`, past the route guard and the
+key's models, as for any key. `TestKeySurfacesEveryRoute` in
+[`key_surface_test.go`](../../internal/gateway/key_surface_test.go) fails
+when a route the router has is not in exactly one of `keyModelRoutes`,
+`keyMCPRoutes` and `keySurfaceNeither`, sends each refused pattern by
+each method from loopback and the network and checks no upstream is
+reached, and judges every other route by the guard alone.
+
 A browser key (`access.Key.Browser`) connects the Magpie Browser extension
 and nothing else. The GUI writes one into the extension's zip
 (`browserKey` in [`internal/gui/browser.go`](../../internal/gui/browser.go),
