@@ -3698,7 +3698,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// key or account added while the conversation runs doesn't take it over
 	// (#63): its reasoning, sealed by the account that wrote it, is refused
 	// by another.
-	before := len(cands)
+	before, beforeAff := len(cands), slices.Clone(cands)
 	inOrder := routingOf(p.Routing) == provider.Ordered
 	if isGroup {
 		inOrder = routingOf(g.Routing) == provider.Ordered
@@ -3708,6 +3708,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// failure rests the account as it would with the others still there,
 	// for new conversations to go elsewhere meanwhile (#1797)
 	strictAlone := aff.Why == "strict" && len(cands) < before
+	// and the others Strict left out, asked only when the vendor's safety
+	// filter refuses what the conversation's own one was sent: a refusal
+	// is about the request's content, not the account Strict keeps, and
+	// that one refuses the same words every time it is asked (Winnie7572
+	// on X: a member's 451 ended every try at it, five members ready)
+	var strictLeft []candidate
+	if strictAlone {
+		strictLeft = notAmong(beforeAff, cands)
+	}
 	defer opened(stuck)
 	leadAccount := ""
 	if sealedTask && !aff.Kept {
@@ -3864,6 +3873,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	all := cands
 	var restLeft []candidate
 	cands, restLeft = probeLeft(cands)
+	strictLeft, _ = probeLeft(strictLeft)
 	// those it left out resting only for a while magpie guessed are asked
 	// next, once every one asked has failed for itself (briefLeftOf)
 	briefLeft := briefLeftOf(restLeft)
@@ -4298,7 +4308,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// asked again, of it or of the next candidate. Only a stream the
 		// agent has the headers of already is held, to be told in it
 		pass := c.p.PassesErrors()
-		hw := newHoldWriter(w, kept.sent || !pass && (!last || len(briefLeft) > 0 || again < max(lastRetries, rateRetries) || other != nil || autoPicks(c) && repicked < 2 ||
+		hw := newHoldWriter(w, kept.sent || !pass && (!last || len(briefLeft) > 0 || len(strictLeft) > 0 || again < max(lastRetries, rateRetries) || other != nil || autoPicks(c) && repicked < 2 ||
 			patience > 0 && rounds < replanRounds && (waitFrom.IsZero() || time.Since(waitFrom) < patience) || wantWhole))
 		// a compaction's summary is held to its end, for a cut or an
 		// error halfway to go to the next candidate (#2274)
@@ -4335,14 +4345,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if !last && c.claudeAccount() && slices.ContainsFunc(cands[i+1:], candidate.claudeAccount) {
 			retell, noRetell = tooBigToRetell(from, body)
 		}
-		if !pass && handsOver(streams, last || noRetell && len(otherThanClaudeAccounts(cands[i+1:])) == 0, wantWhole, from, refusals) {
+		// the last of a strict conversation's own isn't, for a refusal,
+		// while Strict left others out (strictLeft)
+		refusedLast := last && len(strictLeft) == 0
+		if !pass && handsOver(streams, refusedLast || noRetell && len(otherThanClaudeAccounts(cands[i+1:])) == 0, wantWhole, from, refusals) {
 			// reasoning that went through as it came, and a refusal after
 			// it with nothing yet said: the next candidate answers in the
 			// same stream (refusalHandover; yhwangl on X)
 			hw.over = &refusalHandover{proto: from, seq: -1}
 		}
 		// the reasoning's hold, above, once the handover is known
-		hw.thinkingShown = !s.holdsThinking(c, hw.over != nil) || last
+		hw.thinkingShown = !s.holdsThinking(c, hw.over != nil) || refusedLast
 		report := cacheReport
 		if c.p.Account == nil || c.p.Account.Agent != "claude" {
 			report = nil
@@ -5294,6 +5307,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				// refusal be: nobody else is, and the agent has it now
 				cands = cands[:i+1]
 				last = true
+			} else if last && len(strictLeft) > 0 && hw.mayAskAgain() {
+				// the last of a strict conversation's own refused it: the
+				// others Strict left out are asked, as a group's members
+				// or a provider's accounts are for any other conversation.
+				// The one that answers keeps the conversation, whose
+				// words this one refuses. Not a Claude subscription's
+				// other accounts for a big conversation (tooBigToRetell)
+				left := strictLeft
+				if _, big := tooBigToRetell(from, body); big && c.claudeAccount() {
+					left = otherThanClaudeAccounts(left)
+				}
+				cands, strictLeft = append(slices.Clip(cands), left...), nil
+				last = i == len(cands)-1
 			} else if noRetell {
 				// another Claude subscription account is a new Claude Code
 				// told the whole conversation, a cache written again on that

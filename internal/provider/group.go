@@ -63,7 +63,10 @@ const (
 	// answered it whatever happens: resting, all but used up or past the
 	// usage cap set on it, it is still the one asked, and its error goes
 	// to the agent rather than the conversation to another. A usage cap
-	// still keeps new conversations off it.
+	// still keeps new conversations off it. A refusal by the vendor's
+	// safety filter is the exception: it is about the words, which that
+	// account refuses every time, so the others are asked after it, and
+	// the one that answers keeps the conversation.
 	AffinityStrict = "strict"
 )
 

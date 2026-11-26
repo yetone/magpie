@@ -4739,6 +4739,13 @@ var sensitiveCode = lazyre.New(`SensitiveContentDetected$`)
 // its usage policy, rather than malformed.
 var flaggedWords = lazyre.New(`(?i)flagged|usage polic`)
 
+// magpieRefusedLine is the line another magpie ends its error with when
+// its member's safety filter refused the request and nobody there
+// answered it (refusalTold, refusedError): "magpie: <model> refused this
+// request (safety filter: <code>) via <provider>", in a 400 with no code
+// of its own. Its code is the submatch.
+var magpieRefusedLine = lazyre.New(`(?:^|\n)magpie: [^\n]* refused this request \(safety filter: ([^)\s]+)\) via `)
+
 // policyRefusal tells whether an error — an error object, a body holding
 // one, or a stream's error event — is the vendor's safety filter refusing
 // the request: Azure's content_filter, OpenAI's content_policy_violation,
@@ -4791,6 +4798,14 @@ func policyRefusal(raw []byte) (string, bool) {
 		return note(c)
 	case strings.TrimSpace(msg) == highRiskRefusal:
 		return note("high risk")
+	}
+	if m := magpieRefusedLine.FindStringSubmatch(msg); m != nil {
+		// another magpie's refusal (a remote magpie a provider points
+		// at): its member's filter refused, which is about the content,
+		// not this account, as every refusal is (Winnie7572 on X: the
+		// group ended at it). Its member's words go on, without its line.
+		msg, _, _ = strings.Cut(msg, magpieSays)
+		return note(m[1])
 	}
 	return "", false
 }

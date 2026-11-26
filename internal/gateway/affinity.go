@@ -673,6 +673,20 @@ func strictOnly(cs []candidate, pl planned, at int) ([]candidate, planned) {
 	return out, pl
 }
 
+// notAmong is what of cs isn't in kept, in cs's order: the candidates
+// strictOnly left out.
+func notAmong(cs, kept []candidate) []candidate {
+	var out []candidate
+	for _, c := range cs {
+		if !slices.ContainsFunc(kept, func(k candidate) bool {
+			return k.who() == c.who() && k.model == c.model && k.effort == c.effort
+		}) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // stickKey is the conversation a stick is kept for: scope's, by the
 // conversation's id, and a Claude Code subagent's apart from its lead's.
 // Claude Code sends its session's id with every request of the session,
