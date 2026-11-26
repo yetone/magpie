@@ -1691,6 +1691,14 @@ func modelObject(e provider.Entry) map[string]any {
 	// (magpie group set … context=) included
 	if e.Context > 0 {
 		m["context_window"], m["context_length"], m["max_input_tokens"] = e.Context, e.Context, e.Context
+		// the most it may be raised to, when its vendor takes more than
+		// that window at a higher price (Copilot's gpt-6.2-sol: 272K,
+		// 1.05M): another magpie that has this one as its provider keeps
+		// it as its own model's MaxContext, so its user can raise the
+		// window there too (#7296)
+		if e.MaxContext > e.Context {
+			m["max_context_window"] = e.MaxContext
+		}
 	}
 	// the reply limit, kept within that window as agents are told it
 	// (#1438)

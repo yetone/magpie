@@ -1160,6 +1160,10 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		}
 		if codex != nil {
 			codexFacts(&m, r, codex)
+		} else if n, ok := r.MaxWindow.(float64); ok && headers["X-Magpie-Drawers"] != "" && m.Context > 0 && int(n) > m.Context {
+			// another magpie's word on the most its model may be raised
+			// to above context_length (Copilot's tiered windows, #7296)
+			m.MaxContext = int(n)
 		}
 		kimiFacts(&m, r)
 		m.Free = m.Free || goFree(r.Go)
