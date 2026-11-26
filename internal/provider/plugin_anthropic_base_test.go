@@ -49,9 +49,13 @@ func TestPluginAnthropicBaseKeepsV1(t *testing.T) {
 // models on Messages at <endpoint>/v1, and no base of the loader's.
 // Asked on chat, such a model stays on the provider's chat base; and a
 // plugin with no model on Messages (WorkBuddy AI's) leaves it as it was.
+// A model on the list whose own route is chat (blind-model-f here, as the
+// reporter's) goes the same way when asked on Messages: e00986a85 sent it
+// to /v2/messages still.
 func TestPluginUnlistedModelTakesItsAPIsRoute(t *testing.T) {
 	wb := plugin.Provider{ID: "workbuddy", NPM: "@ai-sdk/openai-compatible", API: "https://copilot.tencent.com/v2", Models: []plugin.Model{
 		{ID: "glm-5.3", NPM: "@ai-sdk/openai-compatible", URL: "https://copilot.tencent.com/v2"},
+		{ID: "blind-model-f", NPM: "@ai-sdk/openai-compatible", URL: "https://copilot.tencent.com/v2"},
 		{ID: "claude-opus-5.5", NPM: "@ai-sdk/anthropic", URL: "https://copilot.tencent.com/v1"},
 	}}
 	wbAI := plugin.Provider{ID: "workbuddy-ai", NPM: "@ai-sdk/openai-compatible", API: "https://www.workbuddy.ai/v2", Models: []plugin.Model{
@@ -71,10 +75,23 @@ func TestPluginUnlistedModelTakesItsAPIsRoute(t *testing.T) {
 		{"workbuddy, count_tokens", "test-model-x", "/v1/messages/count_tokens", "", wb, "https://copilot.tencent.com/v1/messages/count_tokens"},
 		{"workbuddy, chat", "test-model-x", "/v1/chat/completions", "", wb, "https://copilot.tencent.com/v2/chat/completions"},
 		{"workbuddy ai, no messages route", "test-model-x", "/v1/messages", "", wbAI, "https://www.workbuddy.ai/v2/messages"},
+		// a model on the list whose own route is chat, asked on Messages
+		// (its API set to Anthropic): the Claude models' route too
+		{"workbuddy, listed chat model on messages", "blind-model-f", "/v1/messages", "", wb, "https://copilot.tencent.com/v1/messages"},
+		{"workbuddy, listed chat model on count_tokens", "blind-model-f", "/v1/messages/count_tokens", "", wb, "https://copilot.tencent.com/v1/messages/count_tokens"},
+		{"workbuddy, listed chat model on chat", "blind-model-f", "/v1/chat/completions", "", wb, "https://copilot.tencent.com/v2/chat/completions"},
+		{"workbuddy, listed claude on messages", "claude-opus-5.5", "/v1/messages", "", wb, "https://copilot.tencent.com/v1/messages"},
+		{"workbuddy, listed claude on chat", "claude-opus-5.5", "/v1/chat/completions", "", wb, "https://copilot.tencent.com/v2/chat/completions"},
+		{"workbuddy ai, listed on messages", "glm-5.3", "/v1/messages", "", wbAI, "https://www.workbuddy.ai/v2/messages"},
+		{"workbuddy ai, listed on chat", "glm-5.3", "/v1/chat/completions", "", wbAI, "https://www.workbuddy.ai/v2/chat/completions"},
 		{"copilot, messages", "claude-test-6", "/v1/messages", "https://api.githubcopilot.com", copilot, "https://api.githubcopilot.com/v1/messages"},
 		{"copilot, chat", "claude-test-6", "/v1/chat/completions", "https://api.githubcopilot.com", copilot, "https://api.githubcopilot.com/chat/completions"},
 	} {
-		m := unlistedModel(c.pp, c.model, c.rest)
+		m, ok := pluginModel(c.pp, c.model)
+		if !ok {
+			m = plugin.Model{ID: c.model, NPM: c.pp.NPM}
+		}
+		m = routedModel(c.pp, m, c.rest)
 		if m.ID != c.model {
 			t.Errorf("%s: model %q, want %q", c.name, m.ID, c.model)
 		}

@@ -785,8 +785,9 @@ func pluginFetch(pp plugin.Provider, account string, req *http.Request) (*http.R
 		}
 	}
 	if !ok {
-		m = unlistedModel(pp, model, rest)
+		m = plugin.Model{ID: model, NPM: pp.NPM}
 	}
+	m = routedModel(pp, m, rest)
 	api := modelAPIID(m)
 	if api != model && !codeAssist {
 		body = withModel(body, api)
@@ -837,20 +838,25 @@ func pluginFetch(pp plugin.Provider, account string, req *http.Request) (*http.R
 	return resp, err
 }
 
-// unlistedModel is how pp's request at rest (magpie's path under the
-// plugin's base) is sent for a model the plugin doesn't list: a test model
-// the user typed in. It takes the provider's own AI SDK package, as
-// OpenCode does for a model its config doesn't declare; but a request on
-// an API that package doesn't speak goes where the plugin sends its own
-// models of that API. WorkBuddy's plugin declares its chat at <endpoint>/v2
-// for the provider and its Claude models on Messages at <endpoint>/v1, with
-// no base of the loader's (a provider-wide one would put /messages under
-// /v2): a model off its list, asked on Anthropic's Messages API (its API
-// set to Anthropic in magpie), went to <endpoint>/v2/messages, which
-// WorkBuddy answers "404 Route Not Found" (Anotiaww on X). It goes to
-// <endpoint>/v1/messages now, the built-in Claude models' route.
-func unlistedModel(pp plugin.Provider, model, rest string) plugin.Model {
-	m := plugin.Model{ID: model, NPM: pp.NPM}
+// routedModel is how m, pp's model, is sent for a request at rest
+// (magpie's path under the plugin's base): as its own AI SDK package says
+// (a model the plugin doesn't list, a test model the user typed in, takes
+// the provider's package, as OpenCode does for a model its config doesn't
+// declare), unless the request is on an API m isn't served on. Then it
+// goes where the plugin sends its own models of that API: their package
+// and URL. WorkBuddy's plugin declares its chat at <endpoint>/v2 and its
+// Claude models on Messages at <endpoint>/v1, with no base of the
+// loader's (a provider-wide one would put /messages under /v2). A model
+// asked on Anthropic's Messages API whose own route is the chat one (its
+// API set to Anthropic in magpie, or a Claude Code turn routed to it by a
+// group) went to <endpoint>/v2/messages, which WorkBuddy answers "404
+// Route Not Found" (Anotiaww on X). e00986a85 sent a model off the list to
+// <endpoint>/v1/messages; a model on the account's list (WorkBuddy's own
+// test models among them) or one the user renamed (SetModelID) still went
+// to /v2/messages. Each goes to /v1/messages now, the built-in Claude
+// models' route. A plugin with no model of that API (WorkBuddy AI's) leaves
+// m as it is.
+func routedModel(pp plugin.Provider, m plugin.Model, rest string) plugin.Model {
 	var want Protocol
 	switch {
 	case strings.HasPrefix(rest, "/v1/messages"):
@@ -862,12 +868,12 @@ func unlistedModel(pp plugin.Provider, model, rest string) plugin.Model {
 	default:
 		return m
 	}
-	if pluginProtocol(pp.ID, m) == want {
+	if slices.Contains(pluginProtocols(pp.ID, m), want) {
 		return m
 	}
 	for _, o := range pp.Models {
 		if pluginProtocol(pp.ID, o) == want {
-			m.NPM, m.URL = o.NPM, o.URL
+			m.NPM, m.URL, m.Also = o.NPM, o.URL, nil
 			return m
 		}
 	}
