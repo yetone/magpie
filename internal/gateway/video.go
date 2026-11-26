@@ -68,8 +68,9 @@ const videoTimeout = 5 * time.Minute
 // Videomakers are the models a provider can make videos with: a Grok
 // subscription's, another magpie's, a preset plan's models when magpie
 // implements that vendor's video API, a MiniMax API key's H3 models
-// (video_minimax.go), and those a provider's own model list marks as video
-// models (customVideomakers).
+// (video_minimax.go), a WorkBuddy plan's those its config lists
+// (video_workbuddy.go), and those a provider's own model list marks as
+// video models (customVideomakers).
 func Videomakers(p provider.Provider) []catalog.Model { return VideomakersOf(p, p.Available) }
 
 // VideomakersOf is Videomakers with p's model list from avail, called only
@@ -88,6 +89,9 @@ func VideomakersOf(p provider.Provider, avail func() []catalog.Model) []catalog.
 	}
 	if filmsMiniMax(p) {
 		return minimaxVideomakers(p)
+	}
+	if filmsWorkBuddy(p) {
+		return wbVideomakers(p)
 	}
 	if !drawsGrok(p) {
 		return customVideomakersOf(p, avail)
@@ -127,6 +131,9 @@ func customVideomakers(p provider.Provider) []catalog.Model {
 }
 
 func customVideomakersOf(p provider.Provider, avail func() []catalog.Model) []catalog.Model {
+	if filmsWorkBuddy(p) {
+		return nil // its config's, at WorkBuddy's own videos API
+	}
 	if p.IsPlugin() && !drawsGrok(p) {
 		var out []catalog.Model
 		for _, m := range avail() {
@@ -319,7 +326,9 @@ func VideomakerMissingOf(v string) string {
 // with: the first model of the first provider that makes any. "" when none
 // can. A MiniMax API key's H3 comes after every other: it is paid by the
 // second from the key's balance, and a key set up for chat would
-// otherwise take videos a subscription made before.
+// otherwise take videos a subscription made before. A WorkBuddy plan's
+// are never picked, as its images aren't (AutoDrawer): each costs the
+// plan's credits.
 func AutoVideomaker() string {
 	// the provider the pick is held to makes them while it can (heldPick,
 	// auto_picks.go): one added later doesn't take it over
@@ -331,7 +340,7 @@ func AutoVideomaker() string {
 
 func autoVideomaker(held string) string {
 	if held != "" {
-		if p, err := provider.Find(held); err == nil && p.On() && !p.DecideOnly() {
+		if p, err := provider.Find(held); err == nil && p.On() && !p.DecideOnly() && !filmsWorkBuddy(*p) {
 			if ms := OfferedVideomakers(*p); len(ms) > 0 {
 				return p.ID + "/" + ms[0].ID
 			}
@@ -339,7 +348,9 @@ func autoVideomaker(held string) string {
 	}
 	paid := ""
 	for _, p := range provider.All() {
-		if !p.On() || p.DecideOnly() {
+		if !p.On() || p.DecideOnly() || filmsWorkBuddy(p) {
+			// a WorkBuddy plan's videos cost its credits: it makes them
+			// only with its model picked or named, as it draws
 			continue
 		}
 		if ms := OfferedVideomakers(p); len(ms) > 0 {
@@ -929,6 +940,14 @@ func videoMaker(id string) (p provider.Provider, vendorID string, started time.T
 		}
 		return q, vendorID, started, nil
 	}
+	if ferr == nil && filmsWorkBuddy(*found) {
+		// a WorkBuddy task is the account's that started it: asked on it
+		q, ok := markedKey(*found, by)
+		if !ok {
+			return p, "", started, fmt.Errorf("this video was started with a %s account that is no longer signed in or on: turn it back on to get the video", found.Name)
+		}
+		return q, vendorID, started, nil
+	}
 	if ferr == nil && !drawsGrok(*found) && !found.IsRemoteMagpie() && len(found.PlanVideos()) == 0 && len(customVideomakers(*found)) > 0 {
 		// asked on the key that started it
 		q, ok := markedKey(*found, by)
@@ -1053,6 +1072,9 @@ func (s *Server) videoStatus(ctx context.Context, p provider.Provider, vendorID 
 	}
 	if filmsDashScope(p) {
 		return s.dashScopeVideoStatus(ctx, p, vendorID)
+	}
+	if filmsWorkBuddy(p) {
+		return s.wbVideoStatus(ctx, p, vendorID)
 	}
 	var st videoState
 	at := grokVideosRoot(p) + "/videos/" + url.PathEscape(vendorID)
@@ -1336,6 +1358,18 @@ func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Pro
 		}
 		p, keys = cs[0].p, cs[1:]
 		onKey = true
+	} else if filmsWorkBuddy(p) {
+		// on the plan's accounts as it draws (drawingAccounts): an
+		// account's own list of chat models never names its video
+		// models; the video's id names the account it is asked after on
+		if p.Account != nil || p.Key != "" {
+			cs, code, _, msg := s.drawingAccounts(r, p, model, f.Model)
+			if code != 0 {
+				return videoStart{p: p}, code, errors.New(msg)
+			}
+			p, keys = cs[0].p, cs[1:]
+		}
+		onKey = true
 	} else if !p.IsRemoteMagpie() && p.PlansMixed() {
 		// keys on plans of their own (KeyAccount.Plan): sent on a key
 		// whose plan makes the model, the Agent Plan's Seedance on the
@@ -1364,10 +1398,18 @@ func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Pro
 	v.custom = !v.remote && !volcengine && !xai && filmsCustom(p, model)
 	minimax := !v.remote && !v.custom && makesMiniMaxVideo(p, model)
 	dashscope := !v.remote && !v.custom && !minimax && makesDashScopeVideo(p, model)
+	var wb wbImageModel
+	workbuddy := false
+	if !v.remote && !v.custom && !minimax && !dashscope && filmsWorkBuddy(p) {
+		var err error
+		if wb, workbuddy, err = s.wbVideoModel(ctx, p, model); err != nil && !workbuddy {
+			return v, 502, err
+		}
+	}
 	// any grok-imagine-video*, not only those listed: the vendor's newer ones work before magpie names them
-	if !v.remote && !v.custom && !volcengine && !minimax && !dashscope && !xai && (!drawsGrok(p) || !strings.HasPrefix(model, grokVideoFamily)) {
+	if !v.remote && !v.custom && !volcengine && !minimax && !dashscope && !workbuddy && !xai && (!drawsGrok(p) || !strings.HasPrefix(model, grokVideoFamily)) {
 		v.unfit = true
-		return v, 400, fmt.Errorf(`%s/%s can't make videos: magpie makes videos with a Grok subscription's or an xAI API key's grok-imagine-video, Volcengine Agent Plan's or an Ark key's Seedance models, a MiniMax API key's MiniMax-H3 models, an Alibaba Token Plan's Wan 3.0 and HappyHorse models, another magpie's, and a provider's models its own model list marks "kind": "video" or that you mark a Video model (right-click the model in the provider's editor: Makes…)`, p.ID, model)
+		return v, 400, fmt.Errorf(`%s/%s can't make videos: magpie makes videos with a Grok subscription's or an xAI API key's grok-imagine-video, Volcengine Agent Plan's or an Ark key's Seedance models, a MiniMax API key's MiniMax-H3 models, an Alibaba Token Plan's Wan 3.0 and HappyHorse models, a WorkBuddy plan's video models its config lists (%s), another magpie's, and a provider's models its own model list marks "kind": "video" or that you mark a Video model (right-click the model in the provider's editor: Makes…)`, p.ID, model, wbVideoNames(wbVideomakers(p)))
 	}
 	// another magpie is asked at its videos API, which says itself what
 	// it can't make
@@ -1392,6 +1434,12 @@ func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Pro
 			return v, 400, err
 		}
 		at, field = dashScopeVideoURL(p), "task_id"
+	case workbuddy:
+		var err error
+		if body, err = s.wbVideoBody(ctx, model, wb, f); err != nil {
+			return v, 400, err
+		}
+		at, field = strings.TrimRight(p.Base(provider.Chat), "/")+"/videos/generations", "task_id"
 	default:
 		var err error
 		if body, err = grokVideoBody(model, f); err != nil {
@@ -1419,6 +1467,12 @@ func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Pro
 			code = 502
 		}
 	}
+	if workbuddy && err == nil {
+		// WorkBuddy's refusal comes as a 200 whose code isn't 0
+		if b, err = wbVideoStarted(p, model, b); err != nil {
+			code = 502
+		}
+	}
 	if minimax {
 		if err != nil {
 			err = minimaxError(code, b, err)
@@ -1443,7 +1497,7 @@ func videoAsker(r *http.Request, p provider.Provider) (provider.Provider, string
 	if !held {
 		return p, ""
 	}
-	if !p.IsRemoteMagpie() && (filmsOpenAI(p) || filmsMiniMax(p) || filmsDashScope(p) || isArk(p) && len(customVideomakers(p)) > 0) {
+	if !p.IsRemoteMagpie() && (filmsOpenAI(p) || filmsMiniMax(p) || filmsDashScope(p) || filmsWorkBuddy(p) || isArk(p) && len(customVideomakers(p)) > 0) {
 		if p.Key == "" && p.Account == nil || accountAllowed(who, candidate{p: p}) {
 			return p, ""
 		}

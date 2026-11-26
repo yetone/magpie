@@ -1320,6 +1320,39 @@ func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider
 		tried(code, err)
 		return p, out, code, time.Time{}, err
 	}
+	cs, refused, back, msg := s.drawingAccounts(r, p, model, d.Model)
+	if refused != 0 {
+		return p, drawn{}, refused, back, errors.New(msg)
+	}
+	cs = probeOne(cs) // of those resting, only the one back soonest (#1799)
+	var out drawn
+	var code int
+	var err error
+	for i, c := range cs {
+		p = c.p
+		tried := sideOf(ctx).try(c)
+		out, code, err = s.draw(ctx, p, model, d)
+		tried(code, err)
+		if err != nil && ctx.Err() == nil {
+			restDrawer(c, code, err.Error())
+		}
+		if err == nil || ctx.Err() != nil || i+1 == len(cs) || !accountRefusedDrawing(code) && !keyLacksModel(code, err) {
+			break
+		}
+	}
+	return p, out, code, time.Time{}, err
+}
+
+// drawingAccounts are the accounts or keys of p (which has some) a request
+// for model that isn't a chat goes over when model is one magpie names
+// itself beside p's chat models (a drawing, a WorkBuddy plan's video), in
+// the order its text requests go over them: an account's own list of
+// models never bars one where it can't name it (listsCantName), an
+// account whose list lacks it is asked last, and those the calling key may
+// not use are left out (#905). With none left it gives the status, when
+// it is back for a cap (else zero), and what the caller is told (asked is
+// the model as the caller named it).
+func (s *Server) drawingAccounts(r *http.Request, p provider.Provider, model, asked string) ([]candidate, int, time.Time, string) {
 	q := p
 	q.Fallback = nil
 	cs := s.candidates(q, model, provider.Chat)
@@ -1348,38 +1381,22 @@ func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider
 	if keyWho, held := accountHolds(r); held {
 		cs = slices.DeleteFunc(cs, func(c candidate) bool { return !accountAllowed(keyWho, c) })
 		if len(cs) == 0 {
-			return p, drawn{}, http.StatusForbidden, time.Time{}, errors.New(keyAccountsError(keyWho, d.Model))
+			return nil, http.StatusForbidden, time.Time{}, keyAccountsError(keyWho, asked)
 		}
 	}
 	if len(cs) == 0 && slices.ContainsFunc(barred, func(c candidate) bool { return c.capped != nil }) {
 		// every account is held at its usage cap
 		msg, back := cappedError(model, barredOf(barred, q, false, provider.Chat, nil), time.Now())
-		return p, drawn{}, http.StatusTooManyRequests, back, errors.New(msg)
+		return nil, http.StatusTooManyRequests, back, msg
 	}
 	if len(cs) == 0 && len(barred) > 0 {
 		// every key or account is set not to serve the model (#474)
-		return p, drawn{}, http.StatusForbidden, time.Time{}, errors.New(barredError(d.Model, barredOf(barred, q, false, provider.Chat, nil)))
+		return nil, http.StatusForbidden, time.Time{}, barredError(asked, barredOf(barred, q, false, provider.Chat, nil))
 	}
 	if len(cs) == 0 {
 		cs = []candidate{{p: p, model: model, rest: p.ID}}
 	}
-	cs = probeOne(cs) // of those resting, only the one back soonest (#1799)
-	var out drawn
-	var code int
-	var err error
-	for i, c := range cs {
-		p = c.p
-		tried := sideOf(ctx).try(c)
-		out, code, err = s.draw(ctx, p, model, d)
-		tried(code, err)
-		if err != nil && ctx.Err() == nil {
-			restDrawer(c, code, err.Error())
-		}
-		if err == nil || ctx.Err() != nil || i+1 == len(cs) || !accountRefusedDrawing(code) && !keyLacksModel(code, err) {
-			break
-		}
-	}
-	return p, out, code, time.Time{}, err
+	return cs, 0, time.Time{}, ""
 }
 
 // restDrawer rests the image model on c's account when the account is out

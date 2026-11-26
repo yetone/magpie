@@ -46,11 +46,13 @@ func drawsWorkBuddy(p provider.Provider) bool {
 	return isWorkBuddy(p) && p.Base(provider.Chat) != ""
 }
 
-// wbImageModel is an image model a WorkBuddy config lists.
+// wbImageModel is an image or video model a WorkBuddy config lists, a
+// video model with what it takes (video_workbuddy.go).
 type wbImageModel struct {
-	ID   string   `json:"id"`
-	Name string   `json:"name"`
-	Tags []string `json:"tags"`
+	ID    string       `json:"id"`
+	Name  string       `json:"name"`
+	Tags  []string     `json:"tags"`
+	Video *wbVideoSpec `json:"videoGeneration"`
 }
 
 func (m wbImageModel) tagged(tag string) bool {
@@ -96,10 +98,10 @@ var wbConfigClient = &http.Client{Timeout: 30 * time.Second, Transport: netproxy
 
 func wbImagesKey(p provider.Provider) string { return p.ID + "\x00" + accountOf(p) }
 
-// wbImageModelsOf is the image models p's config lists, as last asked
-// within wbImagesFor. With wait it asks the config when that is older and
-// answers with what it says; without, it answers at once with what it has
-// (nothing, the first time) and asks in the background.
+// wbImageModelsOf is the image and video models p's config lists, as last
+// asked within wbImagesFor. With wait it asks the config when that is
+// older and answers with what it says; without, it answers at once with
+// what it has (nothing, the first time) and asks in the background.
 func wbImageModelsOf(ctx context.Context, client *http.Client, p provider.Provider, wait bool) ([]wbImageModel, error) {
 	key := wbImagesKey(p)
 	wbImages.Lock()
@@ -161,7 +163,7 @@ func wbAskImages(ctx context.Context, client *http.Client, p provider.Provider, 
 }
 
 // wbFetchImageModels asks <site>/v3/config, signed as p's chats are, for
-// the models it tags as drawing.
+// the models it tags as drawing or filming.
 func wbFetchImageModels(ctx context.Context, client *http.Client, p provider.Provider) ([]wbImageModel, error) {
 	origin := p.Origin(ctx)
 	if origin == "" {
@@ -200,7 +202,7 @@ func wbFetchImageModels(ctx context.Context, client *http.Client, p provider.Pro
 	}
 	var out []wbImageModel
 	for _, m := range env.Data.Models {
-		if m.ID != "" && (m.tagged("text-to-image") || m.tagged("image-to-image")) {
+		if m.ID != "" && (m.tagged("text-to-image") || m.tagged("image-to-image") || m.films()) {
 			out = append(out, m)
 		}
 	}
