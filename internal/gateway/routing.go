@@ -1614,6 +1614,13 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// connection (regionFresh)
 		return Rest{Why: why, Status: status, By: "off", Until: now}
 	}
+	if legalRefused(status, body) {
+		// a 451: the vendor won't serve this request's content, which the
+		// same account serves the moment a word of it changes (Winnie7572
+		// on X). Not the account's doing: none is set aside, wherever the
+		// 451 is read (a System One group, a stream's late error frame)
+		return Rest{Why: failRefused, Status: status, By: "off", Until: now}
+	}
 	if status == http.StatusForbidden && provider.HarnessOnly(wordsOf(body)) {
 		// OpenRouter serving a free model only to the agent apps it lists
 		// (provider.HarnessOnly): the app the request came from was
