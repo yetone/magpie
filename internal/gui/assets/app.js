@@ -11873,8 +11873,11 @@ function renderModels(p) {
     names.append(head);
     const ids = servedIds(p);
     if (!ids.length) { names.append(el("span", "hint", t("Pick a model first."))); return; }
-    const prefs = draft.modelPrefs = draft.modelPrefs || {};
-    draft.onModelPrefs = drawNames;
+    // the draft this line speaks for: a Settings pick says it again
+    // (redrawSuffix) after the editor is left and draft is null
+    const own = draft;
+    const prefs = own.modelPrefs = own.modelPrefs || {};
+    own.onModelPrefs = drawNames;
     const sfx = el("div", "msuffix suffix-said");
     const sfxSaid = el("span", "hint");
     const first = p.models.find((x) => x.id === ids[0]) || { id: ids[0], name: ids[0] };
@@ -11882,7 +11885,7 @@ function renderModels(p) {
       const name = prefs[first.id]?.name ?? (first.default ? first.name : "");
       const base = name || first.default || first.name || first.id;
       // named by the provider serving it there (lcc580 on X)
-      const up = draft.upstreamProviders && first.by && !(name && (mode || suffixMode()) === "own");
+      const up = own.upstreamProviders && first.by && !(name && (mode || suffixMode()) === "own");
       let label = up ? (name || first.plain || base) + " · " + (p.name || p.id) + " › " + first.by : suffixed(base, p.name || p.id, !!name, mode);
       // a remote magpie's model: its name there (ARNO)
       if (!up && !name && first.plain && label === base) label = first.plain;
