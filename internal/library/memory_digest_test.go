@@ -91,3 +91,45 @@ func readMaybe(p string) string {
 	b, _ := os.ReadFile(p)
 	return string(b)
 }
+
+// #7780: SetMemoryDigestOmitWhy omits "(why: ...)" from CLAUDE.md and
+// AGENTS.md while keeping stored Why intact, and restores it when turned off.
+func TestMemoryDigestOmitWhyInInstructions(t *testing.T) {
+	h := sandbox(t)
+	shared := "Be brief."
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"claude", "codex"}}))
+	text, kind, scope, why := "Use pnpm, never npm.", memory.Rule, memory.Global, "lockfile stays consistent"
+	m, _, err := memory.Save(memory.Input{Text: &text, Kind: &kind, Scope: &scope, Why: &why}, memory.FromUser, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok(t)(PublishMemory(false))
+	files := []string{filepath.Join(h, ".claude/CLAUDE.md"), filepath.Join(h, ".codex/AGENTS.md")}
+	for _, f := range files {
+		if got := read(t, f); !strings.Contains(got, "(why: lockfile stays consistent)") {
+			t.Fatalf("%s missing default why suffix:\n%s", f, got)
+		}
+	}
+
+	if r, err := SetMemoryDigestOmitWhy(true); err != nil || r == nil || len(r.Problems) > 0 {
+		t.Fatalf("omit true: the instructions weren't written again: %+v, %v", r, err)
+	}
+	for _, f := range files {
+		got := read(t, f)
+		if !strings.Contains(got, "Use pnpm, never npm.") || strings.Contains(got, "(why:") {
+			t.Fatalf("%s should keep entry and omit (why:):\n%s", f, got)
+		}
+	}
+	if stored, err := memory.Get(m.ID); err != nil || stored.Why != why {
+		t.Fatalf("stored rationale altered: %q (%v)", stored.Why, err)
+	}
+
+	if r, err := SetMemoryDigestOmitWhy(false); err != nil || r == nil || len(r.Problems) > 0 {
+		t.Fatalf("omit false: the instructions weren't written again: %+v, %v", r, err)
+	}
+	for _, f := range files {
+		if got := read(t, f); !strings.Contains(got, "(why: lockfile stays consistent)") {
+			t.Fatalf("%s did not restore why suffix:\n%s", f, got)
+		}
+	}
+}

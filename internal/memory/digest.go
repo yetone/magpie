@@ -40,7 +40,7 @@ var kindTitles = map[string]string{
 // render is the digest of one scope's memories within budget characters:
 // a heading per kind, an item per memory (its own lines kept), pinned and newer ones first, and
 // none cut in the middle. "" when the scope has none.
-func render(ms []*Memory, scope string, budget int) string {
+func render(ms []*Memory, scope string, budget int, omitWhy bool) string {
 	pool := []*Memory{}
 	for _, m := range ms {
 		if m.Scope == scope && m.Status == Active {
@@ -64,7 +64,7 @@ func render(ms []*Memory, scope string, budget int) string {
 	used := 0
 	for _, m := range pool {
 		line := "- " + Indented(m.Text, "  ")
-		if m.Why != "" {
+		if !omitWhy && m.Why != "" {
 			line += " (why: " + oneLine(m.Why) + ")"
 		}
 		n := utf8.RuneCountInString(line) + 1
@@ -124,12 +124,36 @@ func publish(f *file) {
 		case strings.HasPrefix(s, "agent:"):
 			budget = agentBudget
 		}
-		if t := render(f.Memories, s, budget); t != "" {
+		if t := render(f.Memories, s, budget, f.DigestNoWhy); t != "" {
 			d[s] = t
 		}
 	}
 	f.Digest = d
 	f.Published = now()
+}
+
+// DigestOmitWhy reports whether published digests omit "(why: ...)" rationale
+// suffixes while keeping each memory's Why stored (#7780).
+func DigestOmitWhy() (bool, error) {
+	f, err := cached()
+	if err != nil {
+		return false, err
+	}
+	return f.DigestNoWhy, nil
+}
+
+// SetDigestOmitWhy sets whether published digests omit "(why: ...)" rationale
+// suffixes and republishes the digest at once. It reports whether the
+// published digest changed.
+func SetDigestOmitWhy(omit bool) (changed bool, err error) {
+	err = change(func(f *file) error {
+		old := f.Digest
+		f.DigestNoWhy = omit
+		publish(f)
+		changed = !maps.Equal(old, f.Digest)
+		return nil
+	})
+	return changed, err
 }
 
 // Publish makes what memory holds now the digest agents are given. It

@@ -116,7 +116,10 @@ function server(lang, state, sent, dist, sem) {
       if (route.request().method() === "POST") {
         const body = route.request().postDataJSON();
         sent.push({ path: url.pathname, body });
-        if (url.pathname === "/api/memory/digest") state.digest = body.on;
+        if (url.pathname === "/api/memory/digest") {
+          if ("on" in body) state.digest = body.on;
+          if ("omitWhy" in body) state.digestOmitWhy = body.omitWhy;
+        }
         else if (url.pathname === "/api/memory/remove") state.memories = state.memories.filter((m) => !body.ids.includes(m.id));
         else if (body.id) Object.assign(state.memories.find((m) => m.id === body.id), body, { id: body.id });
         else state.memories.push({ id: "m" + (state.memories.length + 1), kind: "preference", scope: "global", origin: "user", status: "active", created: at(6), updated: at(6), ...body });
@@ -308,10 +311,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 3);
           assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/remove").body, { ids: ["m4"] });
 
-          // the summary switched off
+          // the summary's reasons, under Advanced, folded while they are
+          // given (#7780); left out, the fold stays open
+          const more = page.locator(`${view} details.lib-memmore`);
+          assert.equal(await more.getAttribute("open"), null, "Advanced open by default");
+          assert.equal(await page.locator(`${view} .lib-memcard .lib-memwhy`).count(), 0, "reasons switch in the card");
+          await more.locator("summary").click();
+          const why = more.locator(".lib-memwhy button.lib-switch");
+          assert.equal(await why.getAttribute("aria-checked"), "true");
+          await why.click();
+          await page.waitForFunction(() => document.querySelector("#view-library .lib-memwhy button.lib-switch")?.getAttribute("aria-checked") === "false");
+          assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/digest").body, { omitWhy: true });
+          assert.notEqual(await page.locator(`${view} details.lib-memmore`).getAttribute("open"), null, "Advanced closed with the reasons left out");
+          await page.locator(`${view} .lib-memwhy button.lib-switch`).click();
+          await page.waitForFunction(() => document.querySelector("#view-library .lib-memwhy button.lib-switch")?.getAttribute("aria-checked") === "true");
+          assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/digest").body, { omitWhy: false });
+
+          // the summary switched off, and the fold with it
           await page.locator(`${view} .lib-memdigest button.lib-switch`).click();
           await page.waitForFunction(() => document.querySelector("#view-library .lib-memdigest button.lib-switch")?.getAttribute("aria-checked") === "false");
           assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/digest").body, { on: false });
+          assert.equal(await page.locator(`${view} details.lib-memmore`).count(), 0, "Advanced kept with the summary off");
         }
 
         // conversations read: switched on, it reads at once with the automatic model

@@ -117,8 +117,9 @@ type file struct {
 	// published (Publish): what the agents' instructions are given, which
 	// changes only when the user changes memory or once a day, so an
 	// agent's save doesn't rewrite every agent's instructions mid-session
-	Digest    map[string]string `json:"digest,omitempty"`
-	Published time.Time         `json:"published,omitzero"`
+	Digest      map[string]string `json:"digest,omitempty"`
+	DigestNoWhy bool              `json:"digestNoWhy,omitempty"`
+	Published   time.Time         `json:"published,omitzero"`
 	// Dismissed are the texts (norm) of memories distilled from
 	// conversations that the user deleted or archived, the last
 	// maxDismissed: never proposed again

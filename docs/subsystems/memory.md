@@ -183,6 +183,14 @@ project's under the folders it was seen in) to the instructions of the
 agents ticked under Instructions, unless `Instructions.NoMemory`
 (`TestMemoryDigestInInstructions`). The Memory tab's switch sets it.
 
+A memory's why goes into its item as `(why: …)`, and counts against the
+budget, unless the user turns "Include reasons in summary" off under the
+Memory tab's Advanced (#7780). `digestNoWhy` in meta.json keeps that, this
+computer's own like the digest itself, and `SetDigestOmitWhy` publishes
+again at once, so the room it frees takes more memories. The why stays in
+the memory, its file and the tab (`TestDigestOmitWhy`,
+`TestMemoryDigestOmitWhyInInstructions`, `TestMemoryDigestOmitWhyRoute`).
+
 ### GUI
 
 [internal/gui/memory.go](../../internal/gui/memory.go):

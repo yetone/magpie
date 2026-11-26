@@ -169,3 +169,70 @@ func TestIndented(t *testing.T) {
 		}
 	}
 }
+
+// #7780: SetDigestOmitWhy omits "(why: ...)" rationale suffixes from the
+// published digest (freeing budget room for more entries) while preserving
+// stored Why fields; turning it back off restores the suffixes.
+func TestDigestOmitWhy(t *testing.T) {
+	at := fresh(t)
+	old := globalBudget
+	globalBudget = 80
+	t.Cleanup(func() { globalBudget = old })
+
+	why1 := strings.Repeat("reason ", 8)
+	m1, _, err := Save(Input{Text: str("Use pnpm"), Kind: str(Rule), Scope: str(Global), Why: str(why1)}, FromUser, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	*at = at.Add(-time.Minute) // older, so it only fits once why1 is omitted
+	if _, _, err := Save(Input{Text: str("Keep commits small"), Kind: str(Rule), Scope: str(Global), Why: str("easier review")}, FromUser, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Publish(); err != nil {
+		t.Fatal(err)
+	}
+	if omit, err := DigestOmitWhy(); err != nil || omit {
+		t.Fatalf("default DigestOmitWhy = %v, %v; want false", omit, err)
+	}
+	d, err := Digest("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(d, "(why: ") || strings.Contains(d, "Keep commits small") {
+		t.Fatalf("with why on, expected why suffix and budget overflow:\n%s", d)
+	}
+
+	changed, err := SetDigestOmitWhy(true)
+	if err != nil || !changed {
+		t.Fatalf("SetDigestOmitWhy(true): changed=%v err=%v", changed, err)
+	}
+	if omit, err := DigestOmitWhy(); err != nil || !omit {
+		t.Fatalf("DigestOmitWhy after true = %v, %v", omit, err)
+	}
+	d, err = Digest("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(d, "(why:") {
+		t.Fatalf("digest still contains (why:):\n%s", d)
+	}
+	if !strings.Contains(d, "- Use pnpm") || !strings.Contains(d, "- Keep commits small") {
+		t.Fatalf("omitting why should fit both entries within budget:\n%s", d)
+	}
+	// stored Why remains intact on disk and in All()/Get()
+	if got, err := Get(m1.ID); err != nil || got.Why != strings.TrimSpace(why1) {
+		t.Fatalf("stored Why lost: got %q (%v)", got.Why, err)
+	}
+	// subsequent Publish keeps the setting
+	if changed, err := Publish(); err != nil || changed {
+		t.Fatalf("re-publish after omitWhy: changed=%v err=%v", changed, err)
+	}
+	// toggling back off restores "(why: ...)"
+	changed, err = SetDigestOmitWhy(false)
+	if err != nil || !changed {
+		t.Fatalf("SetDigestOmitWhy(false): changed=%v err=%v", changed, err)
+	}
+	if d, err = Digest("codex"); err != nil || !strings.Contains(d, "(why: ") {
+		t.Fatalf("turning omitWhy off did not restore why suffix:\n%s (%v)", d, err)
+	}
+}

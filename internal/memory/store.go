@@ -66,15 +66,16 @@ var mu = filelock.Mutex{Path: func() string { return Dir() + ".lock" }}
 
 // meta is meta.json.
 type meta struct {
-	Version   int                  `json:"version"`
-	Projects  map[string]*Project  `json:"projects,omitempty"`
-	Digest    map[string]string    `json:"digest,omitempty"`
-	Published time.Time            `json:"published,omitzero"`
-	Dismissed []string             `json:"dismissed,omitempty"`
-	Removed   map[string]time.Time `json:"removed,omitempty"`
-	Declined  []string             `json:"declined,omitempty"`
-	Used      map[string]use       `json:"used,omitempty"`
-	Written   map[string]string    `json:"written,omitempty"`
+	Version     int                  `json:"version"`
+	Projects    map[string]*Project  `json:"projects,omitempty"`
+	Digest      map[string]string    `json:"digest,omitempty"`
+	DigestNoWhy bool                 `json:"digestNoWhy,omitempty"`
+	Published   time.Time            `json:"published,omitzero"`
+	Dismissed   []string             `json:"dismissed,omitempty"`
+	Removed     map[string]time.Time `json:"removed,omitempty"`
+	Declined    []string             `json:"declined,omitempty"`
+	Used        map[string]use       `json:"used,omitempty"`
+	Written     map[string]string    `json:"written,omitempty"`
 }
 
 // use is when a search last returned a memory, and how often.
@@ -279,7 +280,7 @@ func read() (*file, error) {
 			return nil, err
 		}
 		f.metaB = b
-		f.Projects, f.Digest, f.Published, f.Dismissed, f.Removed, f.Declined = mt.Projects, mt.Digest, mt.Published, mt.Dismissed, mt.Removed, mt.Declined
+		f.Projects, f.Digest, f.DigestNoWhy, f.Published, f.Dismissed, f.Removed, f.Declined = mt.Projects, mt.Digest, mt.DigestNoWhy, mt.Published, mt.Dismissed, mt.Removed, mt.Declined
 		if mt.Written != nil {
 			f.written = mt.Written
 		}
@@ -389,7 +390,7 @@ func write(f *file) error {
 	if written == nil {
 		written = map[string]string{}
 	}
-	mt := meta{Version: 1, Projects: f.Projects, Digest: f.Digest, Published: f.Published, Dismissed: f.Dismissed,
+	mt := meta{Version: 1, Projects: f.Projects, Digest: f.Digest, DigestNoWhy: f.DigestNoWhy, Published: f.Published, Dismissed: f.Dismissed,
 		Removed: f.Removed, Declined: f.Declined, Written: written}
 	var ops []op
 	kept := map[string]bool{}

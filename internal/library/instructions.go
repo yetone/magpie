@@ -194,6 +194,21 @@ func PublishMemory(due bool) (*Result, error) {
 	if err != nil || !changed {
 		return nil, err
 	}
+	return syncPublishedMemory()
+}
+
+// SetMemoryDigestOmitWhy sets whether published memory digests omit
+// "(why: ...)" rationale suffixes (keeping each memory's Why stored) and
+// rewrites ticked agents' instructions when the digest changes (#7780).
+func SetMemoryDigestOmitWhy(omit bool) (*Result, error) {
+	changed, err := memory.SetDigestOmitWhy(omit)
+	if err != nil || !changed {
+		return nil, err
+	}
+	return syncPublishedMemory()
+}
+
+func syncPublishedMemory() (*Result, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	l, err := load()
