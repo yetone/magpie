@@ -82,10 +82,11 @@ var ErrNoSignIn = errors.New("this server already works without signing in, so t
 // ErrClientRefused is a server whose authorization server turned magpie's
 // registration away with 401 or 403: it admits only the clients it lists,
 // as Figma's (mcp.figma.com, a 403 "Forbidden" to any client_name it doesn't
-// list, #1619). magpie doesn't pass itself off as a listed client; a server
-// magpie isn't signed in to is given to the agents at its own address, so
-// each agent signs in there itself. The GUI has it in every language.
-var ErrClientRefused = errors.New("this server's sign-in admits only the apps it lists and turned magpie away, so magpie can't sign in for the agents. The agents given it still have the server's own address: sign in from each agent itself (in Claude Code, run /mcp and pick the server)")
+// list, #1619). magpie doesn't pass itself off as a listed client; the
+// library gives such a server to each agent at its own address, past the
+// MCP router, so each agent signs in there itself. The GUI has it in every
+// language.
+var ErrClientRefused = errors.New("this server's sign-in admits only the apps it lists and turned magpie away, so neither magpie nor its MCP router can sign in to it. magpie gives it to each agent at its own address, past the router: sign in from each agent itself (in Claude Code, run /mcp and pick the server)")
 
 // ErrTurnedAway is a server whose address answered 403 with a web page
 // rather than the server's own reply: a firewall in front of it (Cloudflare's,

@@ -587,3 +587,62 @@ func TestReaKeepsItsOwnLogo(t *testing.T) {
 		t.Fatal("not offered")
 	}
 }
+
+// RockyShowlle on X: Figma couldn't be connected. Discover found Figma's
+// remote server only as the registry's com.figma.mcp/mcp, added as "mcp"
+// and put behind the MCP router, which can't sign in to it (Figma admits
+// only the apps it lists, #1619). Searching figma now offers Figma, added
+// as figma and kept direct so each agent signs in itself, and Figma
+// Desktop, the server Figma's desktop app runs at 127.0.0.1:3845/mcp for
+// any app, which the router serves like any other.
+func TestFigmaInTheMarket(t *testing.T) {
+	hubSandbox(t)
+	fakeRegistry(t, `{"name": "com.figma.mcp/mcp", "title": "Figma MCP Server", "remotes": [{"type": "streamable-http", "url": "https://mcp.figma.com/mcp"}]}`)
+	list, err := MarketServers("figma")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, m := range list {
+		if m.server.URL == "https://mcp.figma.com/mcp" || m.server.URL == "http://127.0.0.1:3845/mcp" {
+			ids = append(ids, m.ID)
+		}
+	}
+	if !slices.Equal(ids, []string{"figma", "figma-desktop"}) || list[0].ID != "figma" || list[1].ID != "figma-desktop" {
+		t.Fatalf("figma finds %v first of %d", ids, len(list))
+	}
+	if !list[0].SignIn || list[1].SignIn {
+		t.Fatalf("sign-in: %v %v", list[0].SignIn, list[1].SignIn)
+	}
+
+	ok(t)(SetMCPHub(true))
+	ok(t)(InstallServer("figma", nil, []string{"claude"}))
+	ok(t)(InstallServer("figma-desktop", nil, []string{"claude"}))
+	l, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := l.server("figma"); s == nil || s.URL != "https://mcp.figma.com/mcp" || s.Hub != HubDirect {
+		t.Fatalf("figma %+v", s)
+	}
+	if s := l.server("figma-desktop"); s == nil || s.URL != "http://127.0.0.1:3845/mcp" || s.Transport != "http" || s.Hub != "" || len(s.Headers) != 0 {
+		t.Fatalf("figma-desktop %+v", s)
+	}
+	got, err := targetByID("claude").MCP.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := got["figma"]; s == nil || s.URL != "https://mcp.figma.com/mcp" {
+		t.Fatalf("Claude Code isn't given Figma's own address: %+v", got)
+	}
+	if got["figma-desktop"] != nil || got[HubEntry] == nil {
+		t.Fatalf("Figma Desktop isn't behind the router: %+v", got)
+	}
+	var routed []string
+	for _, s := range hubServers("claude") {
+		routed = append(routed, s.Name)
+	}
+	if !slices.Contains(routed, "figma-desktop") || slices.Contains(routed, "figma") {
+		t.Fatalf("the router serves %v", routed)
+	}
+}

@@ -121,11 +121,50 @@ func signInServer(ctx context.Context, name string, label *string) (mcpauth.Stat
 	if s.OAuth != nil {
 		app = &mcpauth.App{ClientID: s.OAuth.ClientID, ClientSecret: s.OAuth.ClientSecret, CallbackPort: s.OAuth.CallbackPort}
 	}
+	var st mcpauth.State
 	if label != nil {
-		return mcpauth.StartAccount(ctx, s.Name, s.URL, app, *label)
+		st, err = mcpauth.StartAccount(ctx, s.Name, s.URL, app, *label)
+	} else {
+		st, err = mcpauth.StartWith(ctx, s.Name, s.URL, app)
 	}
-	return mcpauth.StartWith(ctx, s.Name, s.URL, app)
+	if errors.Is(err, mcpauth.ErrClientRefused) {
+		return st, refusedAt(s, err)
+	}
+	return st, err
 }
+
+// refusedAt is a sign-in that s's authorization server refused because it
+// admits only the clients it lists (#1619): the MCP router, which reaches
+// a server with magpie's sign-in, can't reach it either, so the server is
+// made direct (Server.Hub) and each agent given it is given its own entry,
+// at the server's own address, to sign in there itself. With the router
+// off that is what it already had; turned on later, it stays so. Figma's
+// says Figma Desktop too, the server Figma's desktop app runs on this
+// computer for any client (RockyShowlle on X).
+func refusedAt(s *Server, err error) error {
+	if s.Hub != HubDirect {
+		if _, herr := ServerHub(s.Name, true); herr != nil {
+			return fmt.Errorf("%w (and magpie couldn't keep it out of the MCP router: %v)", err, herr)
+		}
+	}
+	if u, perr := url.Parse(s.URL); perr == nil && strings.EqualFold(u.Hostname(), figmaRemoteHost) {
+		return errFigmaRefused
+	}
+	return err
+}
+
+// figmaRemoteHost is Figma's remote MCP server's (developers.figma.com/docs/figma-mcp-server).
+const figmaRemoteHost = "mcp.figma.com"
+
+// errFigmaRefused is mcpauth.ErrClientRefused for Figma's remote server,
+// with the way that works in any agent: Figma Desktop. The GUI has it in
+// every language.
+var errFigmaRefused = refusal("Figma's remote server admits only the apps Figma lists and turned magpie away, so neither magpie nor its MCP router can sign in to it. magpie gives it to each agent at its own address, past the router: sign in from each agent itself (in Claude Code, run /mcp and pick it). For an agent Figma doesn't list, add Figma Desktop from Discover: the server Figma's desktop app runs on this computer, open to any app")
+
+type refusal string
+
+func (r refusal) Error() string { return string(r) }
+func (r refusal) Unwrap() error { return mcpauth.ErrClientRefused }
 
 // SignOutServer forgets magpie's sign-in to the server called name, and
 // gives the agents the server's own address again.

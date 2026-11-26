@@ -29,8 +29,10 @@ const base = () => ({
 });
 // mcpauth.ErrNoSignIn, as the API says it
 const noSignIn = "this server already works without signing in, so there is nothing to sign in to: the agents given it can use it as it is. A key it takes goes in Headers; a server that signs in at another address (as Exa's ?login) needs that URL";
-// mcpauth.ErrClientRefused: Figma's registration 403s any app it doesn't list (#1619)
-const refused = "this server's sign-in admits only the apps it lists and turned magpie away, so magpie can't sign in for the agents. The agents given it still have the server's own address: sign in from each agent itself (in Claude Code, run /mcp and pick the server)";
+// library's errFigmaRefused (mcpauth.ErrClientRefused at mcp.figma.com):
+// Figma's registration 403s any app it doesn't list (#1619), and the
+// server is then made direct, past the router (RockyShowlle on X)
+const refused = "Figma's remote server admits only the apps Figma lists and turned magpie away, so neither magpie nor its MCP router can sign in to it. magpie gives it to each agent at its own address, past the router: sign in from each agent itself (in Claude Code, run /mcp and pick it). For an agent Figma doesn't list, add Figma Desktop from Discover: the server Figma's desktop app runs on this computer, open to any app";
 
 // mcpauth.ErrTurnedAway: a firewall's 403 page in front of the server
 // (fremontdango on Discord, Cloudflare at agents.stackoverflow.com)
@@ -48,7 +50,7 @@ const unreachable = (host, proxy) => ({
     : "magpie got no answer from {host}, going direct with no proxy, so the sign-in couldn't start. The server's sign-in isn't the problem: the network between this computer and {host} is. Give magpie a proxy in Settings › Network and sharing, or try another network, then click Sign in again ({detail})",
 });
 
-function server(lang, calls) {
+function server(lang, calls, saved) {
   const lib = base();
   let polls = 0;
   return async (route) => {
@@ -64,7 +66,10 @@ function server(lang, calls) {
       // the backend signs in to the saved URL: Exa's plain one asks for none
       const s = lib.servers.find((x) => x.name === name);
       if (s.url === "https://mcp.exa.ai/mcp") return route.fulfill({ status: 400, json: { error: noSignIn } });
-      if (s.url === "https://mcp.figma.com/mcp") return route.fulfill({ status: 400, json: { error: refused } });
+      if (s.url === "https://mcp.figma.com/mcp") {
+        s.hub = "direct";
+        return route.fulfill({ status: 400, json: { error: refused } });
+      }
       if (s.url === "https://agents.stackoverflow.com/mcp") return route.fulfill({ status: 400, json: { error: turnedAway } });
       if (s.url === "https://mcp.notion.com/mcp") return route.fulfill({ status: 400, json: unreachable("mcp.notion.com", "") });
       if (s.url === "https://mcp.linear.app/mcp") return route.fulfill({ status: 400, json: unreachable("mcp.linear.app", "http://127.0.0.1:7890") });
@@ -81,6 +86,7 @@ function server(lang, calls) {
     if (url.pathname === "/api/library/servers/save") {
       const { old, server: s } = req.postDataJSON();
       calls.push("save " + s.name + " " + s.url + " " + JSON.stringify(s.headers || {}));
+      saved.push(s);
       const i = lib.servers.findIndex((x) => x.name === old);
       // a sign-in is to a URL: another one isn't signed in to
       const signIn = lib.servers[i].url === s.url ? lib.servers[i].signIn : { signedIn: false };
@@ -103,9 +109,9 @@ function server(lang, calls) {
 }
 
 const words = {
-  en: { signIn: "Sign in", signOut: "Sign out", signed: "Signed in", label: "Sign-in", done: "Signed in to neon — the agents given it use magpie's sign-in", out: "Signed out of neon — the agents are given the server's own address again", exaDone: "Signed in to exa — the agents given it use magpie's sign-in", noSignIn: "already works without signing in", refused: "admits only the apps it lists", turnedAway: "a firewall in front of this server", saveSignIn: "Save and sign in",
+  en: { signIn: "Sign in", signOut: "Sign out", signed: "Signed in", label: "Sign-in", done: "Signed in to neon — the agents given it use magpie's sign-in", out: "Signed out of neon — the agents are given the server's own address again", exaDone: "Signed in to exa — the agents given it use magpie's sign-in", noSignIn: "already works without signing in", refused: "admits only the apps Figma lists", desktop: "add Figma Desktop from Discover", turnedAway: "a firewall in front of this server", saveSignIn: "Save and sign in",
     direct: "magpie got no answer from mcp.notion.com, going direct with no proxy, so the sign-in couldn't start. The server's sign-in isn't the problem", viaProxy: "magpie got no answer from mcp.linear.app through the proxy http://127.0.0.1:7890, so the sign-in couldn't start" },
-  zh: { signIn: "登录", signOut: "退出登录", signed: "已登录", label: "登录", done: "已登录 neon，分配到它的 agent 共用 magpie 的登录", out: "已退出 neon，agent 改回使用服务器自身的地址", exaDone: "已登录 exa，分配到它的 agent 共用 magpie 的登录", noSignIn: "无需登录即可使用", refused: "只接受它列出的应用", turnedAway: "服务器前面的防火墙拦下了", saveSignIn: "保存并登录",
+  zh: { signIn: "登录", signOut: "退出登录", signed: "已登录", label: "登录", done: "已登录 neon，分配到它的 agent 共用 magpie 的登录", out: "已退出 neon，agent 改回使用服务器自身的地址", exaDone: "已登录 exa，分配到它的 agent 共用 magpie 的登录", noSignIn: "无需登录即可使用", refused: "只接受 Figma 列出的应用", desktop: "在「发现」里添加 Figma Desktop", turnedAway: "服务器前面的防火墙拦下了", saveSignIn: "保存并登录",
     direct: "magpie 直连（未用代理）mcp.notion.com 没有得到回应，所以登录没能开始。问题不在服务器的登录", viaProxy: "magpie 通过代理 http://127.0.0.1:7890 访问 mcp.linear.app 没有得到回应" },
 };
 
@@ -121,14 +127,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     for (const lang of ["en", "zh"]) {
       await t.test(lang, async () => {
         const w = words[lang];
-        const calls = [];
+        const calls = [], saved = [];
         const ctx = await browser.newContext({ viewport: { width: 980, height: 800 } });
         await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "mcp"); } catch {} });
         const page = await ctx.newPage();
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         page.on("pageerror", (e) => errors.push(e.message));
-        await page.route("**/*", server(lang, calls));
+        await page.route("**/*", server(lang, calls, saved));
         await page.goto("http://magpie.test/");
         await page.locator('button[data-view="library"]').click();
         const row = (name) => page.locator("#view-library .lib-row", { has: page.locator(".name", { hasText: new RegExp("^" + name) }) });
@@ -188,15 +194,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // Xichun123 (#1619): Figma admits only the apps it lists. The
         // refusal says so, in the reader's language, and that each agent
-        // signs in itself, not a bare "(403): Forbidden"
+        // signs in itself, not a bare "(403): Forbidden". RockyShowlle on
+        // X: it names Figma Desktop, and the server is made direct, so the
+        // form's Save keeps it direct instead of putting it back
         await row("figma").click();
         const figma = page.locator("#modal .lib-signin");
+        // the page reads the library again after the refusal, which has it direct
+        const reread = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/library");
         await figma.getByRole("button", { name: w.signIn, exact: true }).click();
         await figma.locator(".lib-signin-err", { hasText: w.refused }).waitFor();
+        await reread;
+        // the read's body is taken in the page's next tasks
+        await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))));
         assert.match(await figma.locator(".lib-signin-err").textContent(), /\/mcp/);
+        assert.match(await figma.locator(".lib-signin-err").textContent(), new RegExp(w.desktop));
         assert.deepEqual(calls.slice(6), ["start figma"]);
-        await page.keyboard.press("Escape");
+        await page.locator("#modal .bar button.primary").click();
         await page.locator("#modal .lib-editor").waitFor({ state: "detached" });
+        assert.deepEqual(calls.slice(7), ["save figma https://mcp.figma.com/mcp {}"]);
+        assert.equal(saved.at(-1).hub, "direct");
 
         // a firewall's 403 says it was the firewall, judging the network,
         // in the reader's language, not "says nothing of a sign-in"
@@ -204,7 +220,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const sofa = page.locator("#modal .lib-signin");
         await sofa.getByRole("button", { name: w.signIn, exact: true }).click();
         await sofa.locator(".lib-signin-err", { hasText: w.turnedAway }).waitFor();
-        assert.deepEqual(calls.slice(7), ["start sofa"]);
+        assert.deepEqual(calls.slice(8), ["start sofa"]);
         await page.keyboard.press("Escape");
         await page.locator("#modal .lib-editor").waitFor({ state: "detached" });
 
@@ -220,7 +236,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.keyboard.press("Escape");
           await page.locator("#modal .lib-editor").waitFor({ state: "detached" });
         }
-        assert.deepEqual(calls.slice(8), ["start notion", "start linear"]);
+        assert.deepEqual(calls.slice(9), ["start notion", "start linear"]);
         assert.equal(await scrolled(), before, "no click moved the page");
         await ctx.close();
       });

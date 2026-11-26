@@ -142,6 +142,8 @@ var featured = []MarketServer{
 		"Search, read and write pages and databases in your Notion workspace.", true),
 	remoteServer("atlassian", "Atlassian", "Atlassian", gh("atlassian"), "https://mcp.atlassian.com/v1/mcp",
 		"Jira issues and Confluence pages from Atlassian Cloud.", true),
+	figmaServer(),
+	figmaDesktopServer(),
 	remoteServer("supabase", "Supabase", "Supabase", gh("supabase"), "https://mcp.supabase.com/mcp",
 		"Manage Supabase projects: tables, SQL, migrations, logs and edge functions.", true),
 	remoteServer("stripe", "Stripe", "Stripe", gh("stripe"), "https://mcp.stripe.com",
@@ -300,6 +302,30 @@ func nowledgeServer() MarketServer {
 		Input{Key: "Authorization", Where: "header", Label: "API key", Description: "Optional — only for a Mem reached over Access Anywhere", Placeholder: "nmem_…", Secret: true, format: "Bearer {}"})
 }
 
+// figmaServer is Figma's remote MCP server. Its sign-in admits only the
+// clients Figma lists (dynamic client registration answers any other 403,
+// #1619), so magpie can't sign in to it and neither can the MCP router:
+// it is added direct (Server.Hub), and each agent given it signs in there
+// itself. The registry lists it as com.figma.mcp/mcp, which named it
+// "mcp" (shortName).
+func figmaServer() MarketServer {
+	m := remoteServer("figma", "Figma", "Figma", gh("figma"), "https://mcp.figma.com/mcp",
+		"Design context, variables and screenshots from Figma files. Figma admits only the apps it lists (Claude Code, Codex, Cursor…), so each agent signs in itself.", true)
+	m.server.Hub = HubDirect
+	return m
+}
+
+// figmaDesktopServer is the MCP server Figma's desktop app runs on this
+// computer (developers.figma.com/docs/figma-mcp-server/local-server-installation):
+// Streamable HTTP at 127.0.0.1:3845/mcp, no sign-in, any client. It
+// listens on loopback alone, so the router, which reaches it from this
+// computer, serves it to agents in WSL and on the LAN too (RockyShowlle
+// on X).
+func figmaDesktopServer() MarketServer {
+	return remoteServer("figma-desktop", "Figma Desktop", "Figma", gh("figma"), "http://127.0.0.1:3845/mcp",
+		"Figma's desktop app's own MCP server, open to any agent. Figma must be open, with Dev Mode's \"Enable desktop MCP server\" on.", false)
+}
+
 // selfCommand is the server's command and env for this magpie: its binary
 // by full path, and the gateway's address when it isn't the default one.
 func selfCommand(s *Server) {
@@ -337,6 +363,8 @@ var homepages = map[string]string{
 	"microsoft-learn": "https://github.com/MicrosoftDocs/mcp",
 	"huggingface":     "https://huggingface.co/settings/mcp",
 	"nowledge-mem":    "https://mem.nowledge.co/docs/integrations",
+	"figma":           "https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/",
+	"figma-desktop":   "https://developers.figma.com/docs/figma-mcp-server/local-server-installation/",
 }
 
 func init() {

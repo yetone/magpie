@@ -4168,8 +4168,11 @@ magpie.plugin("library", (ctx) => {
     } catch (e) {
       if (mcpSigning?.name !== name) return;
       mcpSigning = { name, state: "failed", error: t(e.message) };
+      // made direct when it admits only the apps it lists (refusedAt)
+      await api("library").then(take, () => {});
+      if (mcpSigning?.name !== name) return;
       signMoved(name);
-      editServer(s);
+      editServer(lib.servers.find((x) => x.name === name) || s);
     }
   }
   // followed with the dialog closed too, for the row to say it's signed in
@@ -4314,6 +4317,10 @@ magpie.plugin("library", (ctx) => {
         // magpie's words in the reader's language, where it has them
         mcpSigning = { name, state: "failed", error: t(e.message) };
         draw();
+        // a server that admits only the apps it lists is made direct
+        // (refusedAt, #1619): the rows, and the form's Save, take it
+        await api("library").then(take, () => {});
+        render();
         ready?.failed?.(e.message);
       }
     }
@@ -4613,6 +4620,11 @@ magpie.plugin("library", (ctx) => {
     // a server whose sign-in doesn't let magpie register itself (GitHub's,
     // 新v学员 on Discord): the fields for the user's own app open
     ready.failed = (msg) => {
+      // the server as saved: Sign in saved the form first when it differed
+      if (d.hub !== "direct" && lib.servers.find((x) => x.name === d.name)?.hub === "direct") {
+        d.hub = "direct";
+        drawKeep();
+      }
       if (!msg.startsWith(NO_REGISTRATION) || !appBox) return;
       appOpen = true;
       drawApp();
