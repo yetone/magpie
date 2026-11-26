@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 )
 
@@ -12,12 +14,14 @@ import (
 // help providers`; docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-byok-models):
 //
 //	{"providers": [{"name", "type", "baseUrl", "apiKey", "wireApi"}],
-//	 "models":    [{"id", "provider", "name", "maxPromptTokens", "maxOutputTokens", ...}]}
+//	 "models":    [{"id", "provider", "name", "maxPromptTokens", "maxOutputTokens",
+//	                "capabilities": {"supports": {"vision", "reasoning_effort"}}, ...}]}
 //
 // and a model is picked as <provider>/<id> (settings.json "model"). It needs
 // no GitHub sign-in. magpie owns the entry named magpie in providers and the
 // entries of models that name it; every other entry, and any other key the
-// file has, is the user's and stays.
+// file has, is the user's and stays, as does a key the user added to one of
+// magpie's models that magpie doesn't write (copilotModelKeys).
 
 // copilotFile is providers.json at path, read as it is: its top-level keys
 // as they are, "providers" and "models" as lists. A file that does not parse
@@ -101,9 +105,77 @@ func copilotBlock(url, key string) (map[string]any, []map[string]any) {
 			}
 			e["maxPromptTokens"] = prompt
 		}
+		sup := map[string]any{"vision": m.Images}
+		if l := copilotEfforts(m.Efforts); len(l) > 0 {
+			sup["reasoning_effort"] = l
+		}
+		e["capabilities"] = map[string]any{"supports": sup}
 		ms = append(ms, e)
 	}
 	return prov, ms
+}
+
+// copilotLevels are the reasoning levels Copilot's capabilities.supports.
+// reasoning_effort takes, weakest first (the CLI's --reasoning-effort
+// values, 1.0.116; docs.github.com's cli-config-dir-reference).
+var copilotLevels = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+
+// copilotEfforts are a model's reasoning levels in Copilot's words and
+// order. /model offers a model's effort (←/→) only from this list: with
+// none, or with the boolean reasoningEffort, it shows "—" and keeps none
+// (TonyRL on Discord). The gateway fits a level Copilot sends to the
+// model's own (fitEffort), so a vendor's word for one (Trae's light) is
+// listed as the level it is.
+func copilotEfforts(efforts []string) []string {
+	var out []string
+	for _, l := range copilotLevels {
+		if slices.ContainsFunc(efforts, func(e string) bool { return catalog.EffortLevel(e) == l }) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// copilotModelKeys are the keys of a model entry magpie writes, each
+// path into capabilities included: magpie's again on every write, so one
+// the catalog no longer gives (a model's efforts gone) goes with it. Every
+// other key the user put in one of magpie's models stays (wireModel,
+// systemMessage, capabilities.supports.toolCalls, as /model's Edit
+// writes them).
+var copilotModelKeys = [][]string{
+	{"id"}, {"provider"}, {"name"}, {"maxOutputTokens"}, {"maxContextWindowTokens"}, {"maxPromptTokens"},
+	{"capabilities", "supports", "vision"}, {"capabilities", "supports", "reasoning_effort"},
+}
+
+// copilotModel is magpie's model entry want with what the user added to
+// it in have, the file's entry of the same id.
+func copilotModel(have json.RawMessage, want map[string]any) json.RawMessage {
+	b, _ := json.Marshal(want)
+	var h map[string]any
+	d := json.NewDecoder(bytes.NewReader(have))
+	d.UseNumber() // a number of the user's goes back as they wrote it
+	if len(have) == 0 || d.Decode(&h) != nil || h == nil {
+		return b
+	}
+	for _, path := range copilotModelKeys {
+		at := h
+		for _, k := range path[:len(path)-1] {
+			at, _ = at[k].(map[string]any)
+		}
+		if at != nil {
+			delete(at, path[len(path)-1])
+		}
+	}
+	hb, _ := json.Marshal(h)
+	var hm, wm map[string]json.RawMessage
+	if json.Unmarshal(hb, &hm) != nil || json.Unmarshal(b, &wm) != nil {
+		return b
+	}
+	out, err := json.Marshal(mergeTheirs(hm, wm, nil))
+	if err != nil {
+		return b
+	}
+	return out
 }
 
 // copilotWrite puts magpie's provider and models into providers.json,
@@ -150,10 +222,19 @@ func copilotWrite(path, url, key string) error {
 	}
 	var outM []json.RawMessage
 	first := -1
+	had := map[string]json.RawMessage{}
 	for _, e := range models {
 		if copilotOwn(e, "provider") {
 			if first < 0 {
 				first = len(outM)
+			}
+			var id struct {
+				ID string `json:"id"`
+			}
+			if json.Unmarshal(e, &id) == nil && id.ID != "" {
+				if _, ok := had[id.ID]; !ok {
+					had[id.ID] = e
+				}
 			}
 			continue
 		}
@@ -164,8 +245,7 @@ func copilotWrite(path, url, key string) error {
 	}
 	var mine []json.RawMessage
 	for _, m := range ms {
-		b, _ := json.Marshal(m)
-		mine = append(mine, b)
+		mine = append(mine, copilotModel(had[m["id"].(string)], m))
 	}
 	outM = append(outM[:first], append(mine, outM[first:]...)...)
 	top["providers"], _ = json.Marshal(outP)

@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // providers is providers.json at path, parsed.
@@ -162,5 +164,109 @@ func TestCopilotSyncCheckAndEnv(t *testing.T) {
 	t.Setenv("COPILOT_HOME", filepath.Join(home, "ch"))
 	if got := copilot(home, filepath.Join(home, ".config")).Path; got != filepath.Join(home, "ch", "settings.json") {
 		t.Fatalf("COPILOT_HOME ignored: %s", got)
+	}
+}
+
+// copilotCaps saves a provider whose models think at levels in vendors' own
+// words or take images, and picks one in Copilot.
+func copilotCaps(t *testing.T) (*Agent, string) {
+	t.Helper()
+	cp, provs := copilotSandbox(t)
+	// images only where the model takes them itself, not where magpie's
+	// vision model describes them (those say true as well)
+	was := provider.Described
+	provider.Described = func() bool { return false }
+	t.Cleanup(func() { provider.Described = was })
+	if err := provider.Save(provider.Provider{ID: "see", Name: "See", Chat: "https://example.test/v1", Key: "key",
+		Models: []string{"thinks", "looks"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("see", "https://example.test/v1", []catalog.Model{
+		{ID: "thinks", Reasoning: true, Efforts: []string{"none", "light", "medium", "high", "xhigh", "ultra"}, InputModalities: []string{"text"}},
+		{ID: "looks", Images: true, InputModalities: []string{"text", "image"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cp.Field("model").Set("magpie/see/thinks"); err != nil {
+		t.Fatal(err)
+	}
+	return cp, provs
+}
+
+// copilotSupports is capabilities.supports of magpie's model id in the file.
+func copilotSupports(t *testing.T, provs, id string) map[string]any {
+	t.Helper()
+	_, ms, _ := copilotParsed(t, provs)
+	for _, m := range ms {
+		if m["id"] == id && m["provider"] == "magpie" {
+			c, _ := m["capabilities"].(map[string]any)
+			s, _ := c["supports"].(map[string]any)
+			return s
+		}
+	}
+	t.Fatalf("no %s in:\n%s", id, readFile(provs))
+	return nil
+}
+
+// Copilot's /model lets the user pick a model's reasoning effort (←/→) only
+// when its entry lists the levels in capabilities.supports.reasoning_effort;
+// without them it shows "—" and sends none (TonyRL on Discord). Each of
+// magpie's models carries its levels in Copilot's words, and whether it
+// takes images.
+func TestCopilotModelsSayTheirEffortsAndImages(t *testing.T) {
+	_, provs := copilotCaps(t)
+	th := copilotSupports(t, provs, "see/thinks")
+	b, _ := json.Marshal(th["reasoning_effort"])
+	if string(b) != `["none","low","medium","high","xhigh"]` || th["vision"] != false {
+		t.Fatalf("see/thinks supports %v in:\n%s", th, readFile(provs))
+	}
+	lk := copilotSupports(t, provs, "see/looks")
+	if _, ok := lk["reasoning_effort"]; ok || lk["vision"] != true {
+		t.Fatalf("see/looks supports %v in:\n%s", lk, readFile(provs))
+	}
+}
+
+// What the user adds to one of magpie's models (Copilot's /model Edit
+// writes capabilities.supports.toolCalls; wireModel by hand) stays through a
+// sync, while what magpie writes follows the catalog: levels magpie wrote
+// for a model that no longer has them go.
+func TestCopilotSyncKeepsWhatTheUserAddedToAModel(t *testing.T) {
+	cp, provs := copilotCaps(t)
+	var top map[string]any
+	json.Unmarshal([]byte(readFile(provs)), &top)
+	for _, e := range top["models"].([]any) {
+		m := e.(map[string]any)
+		sup := m["capabilities"].(map[string]any)["supports"].(map[string]any)
+		switch m["id"] {
+		case "see/thinks":
+			m["wireModel"] = "see/thinks-2"
+			m["metadata"] = map[string]any{"n": json.Number("9007199254740993")} // 2^53+1: a float64 rounds it
+			sup["toolCalls"] = false
+			sup["vision"] = true
+		case "see/looks":
+			sup["reasoning_effort"] = []string{"high"}
+		}
+	}
+	b, _ := json.Marshal(top)
+	writeFile(t, provs, string(b))
+	if err := cp.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	_, ms, _ := copilotParsed(t, provs)
+	wire := ""
+	for _, m := range ms {
+		if m["id"] == "see/thinks" {
+			wire, _ = m["wireModel"].(string)
+		}
+	}
+	th := copilotSupports(t, provs, "see/thinks")
+	if wire != "see/thinks-2" || th["toolCalls"] != false || th["vision"] != false || th["reasoning_effort"] == nil {
+		t.Fatalf("see/thinks after sync: wireModel %q, supports %v\n%s", wire, th, readFile(provs))
+	}
+	if !strings.Contains(readFile(provs), `"n": 9007199254740993`) {
+		t.Fatalf("the user's number is not as they wrote it:\n%s", readFile(provs))
+	}
+	if lk := copilotSupports(t, provs, "see/looks"); lk["reasoning_effort"] != nil {
+		t.Fatalf("see/looks kept levels it has none of: %v", lk)
 	}
 }
