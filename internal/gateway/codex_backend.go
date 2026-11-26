@@ -120,6 +120,9 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		// it, as handle's and gemini's do (Jason on Discord: a held Codex
 		// turn showed as no model, "magpie · 0 on")
 		noteAsked(r.Context(), model)
+		// normalize Codex's "fast" word before the configured tier override,
+		// as /v1/responses does (gateway.go)
+		body = fastTier(body)
 		// the service tier set for Codex, in place of the one it asked
 		body = codexTiered(r, body, model)
 		body = keyTiered(r, body, model)
@@ -1078,6 +1081,11 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		// url_citation) as Codex stored it, turned them away alike
 		// (#4921)
 		body = withoutOffsetlessCitations(body)
+		// a client-written service_tier the ChatGPT backend refuses (such
+		// as "flex", an OpenAI API billing tier) would 400 every turn of
+		// the thread (#7793); keep only the tiers the backend takes,
+		// matching provider.codexBody on /v1/responses
+		body = codexTierTakenOut(body)
 	}
 	u := base + rest
 	if r.URL.RawQuery != "" {

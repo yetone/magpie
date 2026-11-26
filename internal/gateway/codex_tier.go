@@ -73,6 +73,23 @@ func fastTier(body []byte) []byte {
 	return withServiceTier(body, "priority")
 }
 
+// codexTierNative are the service_tier values the ChatGPT backend takes on
+// its native route: omitted (standard), "priority" (Fast), and "ultrafast".
+// A client's own word for a tier that lane refuses — such as "flex", an
+// OpenAI API billing tier — is stripped, matching provider.codexBody on
+// /v1/responses, so the backend does not 400 every turn of the thread (#7793).
+var codexTierNative = map[string]bool{"priority": true, "ultrafast": true}
+
+// codexTierTakenOut removes a top-level service_tier that the ChatGPT
+// backend refuses, leaving every other byte unchanged.
+func codexTierTakenOut(body []byte) []byte {
+	t := topValue(body, tierField)
+	if !t.Exists() || t.Type == gjson.String && codexTierNative[t.Str] {
+		return body
+	}
+	return withServiceTier(body, "")
+}
+
 // withServiceTier is body with its top-level service_tier set to tier, or
 // without one for "", every other byte as it came. A body that isn't a
 // JSON object goes as it came.
@@ -82,7 +99,7 @@ func withServiceTier(body []byte, tier string) []byte {
 		return body
 	}
 	want := []byte(`"` + tier + `"`)
-	if found && bytes.Equal(bytes.TrimSpace(cur), want) {
+	if tier != "" && found && bytes.Equal(bytes.TrimSpace(cur), want) {
 		return body
 	}
 	b := withoutTopMember(body, tierField)

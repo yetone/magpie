@@ -103,6 +103,7 @@ func TestWithServiceTier(t *testing.T) {
 		{`{"model":"m","service_tier":"ultrafast"}`, "priority", `{"service_tier":"priority","model":"m"}`},
 		{`{"model":"m","service_tier":"priority"}`, "priority", `{"model":"m","service_tier":"priority"}`},
 		{`{"model":"m","service_tier":"priority"}`, "", `{"model":"m"}`},
+		{`{"model":"m","service_tier":""}`, "", `{"model":"m"}`},
 		{`{"model":"m"}`, "", `{"model":"m"}`},
 		{`{"model":"m","metadata":{"service_tier":"flex"}}`, "", `{"model":"m","metadata":{"service_tier":"flex"}}`},
 		{`not json`, "priority", `not json`},
