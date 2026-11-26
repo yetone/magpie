@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -24,18 +25,29 @@ import (
 // conversation, so the loop is in the request itself: its newest turns are
 // the same calls with the same arguments answered with the same results.
 //
-// stoppedToolLoop answers a request whose last toolLoopRepeats turns are
-// all that one exchange here, in the agent's own API, with a notice that
-// ends the agent's turn, and sends it nowhere. A turn that got a different
-// result (a poll whose answer moved, a file that changed) is progress and
-// starts the count again, as does anything the user says: the notice
-// itself is a turn without calls, so the user's next word goes on with
-// the conversation. It is on with Settings' Stop looping replies
+// toolLoopGuard first tells the model: a request whose last
+// toolLoopRepeats turns are all that one exchange goes on to the model
+// with a short line added to its newest tool result, saying the call has
+// come back the same that many times and to change course (yummypyrus on
+// X: a pause ended a task the model could have turned around itself).
+// The agent keeps the result as it ran it, so its next request carries
+// the same turns without the line: if the model asks for the same call
+// again and gets the same result, that request (toolLoopStops turns) is
+// answered here, in the agent's own API, with a notice that ends the
+// agent's turn, and sent nowhere. A turn that got a different result (a
+// poll whose answer moved, a file that changed) is progress and starts
+// the count again, as does anything the user says: the notice itself is
+// a turn without calls, so the user's next word goes on with the
+// conversation. Both are on with Settings' Stop looping replies
 // (settings.NoLoopGuard off), as loopGuard is.
 
 // toolLoopRepeats is how many turns in a row of the same calls answered
-// with the same results stop the next: the ninth is answered here.
+// with the same results have the model told so, on the next request.
 const toolLoopRepeats = 8
+
+// toolLoopStops is how many such turns stop the next request: the one
+// after the model was told, which it asked the same call again.
+const toolLoopStops = toolLoopRepeats + 1
 
 // toolLoopWho is who answered such a turn, as the Routing view names it.
 const toolLoopWho = "Tool loop stopped"
@@ -49,25 +61,34 @@ var toolResultMarks = map[provider.Protocol][][]byte{
 	provider.Gemini:    {[]byte(`"functionResponse"`), []byte(`"function_response"`)},
 }
 
-// stoppedToolLoop answers r here when its conversation is stuck in a tool
-// loop, and says whether it did.
-func (s *Server) stoppedToolLoop(w http.ResponseWriter, r *http.Request, from provider.Protocol, body []byte) bool {
+// toolLoopGuard is body as r goes on, with the model told of the tool
+// loop its conversation is in, or stopped true when r was answered here,
+// its loop having gone on after the model was told.
+func (s *Server) toolLoopGuard(w http.ResponseWriter, r *http.Request, from provider.Protocol, body []byte) (_ []byte, stopped bool) {
 	if settings.Shared().NoLoopGuard || !mayLoop(from, body) {
-		return false
+		return body, false
 	}
 	req, err := parse(from, tailOf(from, body))
 	if err != nil {
-		return false // serve says what is wrong with it
+		return body, false // serve says what is wrong with it
 	}
 	loop, ok := toolLoopOf(req.Messages)
 	if !ok {
-		return false
+		return body, false
+	}
+	if loop.turns < toolLoopStops {
+		if told, ok := nudged(from, body, fmt.Sprintf(toolLoopNudge, loop.turns)); ok {
+			log.Printf("gateway: tool loop: the same tool call got the same result %d turns in a row (%s); the model is told so on its newest result", loop.turns, loop.called())
+			return told, false
+		}
+		// a result nothing can be added to: stopped, as before the
+		// model was told first
 	}
 	why := loop.why()
 	s.answeredHere(r, from, body, toolLoopWho, why, func() {
 		writeLocalText(w, from, req, loop.notice(conversationLang(from, body)))
 	})
-	return true
+	return body, true
 }
 
 // mayLoop: body has results enough to hold a loop.
@@ -88,10 +109,10 @@ var conversationKey = map[provider.Protocol]string{
 }
 
 // tailItems is how many of a conversation's newest messages (a Responses
-// input's items) are read for a loop: toolLoopRepeats turns are 16
-// messages, or 56 Responses items with reasoning and three calls a turn.
+// input's items) are read for a loop: toolLoopStops turns are 18
+// messages, or 63 Responses items with reasoning and three calls a turn.
 // A loop of more calls a turn than fit isn't seen.
-const tailItems = 8 * toolLoopRepeats
+const tailItems = 8 * toolLoopStops
 
 // tailOf is body with only the newest tailItems of its conversation, for
 // the guard to parse a turn's end and not the whole of a long one, which
@@ -404,6 +425,141 @@ var toolLoopNotices = map[string]string{
 	langJA:   "このターンはモデルに送る前に止めました：エージェントが同じツール呼び出しを %d 回続けて実行し、毎回同じ結果を受け取りました（%s）。モデルが同じことを繰り返しており、続けても進展のないリクエストが増えるだけなので、このターンはどこにも送っていません。次にどうするかをエージェントに伝えれば会話は続きます。設定 › モデル › 応答 › ループする応答を止める でこのチェックをオフにできます。",
 	langKO:   "이 턴은 모델에 보내기 전에 중단되었습니다: 에이전트가 같은 도구 호출을 %d번 연속으로 실행했고 매번 같은 결과를 받았습니다(%s). 모델이 같은 일을 반복하고 있어 계속해도 진전 없이 요청만 늘어나므로, 이 턴은 어디에도 보내지 않았습니다. 에이전트에게 어떻게 진행할지 알려 주면 대화가 이어집니다. Settings › Models › Replies › Stop looping replies 에서 이 검사를 끌 수 있습니다.",
 	langDE:   "Dieser Zug wurde angehalten, bevor er das Modell erreichte: Der Agent hat denselben Tool-Aufruf %d-mal hintereinander ausgeführt und jedes Mal dasselbe Ergebnis erhalten (%s). Das Modell wiederholt sich, und jeder weitere Zug wäre eine weitere Anfrage ohne Fortschritt, daher wurde dieser Zug nirgendwohin gesendet. Sag dem Agenten, wie es weitergeht, und das Gespräch läuft weiter; Einstellungen › Modelle › Antworten › Schleifende Antworten beenden schaltet diese Prüfung aus.",
+}
+
+// toolLoopNudge is the line the model is told on its newest tool result,
+// given the turns. It goes to the vendor as part of the result, so it
+// names neither magpie nor a vendor's limits, and says only what the
+// conversation itself shows; English, as a tool's own words often are.
+const toolLoopNudge = "[This tool call has now been made %d times in a row with the same arguments and returned the same result each time. Making it again will not change the result: take a different approach, or stop and tell the user what is in the way.]"
+
+// nudged is body with note added to the newest tool result of its
+// conversation, where from's API keeps a result's text: after a string's
+// text, as a text part at the end of a list of parts, or as the whole of
+// a result with none. Only that result is written again; the rest of
+// body is as it came. False when no result there takes text (a computer
+// call's screenshot, a body not as parse read it).
+func nudged(from provider.Protocol, body []byte, note string) ([]byte, bool) {
+	list := getIn(body, conversationKey[from])
+	if !list.IsArray() {
+		return body, false
+	}
+	var items []gjson.Result
+	list.ForEach(func(_, v gjson.Result) bool {
+		items = append(items, v)
+		return true
+	})
+	// at, the object the result's text is in, and edit, which adds the
+	// note to it
+	var at gjson.Result
+	var edit func(map[string]json.RawMessage) bool
+	textPart := map[provider.Protocol]string{provider.Responses: "input_text", provider.Chat: "text", provider.Anthropic: "text"}[from]
+	addTo := func(key string) func(map[string]json.RawMessage) bool {
+		return func(o map[string]json.RawMessage) bool {
+			v, ok := withNote(o[key], note, textPart)
+			if ok {
+				o[key] = v
+			}
+			return ok
+		}
+	}
+	switch from {
+	case provider.Responses:
+		for i := len(items) - 1; i >= 0 && !at.Exists(); i-- {
+			switch items[i].Get("type").String() {
+			case "function_call_output", "custom_tool_call_output":
+				at, edit = items[i], addTo("output")
+			}
+		}
+	case provider.Chat:
+		for i := len(items) - 1; i >= 0 && !at.Exists(); i-- {
+			if items[i].Get("role").String() == "tool" {
+				at, edit = items[i], addTo("content")
+			}
+		}
+	case provider.Anthropic:
+		if len(items) > 0 {
+			items[len(items)-1].Get("content").ForEach(func(_, b gjson.Result) bool {
+				if b.Get("type").String() == "tool_result" {
+					at, edit = b, addTo("content")
+				}
+				return true
+			})
+		}
+	case provider.Gemini:
+		if len(items) > 0 {
+			items[len(items)-1].Get("parts").ForEach(func(_, p gjson.Result) bool {
+				for _, k := range []string{"functionResponse", "function_response"} {
+					if r := p.Get(k); r.IsObject() {
+						at = r
+						edit = func(o map[string]json.RawMessage) bool {
+							var res map[string]json.RawMessage
+							if json.Unmarshal(o["response"], &res) != nil || res == nil {
+								return false
+							}
+							key := "output"
+							if _, ok := res[key]; !ok {
+								key = "note"
+							}
+							v, ok := withNote(res[key], note, "")
+							if !ok {
+								return false
+							}
+							res[key] = v
+							o["response"] = rawJSON(res)
+							return o["response"] != nil
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
+	if !at.IsObject() || at.Index <= 0 || at.Index+len(at.Raw) > len(body) || string(body[at.Index:at.Index+len(at.Raw)]) != at.Raw {
+		return body, false
+	}
+	var o map[string]json.RawMessage
+	if json.Unmarshal([]byte(at.Raw), &o) != nil || !edit(o) {
+		return body, false
+	}
+	raw := rawJSON(o)
+	if raw == nil {
+		return body, false
+	}
+	out := make([]byte, 0, len(body)+len(raw)-len(at.Raw))
+	out = append(out, body[:at.Index]...)
+	out = append(out, raw...)
+	return append(out, body[at.Index+len(at.Raw):]...), true
+}
+
+// withNote is a result's text v with note after it: a string's two lines
+// on, a list's new part of type part (none: no list is taken), or the
+// note alone for no text.
+func withNote(v json.RawMessage, note, part string) (json.RawMessage, bool) {
+	t := bytes.TrimSpace(v)
+	switch {
+	case len(t) == 0 || string(t) == "null":
+		return rawJSON(note), true
+	case t[0] == '"':
+		var s string
+		if json.Unmarshal(t, &s) != nil {
+			return nil, false
+		}
+		if s != "" {
+			s += "\n\n"
+		}
+		return rawJSON(s + note), true
+	case t[0] == '[' && part != "":
+		var parts []json.RawMessage
+		if json.Unmarshal(t, &parts) != nil {
+			return nil, false
+		}
+		return rawJSON(append(parts, rawJSON(struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}{part, note}))), true
+	}
+	return nil, false
 }
 
 // writeLocalText answers req with text in from's API, as a whole reply or

@@ -96,7 +96,7 @@ func TestToolLoopNoticeInTheConversationsLanguage(t *testing.T) {
 					}
 					return codexRead(i)
 				}
-				body := strings.Replace(toolTurns(x.from, 60+toolLoopRepeats, turn, x.stream), "why does parse panic?", a.ask, 1)
+				body := strings.Replace(toolTurns(x.from, 60+toolLoopStops, turn, x.stream), "why does parse panic?", a.ask, 1)
 				got := askAgent(t, gw+x.path, body)
 				if !strings.Contains(got, a.says) || !strings.Contains(got, "sed -n 1,200p src/parser.rs") || v.asked.Load() != 0 {
 					t.Fatalf("not told in %s (vendor asked %d):\n%s", lang, v.asked.Load(), got)

@@ -38,9 +38,11 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request, from provide
 	}
 	w, recorded := recordConversation(w, r, from, body)
 	defer recorded()
-	// a conversation going round one tool call is answered here, before
-	// anything of it is asked of a hook, a middleware or a provider
-	if s.stoppedToolLoop(w, r, from, body) {
+	// a conversation going round one tool call has the model told so, and
+	// is answered here when it goes on after that, before anything of it
+	// is asked of a hook, a middleware or a provider
+	body, stopped := s.toolLoopGuard(w, r, from, body)
+	if stopped {
 		return
 	}
 	w, body, hooked := gatewayHooks(w, r, from, body)

@@ -344,7 +344,8 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		defer recorded()
 		// and the tool loop it may be stuck in spends that sign-in's
 		// allowance as it would a magpie model's
-		if s.stoppedToolLoop(w, r, provider.Responses, body) {
+		var stopped bool
+		if body, stopped = s.toolLoopGuard(w, r, provider.Responses, body); stopped {
 			return
 		}
 		// Codex's own sign-in: the request hooks, not the middleware

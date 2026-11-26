@@ -11,17 +11,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
 // countingVendor is a Chat vendor that answers every request with a word,
-// streamed or whole as asked, and counts the requests it got.
-type countingVendor struct{ asked atomic.Int64 }
+// streamed or whole as asked, and counts the requests it got, keeping
+// the last one's body.
+type countingVendor struct {
+	asked atomic.Int64
+	last  atomic.Pointer[string]
+}
 
 func (v *countingVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
+	got := string(body)
+	v.last.Store(&got)
 	v.asked.Add(1)
 	if strings.Contains(string(body), `"stream":true`) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -164,7 +171,7 @@ func TestToolLoopIsStoppedOnEveryProtocol(t *testing.T) {
 				}
 				return codexRead(i)
 			}
-			got := askAgent(t, gw+x.path, toolTurns(x.from, 60+toolLoopRepeats, turn, x.stream))
+			got := askAgent(t, gw+x.path, toolTurns(x.from, 60+toolLoopStops, turn, x.stream))
 			if !strings.Contains(got, "This turn was stopped") || !strings.Contains(got, x.done) || !strings.Contains(got, "sed -n 1,200p src/parser.rs") {
 				t.Fatalf("the agent wasn't told of the loop in its API:\n%s", got)
 			}
@@ -198,7 +205,7 @@ func TestToolLoopStoppedOnCodexsOwnSignIn(t *testing.T) {
 	t.Cleanup(func() { provider.CodexBase = was })
 	gw := httptest.NewServer(New().Handler())
 	t.Cleanup(gw.Close)
-	body := strings.Replace(toolTurns(provider.Responses, toolLoopRepeats, codexRead, true), `"model":"wb/deepseek-v4-pro"`, `"model":"gpt-5.5"`, 1)
+	body := strings.Replace(toolTurns(provider.Responses, toolLoopStops, codexRead, true), `"model":"wb/deepseek-v4-pro"`, `"model":"gpt-5.5"`, 1)
 	got := askAgent(t, gw.URL+CodexPath+"/responses", body)
 	if !strings.Contains(got, "This turn was stopped") || !strings.Contains(got, `"type":"response.completed"`) {
 		t.Fatalf("Codex wasn't told of the loop:\n%s", got)
@@ -210,6 +217,152 @@ func TestToolLoopStoppedOnCodexsOwnSignIn(t *testing.T) {
 	askAgent(t, gw.URL+CodexPath+"/responses", strings.Replace(toolTurns(provider.Responses, toolLoopRepeats-1, codexRead, true), `"model":"wb/deepseek-v4-pro"`, `"model":"gpt-5.5"`, 1))
 	if n := v.asked.Load(); n != 1 {
 		t.Fatalf("the ChatGPT backend was asked %d times for a turn short of a loop", n)
+	}
+	// the loop's first request goes on too, the model told on its newest
+	// result alone
+	askAgent(t, gw.URL+CodexPath+"/responses", strings.Replace(toolTurns(provider.Responses, toolLoopRepeats, codexRead, true), `"model":"wb/deepseek-v4-pro"`, `"model":"gpt-5.5"`, 1))
+	if n := v.asked.Load(); n != 2 {
+		t.Fatalf("the ChatGPT backend was asked %d times; the loop's first request wasn't sent on", n)
+	}
+	sent := *v.last.Load()
+	told := fmt.Sprintf(toolLoopNudge, toolLoopRepeats)
+	out := lastOf(sent, "input").Get("output").String()
+	if strings.Count(sent, told) != 1 || !strings.Contains(out, "todo!()") || !strings.HasSuffix(out, "\n\n"+told) {
+		t.Fatalf("the backend wasn't told of the loop on the newest result alone:\n%s", sent)
+	}
+}
+
+// lastOf is the last item of body's list at key.
+func lastOf(body, key string) gjson.Result {
+	var last gjson.Result
+	getIn([]byte(body), key).ForEach(func(_, v gjson.Result) bool {
+		last = v
+		return true
+	})
+	return last
+}
+
+// yummypyrus on X: a loop the model could have turned around itself was
+// stopped. Its first request goes on to the model, in every API, with a
+// line on the newest tool result saying the call came back the same
+// that many times; the rest of that result, and every other, goes as it
+// was. If the model asks the same again, the next request is stopped as
+// before. The line names neither magpie nor a vendor's limits.
+func TestToolLoopTellsTheModelFirst(t *testing.T) {
+	told := fmt.Sprintf(toolLoopNudge, toolLoopRepeats)
+	for _, w := range []string{"magpie", "Magpie", "limit", "quota", "credit", "stopped"} {
+		if strings.Contains(toolLoopNudge, w) {
+			t.Fatalf("the line the model is told says %q: %s", w, toolLoopNudge)
+		}
+	}
+	for _, x := range toolLoopAsks {
+		t.Run(x.name, func(t *testing.T) {
+			v := &countingVendor{}
+			gw := toolLoopOn(t, v)
+			got := askAgent(t, gw+x.path, toolTurns(x.from, toolLoopRepeats, codexRead, x.stream))
+			if strings.Contains(got, "This turn was stopped") || !strings.Contains(got, "read it") || !strings.Contains(got, x.done) || v.asked.Load() != 1 {
+				t.Fatalf("the loop's first request didn't reach the model (vendor asked %d):\n%s", v.asked.Load(), got)
+			}
+			sent := *v.last.Load()
+			if n := strings.Count(sent, told); n != 1 {
+				t.Fatalf("the model was told %d times:\n%s", n, sent)
+			}
+			// the newest result: Chat's last tool message, its text then the line
+			last := lastOf(sent, "messages")
+			if last.Get("role").String() != "tool" || !strings.Contains(last.Get("content").String(), "todo!()") || !strings.Contains(last.Get("content").String(), told) {
+				t.Fatalf("the line isn't on the newest result with its text: %s", last.Raw)
+			}
+			// the model asks the same again: stopped, sent nowhere
+			got = askAgent(t, gw+x.path, toolTurns(x.from, toolLoopRepeats+1, codexRead, x.stream))
+			if !strings.Contains(got, "This turn was stopped") || !strings.Contains(got, x.done) || v.asked.Load() != 1 {
+				t.Fatalf("the loop going on after the model was told wasn't stopped (vendor asked %d):\n%s", v.asked.Load(), got)
+			}
+		})
+	}
+}
+
+// The line goes where each API keeps a result's text, whatever form the
+// agent wrote it in, and nothing else of the body changes. A result that
+// takes no text stops the loop as it did before the model was told.
+func TestToolLoopLineOnEachResultsForm(t *testing.T) {
+	const note = "NOTE"
+	for _, c := range []struct {
+		name string
+		from provider.Protocol
+		body string
+		want string // the newest result as written again; "" none
+	}{
+		{"responses string", provider.Responses,
+			`{"input":[{"type":"function_call","call_id":"a","name":"x","arguments":"{}"},{"type":"function_call_output","call_id":"a","output":"one"},{"type":"function_call","call_id":"b","name":"x","arguments":"{}"},{"type":"function_call_output","call_id":"b","output":"two <b> & \"q\""}],"stream":true}`,
+			`{"call_id":"b","output":"two <b> & \"q\"\n\nNOTE","type":"function_call_output"}`},
+		{"responses parts", provider.Responses,
+			`{"input":[{"type":"custom_tool_call_output","call_id":"b","output":[{"type":"input_text","text":"two"}]}]}`,
+			`{"call_id":"b","output":[{"type":"input_text","text":"two"},{"type":"input_text","text":"NOTE"}],"type":"custom_tool_call_output"}`},
+		{"responses screenshot", provider.Responses,
+			`{"input":[{"type":"computer_call_output","call_id":"b","output":{"type":"computer_screenshot","image_url":"data:"}}]}`, ""},
+		{"responses output not text", provider.Responses,
+			`{"input":[{"type":"function_call_output","call_id":"b","output":{"ok":true}}]}`, ""},
+		{"chat string", provider.Chat,
+			`{"messages":[{"role":"tool","tool_call_id":"a","content":"one"},{"role":"tool","tool_call_id":"b","content":"two"},{"role":"user","content":"<reminder>"}]}`,
+			`{"content":"two\n\nNOTE","role":"tool","tool_call_id":"b"}`},
+		{"chat parts", provider.Chat,
+			`{"messages":[{"role":"tool","tool_call_id":"b","content":[{"type":"text","text":"two"}]}]}`,
+			`{"content":[{"type":"text","text":"two"},{"type":"text","text":"NOTE"}],"role":"tool","tool_call_id":"b"}`},
+		{"chat empty", provider.Chat,
+			`{"messages":[{"role":"tool","tool_call_id":"b","content":""}]}`,
+			`{"content":"NOTE","role":"tool","tool_call_id":"b"}`},
+		{"anthropic string", provider.Anthropic,
+			`{"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"a","content":"one"},{"type":"tool_result","tool_use_id":"b","content":"two","is_error":true,"cache_control":{"type":"ephemeral"}},{"type":"text","text":"<system-reminder>x</system-reminder>"}]}]}`,
+			`{"cache_control":{"type":"ephemeral"},"content":"two\n\nNOTE","is_error":true,"tool_use_id":"b","type":"tool_result"}`},
+		{"anthropic blocks", provider.Anthropic,
+			`{"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"b","content":[{"type":"text","text":"two"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBO"}}]}]}]}`,
+			`{"content":[{"type":"text","text":"two"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBO"}},{"type":"text","text":"NOTE"}],"tool_use_id":"b","type":"tool_result"}`},
+		{"anthropic none", provider.Anthropic,
+			`{"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"b"}]}]}`,
+			`{"content":"NOTE","tool_use_id":"b","type":"tool_result"}`},
+		{"gemini output", provider.Gemini,
+			`{"contents":[{"role":"user","parts":[{"functionResponse":{"name":"a","response":{"output":"one"}}},{"functionResponse":{"name":"b","response":{"output":"two"}}}]}]}`,
+			`{"name":"b","response":{"output":"two\n\nNOTE"}}`},
+		{"gemini other", provider.Gemini,
+			`{"contents":[{"role":"user","parts":[{"function_response":{"name":"b","response":{"result":{"n":1}}}}]}]}`,
+			`{"name":"b","response":{"note":"NOTE","result":{"n":1}}}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := nudged(c.from, []byte(c.body), note)
+			if c.want == "" {
+				if ok || string(got) != c.body {
+					t.Fatalf("a result that takes no text was written: %s", got)
+				}
+				return
+			}
+			if !ok {
+				t.Fatal("no line added")
+			}
+			if !json.Valid(got) {
+				t.Fatalf("not JSON: %s", got)
+			}
+			// the body is as it came but for the newest result
+			i := 0
+			for i < len(c.body) && i < len(got) && c.body[i] == got[i] {
+				i++
+			}
+			j := 0
+			for j < len(c.body)-i && j < len(got)-i && c.body[len(c.body)-1-j] == got[len(got)-1-j] {
+				j++
+			}
+			was, is := c.body[i:len(c.body)-j], string(got[i:len(got)-j])
+			if !strings.Contains(c.want, is) || strings.Count(string(got), note) != 1 {
+				t.Fatalf("written again: %q for %q\nbody %s", is, was, got)
+			}
+			var w, g any
+			json.Unmarshal([]byte(c.want), &w)
+			at := strings.Index(string(got), c.want[:2])
+			_ = at
+			if !strings.Contains(string(got), c.want) {
+				t.Fatalf("the newest result is not %s:\n%s", c.want, got)
+			}
+			_ = g
+		})
 	}
 }
 
