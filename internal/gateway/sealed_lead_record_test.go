@@ -194,7 +194,7 @@ func TestSealedTaskGoesToTheLeadsLoggedAccountFirst(t *testing.T) {
 	var tried []string
 	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
-		if !strings.HasSuffix(r.URL.Path, "/responses") {
+		if !strings.HasSuffix(r.URL.Path, "/responses") || r.Header.Get("chatgpt-account-id") == "" {
 			t.Errorf("DIAG stray request: %s %s account=%q ua=%q", r.Method, r.URL.String(), r.Header.Get("chatgpt-account-id"), r.Header.Get("User-Agent"))
 		}
 		tried = append(tried, r.Header.Get("chatgpt-account-id"))
