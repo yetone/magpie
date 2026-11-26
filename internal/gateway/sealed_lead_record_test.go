@@ -191,13 +191,26 @@ func TestSealedTaskLogDoesNotOpenItToAnotherProvider(t *testing.T) {
 // lead; with that forgotten, the usage log still names the account, and
 // the task doesn't go to the group's other account first.
 func TestSealedTaskGoesToTheLeadsLoggedAccountFirst(t *testing.T) {
-	var tried []string
+	// the turns asked of the backend, by account; anything else the
+	// backend is asked (an account's model list, a late request of an
+	// earlier test's) is no try, and is logged for what it was (#7914)
+	var mu sync.Mutex
+	var turns []string
+	tried := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return strings.Join(turns, ",")
+	}
 	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
-		if !strings.HasSuffix(r.URL.Path, "/responses") || r.Header.Get("chatgpt-account-id") == "" {
-			t.Errorf("DIAG stray request: %s %s account=%q ua=%q", r.Method, r.URL.String(), r.Header.Get("chatgpt-account-id"), r.Header.Get("User-Agent"))
+		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/responses") {
+			t.Logf("not a turn: %s %s (account %q, %s)", r.Method, r.URL, r.Header.Get("chatgpt-account-id"), r.Header.Get("User-Agent"))
+			http.NotFound(w, r)
+			return
 		}
-		tried = append(tried, r.Header.Get("chatgpt-account-id"))
+		mu.Lock()
+		turns = append(turns, r.Header.Get("chatgpt-account-id"))
+		mu.Unlock()
 		io.WriteString(w, sse(`data: {"type":"response.output_text.delta","delta":"on it"}`,
 			`data: {"type":"response.completed","response":{"id":"r1","status":"completed","output":[]}}`))
 	})
@@ -221,13 +234,15 @@ func TestSealedTaskGoesToTheLeadsLoggedAccountFirst(t *testing.T) {
 		s.Handler().ServeHTTP(rec, req)
 		return rec
 	}
-	if rec := ask(New(), "lead-1", "", "spare@example.com", leadAsk); rec.Code != 200 || strings.Join(tried, ",") != "acct-2" {
-		t.Fatalf("lead: %d %s (tried %v)", rec.Code, rec.Body.String(), tried)
+	if rec := ask(New(), "lead-1", "", "spare@example.com", leadAsk); rec.Code != 200 || tried() != "acct-2" {
+		t.Fatalf("lead: %d %s (tried %q)", rec.Code, rec.Body.String(), tried())
 	}
 	forgetSticks(t)
-	tried = nil
+	mu.Lock()
+	turns = nil
+	mu.Unlock()
 	rec := ask(New(), "worker-1", "lead-1", "", sealedTaskFernet)
-	if rec.Code != 200 || grok.n != 0 || strings.Join(tried, ",") != "acct-2" {
-		t.Fatalf("subagent: %d %s, grok asked %d times, accounts tried %v", rec.Code, rec.Body.String(), grok.n, tried)
+	if rec.Code != 200 || grok.n != 0 || tried() != "acct-2" {
+		t.Fatalf("subagent: %d %s, grok asked %d times, accounts tried %q", rec.Code, rec.Body.String(), grok.n, tried())
 	}
 }
