@@ -284,6 +284,17 @@ says, with the error on the route. `TestCodexTurnsClassifiedByLuna`,
 `TestCodexLunaDecisionsRefusedRecorded`,
 `TestCodexLunaDecisionsUnservedAskedByChat`,
 `TestCodexTurnsClassifiedBySignedInLuna`.
+Every Decisions call, answered or not, is also a route of kind routing on
+the Routing page and in the tray, and a call in Recent calls with its
+request and answer, as a chat classifier's call is (`keepDecide`; before,
+it was only a usage row, so the tray never showed it; zyh6036 on X). A
+turn where gpt-6-luna declines the intent (or the levels question) but
+rates the effort keeps the effort and says why the intent is missing
+(`intentFailed`: "gpt-6-luna declined to say which kind the message
+is"), falling back to the session's previous intent when there was one,
+instead of reading as "none of these" with no reason.
+`TestOpenAIDecisionsCallsShown`,
+`TestOpenAIDecisionsIntentRefusalSaysWhy`.
 Refresh replaces the list: removed decisions stop routing, and an empty
 remote list never gains a fabricated Jev alias.
 An older peer without the decision-list extension continues serving its

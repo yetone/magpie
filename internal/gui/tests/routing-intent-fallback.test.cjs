@@ -25,7 +25,8 @@ const groups = () => ({
 });
 const now = Date.now();
 const err = "c/cls: no answer in 8s";
-const routeOf = (kept) => ({
+const declined = "gpt-6-luna declined to say which kind the message is";
+const routeOf = (how) => { const kept = how === true; return {
   id: 7, seq: 7, time: new Date(now - 2000).toISOString(), agent: "claude", model: "main", provider: kept ? "b" : "a", done: true, status: 200, ms: 900, tokens: 9000,
   group: { id: "main", name: "Main", members: ["a/fast", "b/opus"] },
   order: kept
@@ -35,20 +36,27 @@ const routeOf = (kept) => ({
   rule: kept
     ? { n: 1, use: "b/opus", when: ['intent "complex"'], turn: 3, tokens: 9000,
       classified: { by: "c/cls", intents: ["complex"], intent: "complex", after: "complex", error: err, fallback: "previous" } }
-    : { n: 0, turn: 1, tokens: 9000, classified: { by: "c/cls", intents: ["complex"], error: err } },
-});
+    : how === "rated"
+      ? { n: 0, turn: 1, tokens: 9000, pick: "high", classified: { by: "openai/gpt-6-luna", intents: ["complex"], error: declined, effort: "high", score: 2.2 } }
+      : { n: 0, turn: 1, tokens: 9000, classified: { by: "c/cls", intents: ["complex"], error: err } },
+}; };
 
 const words = {
   en: { kept: `c/cls was to tell which of “complex” turn 3 is, but couldn't — ${err} — so the turn keeps “complex”, as turn 2 was.`,
-    none: `c/cls was to tell which of “complex” turn 1 is, but couldn't — ${err} — so no rule with an intent matches it.` },
+    none: `c/cls was to tell which of “complex” turn 1 is, but couldn't — ${err} — so no rule with an intent matches it.`,
+    rated: `openai/gpt-6-luna was to tell which of “complex” turn 1 is, but couldn't — ${declined} — so no rule with an intent matches it. openai/gpt-6-luna rated turn 1 2.2 of 3, so it picks high reasoning for the turn — each model gets the level it has nearest.` },
   zh: { kept: `c/cls 未能判断第 3 轮属于 “complex” 中的哪一个（${err}），因此沿用第 2 轮的“complex”。`,
-    none: `c/cls 未能判断第 1 轮属于 “complex” 中的哪一个（${err}），带意图的规则均不命中。` },
+    none: `c/cls 未能判断第 1 轮属于 “complex” 中的哪一个（${err}），带意图的规则均不命中。`,
+    rated: `openai/gpt-6-luna 未能判断第 1 轮属于 “complex” 中的哪一个（${declined}），带意图的规则均不命中。 openai/gpt-6-luna 给第 1 轮难度打 2.2 分（满分 3），选用 high 推理强度，各模型取最接近的档位。` },
   "zh-TW": { kept: `c/cls 未能判斷第 3 輪屬於 “complex” 中的哪一個（${err}），因此沿用第 2 輪的「complex」。`,
-    none: `c/cls 未能判斷第 1 輪屬於 “complex” 中的哪一個（${err}），帶意圖的規則均不命中。` },
+    none: `c/cls 未能判斷第 1 輪屬於 “complex” 中的哪一個（${err}），帶意圖的規則均不命中。`,
+    rated: `openai/gpt-6-luna 未能判斷第 1 輪屬於 “complex” 中的哪一個（${declined}），帶意圖的規則均不命中。 openai/gpt-6-luna 給第 1 輪難度打 2.2 分（滿分 3），選用 high 推理強度，各模型取最接近的檔位。` },
   ja: { kept: `c/cls はターン 3 が “complex” のどれかを判定するはずでしたが、できませんでした（${err}）。そのため、ターン 2 と同じ「complex」のままにします。`,
-    none: `c/cls はターン 1 が “complex” のどれかを判定するはずでしたが、できませんでした（${err}）。そのため、インテントを含むルールは一致しません。` },
+    none: `c/cls はターン 1 が “complex” のどれかを判定するはずでしたが、できませんでした（${err}）。そのため、インテントを含むルールは一致しません。`,
+    rated: `openai/gpt-6-luna はターン 1 が “complex” のどれかを判定するはずでしたが、できませんでした（${declined}）。そのため、インテントを含むルールは一致しません。 openai/gpt-6-luna がターン 1 の難しさを 3 段階中 2.2 と評価したため、このターンは high の推論を選びます。各モデルは最も近いレベルを使います。` },
   de: { kept: `c/cls sollte bestimmen, welche von “complex” Runde 3 ist, konnte es aber nicht – ${err} –, daher bleibt die Runde bei „complex“ wie Runde 2.`,
-    none: `c/cls sollte bestimmen, welche von “complex” Runde 1 ist, konnte es aber nicht – ${err} –, daher trifft keine Regel mit Absicht zu.` },
+    none: `c/cls sollte bestimmen, welche von “complex” Runde 1 ist, konnte es aber nicht – ${err} –, daher trifft keine Regel mit Absicht zu.`,
+    rated: `openai/gpt-6-luna sollte bestimmen, welche von “complex” Runde 1 ist, konnte es aber nicht – ${declined} –, daher trifft keine Regel mit Absicht zu. openai/gpt-6-luna bewertete Runde 1 mit 2.2 von 3 und wählt daher high Reasoning für die Runde – jedes Modell erhält seine nächstgelegene Stufe.` },
 };
 
 function serve(lang, route) {
@@ -105,6 +113,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
       });
     }
+    // zyh6036 on X: a decision model that declined the intent but rated
+    // the turn: why no intent came of it, and the effort it picked
+    test(`${engine} ${lang}: a declined intent says why, beside the effort rated`, async (t) => {
+      const { page, errors } = await open(t, engine, lang, 1100, "rated");
+      await page.waitForFunction((s) => document.documentElement.innerText.includes(s), w.rated).catch(() => {});
+      const said = await page.evaluate(() => document.documentElement.innerText);
+      assert(said.includes(w.rated), `the declined intent and the effort are told: ${said.slice(0, 3000)}`);
+      assert.deepEqual(errors, []);
+    });
     test(`${engine} ${lang}: a classifier that couldn't say, with nothing to keep`, async (t) => {
       const { page, errors } = await open(t, engine, lang, 1100, false);
       await page.waitForFunction((s) => document.documentElement.innerText.includes(s), w.none).catch(() => {});

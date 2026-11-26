@@ -449,9 +449,16 @@ func (s *Server) askDecideTries(wait time.Duration, cs []candidate, intents []st
 		if ctx.Err() != nil {
 			break // the wait is spent: the rest are not asked, nor rested
 		}
-		if v, err = s.askJev(ctx, wait, c.p, c.model, intents, prev, effort, text); err == nil {
+		if v, err = s.askJev(context.WithValue(ctx, decideSeat{}, c), wait, c.p, c.model, intents, prev, effort, text); err == nil {
 			servedCandidate(c, 0)
 			return v, nil
+		}
+		if errors.As(err, new(intentFailed)) || errors.As(err, new(effortFailed)) {
+			// it answered, declining one question: the other's answer
+			// holds, and another key of the same model would be asked
+			// the same words
+			servedCandidate(c, 0)
+			return v, err
 		}
 		var refused decideRefused
 		var answer answerError

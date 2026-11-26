@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -232,16 +233,142 @@ func TestOpenAIDecisionsClassify(t *testing.T) {
 }
 
 // A question OpenAI declined ({"type":"refusal"}) is no answer: the
-// effort it refused is not the lowest, nor an intent "none of these".
+// effort it refused is not the lowest, nor an intent "none of these",
+// and the route says it declined.
 func TestOpenAIDecisionsRefusal(t *testing.T) {
 	s, up, _ := openaiClassified(t, "openai/gpt-6-luna", provider.Rule{Use: "b/big", Intent: "debugging"})
 	up.choice, up.refuse = "debugging", []string{"effort"}
 	_, r := postOK(t, s, "s1", chat("why does this crash?", nil, 0, `,"reasoning_effort":"medium"`))
-	if c := r.Rule.Classified; c.Intent != "debugging" || c.Effort != "" || r.Rule.Pick == "low" {
+	if c := r.Rule.Classified; c.Intent != "debugging" || c.Effort != "" || r.Rule.Pick == "low" || c.Error != "" ||
+		c.EffortError != "gpt-6-luna declined to say how hard the turn is" {
 		t.Fatalf("%+v %+v", r.Rule, c)
 	}
-	if v, err := readJev([]byte(`{"answers":{"effort":{"type":"refusal"},"intent":{"type":"refusal"}}}`), []string{"a", "b"}, false, before{}); err != nil || v.Effort != "" || v.Said != "" || v.Intent != "" {
+	v, err := readJev([]byte(`{"answers":{"effort":{"type":"refusal"},"intent":{"type":"refusal"}}}`), []string{"a", "b"}, false, before{}, true)
+	if !errors.As(err, new(answerError)) || v.Effort != "" || v.Said != "" || v.Intent != "" ||
+		err.Error() != "the decision model declined to say which kind the message is, or declined to say how hard the turn is" {
 		t.Fatalf("refusals read as %+v %v", v, err)
+	}
+}
+
+// zyh6036 on X: with gpt-6-luna on OpenAI's Decisions API as a group's
+// classifier, some turns went to the group's first member with the route
+// saying only that it said none, while the effort it rated came back.
+// The intent it declined is said, the effort it rated holds, and a turn
+// after one with an intent keeps that one, as for a classifier that
+// couldn't say. Nothing is rested for it.
+func TestOpenAIDecisionsIntentRefusalSaysWhy(t *testing.T) {
+	s, up, _ := openaiClassified(t, "openai/gpt-6-luna",
+		provider.Rule{Use: "b/big", Intent: "debugging"}, provider.Rule{Use: "a/small", Intent: "renames"})
+	up.choice, up.score, up.refuse = "debugging", 2.2, []string{"intent"}
+	_, r := postOK(t, s, "s1", chat("why does this crash?", nil, 0, `,"reasoning_effort":"low"`))
+	c := r.Rule.Classified
+	if c == nil || c.Intent != "" || c.Said != "" || c.Effort != "high" || r.Rule.Pick != "high" || r.Rule.N != 0 ||
+		c.Error != "gpt-6-luna declined to say which kind the message is" {
+		t.Fatalf("declined intent: %+v %+v", r.Rule, c)
+	}
+	// the next turn says, and the one after declines: it keeps the
+	// intent the turn before had
+	up.mu.Lock()
+	up.refuse = nil
+	up.mu.Unlock()
+	_, r = postOK(t, s, "s2", chat("why does this crash?", []string{"and this one?"}, 0, `,"reasoning_effort":"low"`))
+	if c := r.Rule.Classified; c.Intent != "debugging" || c.Error != "" {
+		t.Fatalf("answered: %+v", c)
+	}
+	up.mu.Lock()
+	up.refuse = []string{"intent"}
+	up.mu.Unlock()
+	_, r = postOK(t, s, "s2", chat("why does this crash?", []string{"and this one?", "now rename it"}, 0, `,"reasoning_effort":"low"`))
+	if c := r.Rule.Classified; c.Intent != "debugging" || c.Fallback != "previous" || c.Effort != "high" || r.Rule.Use != "b/big" ||
+		!strings.Contains(c.Error, "declined to say which kind") {
+		t.Fatalf("declined after an intent: %+v %+v", r.Rule, c)
+	}
+	classified.Lock()
+	rested := len(classified.failed)
+	classified.Unlock()
+	if rested != 0 {
+		t.Fatalf("a declined question rested the classifier: %d", rested)
+	}
+	// whether the kinds are levels, asked first, declined: the turn says so
+	s, up, _ = openaiClassified(t, "openai/gpt-6-luna",
+		provider.Rule{Use: "b/big", Intent: "debugging"}, provider.Rule{Use: "a/small", Intent: "renames"})
+	up.choice, up.refuse = "debugging", []string{"levels"}
+	_, r = postOK(t, s, "s3", chat("why does this crash?", nil, 0, ""))
+	if c := r.Rule.Classified; c.Intent != "" || !strings.Contains(c.Error, "gpt-6-luna declined to say whether the group's kinds are levels") {
+		t.Fatalf("declined levels: %+v", c)
+	}
+}
+
+// zyh6036 on X: a chat model as the classifier showed its call every turn
+// in the tray's list and on the Routing page, gpt-6-luna on OpenAI's
+// Decisions API never did. Each Decisions call is a route of its own,
+// kind "routing", on the key it went to, in Recent calls, and its usage
+// row names the route.
+func TestOpenAIDecisionsCallsShown(t *testing.T) {
+	s, up, _ := openaiClassified(t, "openai/gpt-6-luna",
+		provider.Rule{Use: "b/big", Intent: "debugging"}, provider.Rule{Use: "a/small", Intent: "renames"})
+	up.choice, up.score = "debugging", 2.2
+	_, turn := postOK(t, s, "s1", chat("why does this crash?", nil, 0, `,"reasoning_effort":"low"`))
+	s.trace.mu.Lock()
+	var own []Route
+	for _, r := range s.trace.routes {
+		if r.ID != turn.ID {
+			own = append(own, *r)
+		}
+	}
+	s.trace.mu.Unlock()
+	if len(own) != 2 {
+		t.Fatalf("%d routes besides the turn's, want the 2 Decisions calls: %+v", len(own), own)
+	}
+	ids := map[int64]bool{}
+	for _, r := range own {
+		if r.Kind != "routing" || r.Agent != usage.AgentOf(RouterAgent) || r.Model != "openai/gpt-6-luna" || r.Provider != "openai" ||
+			!r.Done || r.Status != 200 || r.Error != "" || r.Tokens != 42 || len(r.Order) != 1 || len(r.Tries) != 1 ||
+			r.Order[0].Name != "OpenAI" || r.Tries[0].Status != 200 || r.Tries[0].ID != r.Order[0].ID {
+			t.Fatalf("classifier route %+v order %+v tries %+v", r, r.Order, r.Tries)
+		}
+		ids[r.ID] = true
+	}
+	n := 0
+	for _, c := range s.Recent() {
+		if c.Kind == "routing" && ids[c.Route] && c.Model == "openai/gpt-6-luna" && c.Status == 200 && c.Usage.Input == 42 &&
+			strings.Contains(c.RequestBody, `"questions"`) {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("%d classifier calls in Recent calls, want 2: %+v", n, s.Recent())
+	}
+	n = 0
+	for _, r := range usage.Load(time.Time{}) {
+		if r.Kind == "routing" && ids[r.RouteID] {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("%d classifier usage rows name their route, want 2", n)
+	}
+	// a call OpenAI turns away is shown too, with why
+	s, _, _ = openaiClassified(t, "openai/gpt-6-luna", provider.Rule{Use: "b/big", Intent: "debugging"})
+	p, err := provider.Find("openai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Key = "sk-wrong"
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	postAs(t, s, "s2", chat("why does this crash?", nil, 0, ""))
+	var failed *Route
+	s.trace.mu.Lock()
+	for _, r := range s.trace.routes {
+		if r.Kind == "routing" && r.Status == 401 {
+			failed = r
+		}
+	}
+	s.trace.mu.Unlock()
+	if failed == nil || !strings.Contains(failed.Error, "Incorrect API key") || failed.Tries[0].Status != 401 {
+		t.Fatalf("a refused Decisions call isn't shown: %+v", failed)
 	}
 }
 
