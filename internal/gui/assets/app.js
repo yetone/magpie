@@ -19049,13 +19049,19 @@ function quotaWindows(sub) {
   for (const w of sub.windows) {
     const quota = el("div", "quota");
     const labels = el("div", "quota-labels");
-    // the count and its share in parts, so a count too long for its
-    // window's width goes to a second line at the · rather than cut short
+    // every segment, so a plugin's display with several · keeps them
+    // all (#7396). A count too long for the window's width goes to the
+    // next line at a · rather than cut short. An empty later piece
+    // still leaves the first as the two-piece split did.
     const n = el("button", "quota-n");
     const text = w.historyMissing ? t("No readings in this cycle") : quotaText(w);
-    const [count, share] = text.split(" · ");
-    n.append(el("span", "", share ? count + " ·" : count));
-    if (share) n.append(" ", el("span", "", share));
+    const parts = text.split(" · ");
+    let last = parts.length - 1;
+    while (last > 0 && !parts[last]) last--;
+    for (let i = 0; i <= last; i++) {
+      if (i) n.append(" ");
+      n.append(el("span", "", i < last ? parts[i] + " ·" : parts[i]));
+    }
     n.title = w.historyMissing ? text : text + "\n" + t(quotaLeft ? "Show how much of each window is used" : "Show how much of each window is left");
     n.disabled = !!w.historyMissing;
     n.onclick = () => setQuotaLeft(!quotaLeft);

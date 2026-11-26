@@ -2255,6 +2255,12 @@ line, the 2 days / Cycle control turning every card without moving the page,
 no curve without readings, the theme's chart colours in light and dark, and
 the tray card's thin current-cycle line, in Chinese and English.
 
+`quota-window-segments.test.cjs` checks that a quota window's figure keeps
+every " · " piece (#7396): a plugin's display with four, a text row, a
+metered window whose display has one of its own, one and two pieces as
+before, no readings, and a narrow window wrapping at a · rather than cut
+short. English and Chinese, Chromium and WebKit, the API faked.
+
 `balance-curve.test.cjs` checks a key's balance over time on the Usage page:
 its readings as a line, the least-squares line since the last top-up dashed
 on to zero, "Runs out in 3d at this pace" and the spend a day, a click (or

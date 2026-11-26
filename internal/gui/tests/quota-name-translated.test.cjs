@@ -72,9 +72,13 @@ const pendingWords = {
   ja: "開始前の ZCode ギフト枠",
   de: "ZCode-Geschenkplan, noch nicht aktiv",
 };
+// as /api/usage/quotas sends them: the plugin's row set aside with a
+// display and nothing counted is text (plugin_usage.go), and aside itself
+// isn't sent. Without text the share was hidden only by the old two-piece
+// cut of the figure, which #7396 took away.
 const lines = [
-  { what: "claim", words: claimWords, window: { name: CLAIM, used: 0, aside: true, display: "1 · ZCode Trust Build" } },
-  { what: "not started", words: pendingWords, window: { name: PENDING, used: 0, aside: true, display: "Start Plan · 2026-10-29 23:00" } },
+  { what: "claim", words: claimWords, window: { name: CLAIM, used: 0, text: true, display: "1 · ZCode Trust Build" } },
+  { what: "not started", words: pendingWords, window: { name: PENDING, used: 0, text: true, display: "Start Plan · 2026-10-29 23:00" } },
 ];
 
 // 440 is the narrowest the card is really seen at, 560 the window's minimum;
