@@ -329,12 +329,29 @@ func SubagentTranscriptAfter(s Session, sub string, n int) (Transcript, error) {
 	if !Reads(s.Agent) {
 		return Transcript{Parts: []Part{}}, ErrNotRead
 	}
-	for _, sa := range s.Subagents {
-		if sa.ID != sub {
-			continue
-		}
-		c := Session{Agent: s.Agent, ID: sa.ID, Path: sa.Path}
-		return TranscriptAfter(c, n)
+	c, ok := subagentSession(s, sub)
+	if !ok {
+		return Transcript{Parts: []Part{}}, ErrNoSubagent
 	}
-	return Transcript{Parts: []Part{}}, ErrNoSubagent
+	return TranscriptAfter(c, n)
+}
+
+// SubagentCounted is Counted for the session's subagent sub.
+func SubagentCounted(s Session, sub string, t Transcript) (Transcript, error) {
+	c, ok := subagentSession(s, sub)
+	if !ok {
+		return t, ErrNoSubagent
+	}
+	return Counted(c, t)
+}
+
+// subagentSession is the session's subagent sub, read as a session of its
+// own.
+func subagentSession(s Session, sub string) (Session, bool) {
+	for _, sa := range s.Subagents {
+		if sa.ID == sub {
+			return Session{Agent: s.Agent, ID: sa.ID, Path: sa.Path}, true
+		}
+	}
+	return Session{}, false
 }

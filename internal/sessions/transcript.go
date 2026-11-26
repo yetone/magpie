@@ -22,7 +22,12 @@ type Transcript struct {
 	From     int    `json:"from,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Captured int    `json:"captured,omitempty"`
-	size     int    // characters of Parts' text, kept up as they are added
+	// Turns is the user's messages in the whole file, and TurnsBefore
+	// those among the From parts left out: what a sheet showing only
+	// part of a long session counts its turns against (TurnsOf)
+	Turns       int `json:"turns,omitempty"`
+	TurnsBefore int `json:"turnsBefore,omitempty"`
+	size        int // characters of Parts' text, kept up as they are added
 }
 
 // transcriptMax is the characters of all of a transcript's parts.
@@ -153,6 +158,56 @@ func TranscriptAfter(s Session, n int) (Transcript, error) {
 		return out.add(in, p)
 	})
 	return out, err
+}
+
+// turn says whether a kept part starts a turn as a sheet counts them: a
+// message the user wrote (a [data-turn] in the GUI's drawTalk).
+func turn(p Part) bool {
+	return p.Role == "user" && (p.Kind == "" || p.Kind == "text")
+}
+
+// TurnsOf reads a session's whole file to count its turns, and those
+// among the first before parts it keeps: a long session's sheet is read
+// a part at a time, and still says how many turns the session has
+// (usrname1833 on Discord: "turn i / N" counted only what was read).
+func TurnsOf(s Session, before int) (all, inBefore int, err error) {
+	if !Reads(s.Agent) {
+		return 0, 0, ErrNotRead
+	}
+	if !HasTranscript(s.Agent) || s.Path == "" {
+		return 0, 0, ErrNoTranscript
+	}
+	i := 0 // the parts kept so far, as keep keeps them
+	err = readTranscript(s, func(_ bool, p Part) bool {
+		p, ok := keep(p)
+		if !ok {
+			return true
+		}
+		if turn(p) {
+			all++
+			if i < before {
+				inBefore++
+			}
+		}
+		i++
+		return true
+	})
+	return all, inBefore, err
+}
+
+// Counted is t with Turns and TurnsBefore filled in, when t holds only
+// part of the session (it was cut, or starts past From); a whole one's
+// turns are its own.
+func Counted(s Session, t Transcript) (Transcript, error) {
+	if !t.Cut && t.From <= 0 {
+		return t, nil
+	}
+	all, before, err := TurnsOf(s, t.From)
+	if err != nil {
+		return t, err
+	}
+	t.Turns, t.TurnsBefore = all, before
+	return t, nil
 }
 
 // readTranscript tells add each part of a session's conversation, in order,

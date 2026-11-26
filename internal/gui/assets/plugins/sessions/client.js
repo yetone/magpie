@@ -1828,8 +1828,11 @@ magpie.plugin("sessions", (ctx) => {
       const tops = ts.map(at);
       const atEnd = y + body.clientHeight >= body.scrollHeight - 1;
       const here = ts.length ? (atEnd ? ts.length : Math.max(1, tops.filter((x) => x <= y + SLACK).length)) : 0;
+      // a long session is read a part at a time: its turns are counted
+      // in the whole file, and those before what is shown (usrname1833)
+      const tr = talks.get(k)?.tr, before = tr?.turnsBefore || 0;
       count.hidden = !ts.length;
-      count.textContent = here + " / " + ts.length;
+      count.textContent = (before + here) + " / " + Math.max(tr?.turns || 0, before + ts.length);
       prev.disabled = !tops.some((x) => x < y - SLACK);
       next.disabled = here >= ts.length;
       top.disabled = y <= 0;

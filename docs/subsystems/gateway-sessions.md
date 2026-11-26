@@ -762,6 +762,19 @@ reached the end. The Markdown export reads the whole file and was never
 cut. Verification: `TestTranscriptAfterReadsTheRest`,
 `TestSessionTextReadsPastTheCut`; browser `sessions-talk-rest.test.cjs`.
 
+The sheet's "turn i / N" counts the whole session. A first read that is cut,
+or starts past the start (a search's, `from` > 0), carries `turns`, the
+user's text messages in the whole file, and `turnsBefore`, those among the
+`from` parts it skipped (`sessions.Counted`, `SubagentCounted`; a turn is
+the `turn` of `TurnsOf`, the same parts the sheet marks `[data-turn]`).
+They cost a second scan of the file, so a read that holds the whole session
+and a `after=` read (the sheet has N already) aren't counted, and
+`TranscriptOf`'s other callers (memdistill, the CLI) never pay it. Before,
+N was the turns drawn, about 18 of a long real session (usrname1833 on
+Discord). Verification: `TestCountedCountsTheWholeFile`,
+`TestSessionTranscriptCountsEveryTurn`; browser
+`sessions-talk-turns.test.cjs`.
+
 A gateway session without a saved Desktop name is titled by what it was
 first asked (YOU on Discord), not its `ses_…` id: `sessions.GatewayTitle` reads the first 8 complete turns of
 the oldest recorded file of it in the 7 days kept, takes the first user text

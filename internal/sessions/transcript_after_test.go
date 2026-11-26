@@ -90,3 +90,82 @@ func TestSessionTextReadsPastTheCut(t *testing.T) {
 		t.Fatalf("the end still said to be cut: %.400q", text)
 	}
 }
+
+// A long session's turns are counted in its whole file, not in the part a
+// sheet has read (usrname1833 on Discord: the sheet's "turn i / N" counted
+// only what was read, about 18 turns of a real session): a turn is the
+// user's message, as the sheet counts them, and a read that starts past
+// From knows the turns before it.
+func TestCountedCountsTheWholeFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "turns.jsonl")
+	const turns = 120
+	var lines []string
+	for i := range turns {
+		sec := i * 10
+		id := fmt.Sprintf("msg_%d", i)
+		lines = append(lines,
+			claudeUser(sec, fmt.Sprintf("%q", fmt.Sprintf("ask %d", i))),
+			claudeBlocks(id+"a", sec+1, `{"type":"thinking","thinking":"think first"}`, fmt.Sprintf(`{"type":"tool_use","id":"tu_%d","name":"Bash","input":{"command":"ls"}}`, i)),
+			claudeUser(sec+2, fmt.Sprintf(`[{"type":"tool_result","tool_use_id":"tu_%d","content":%q}]`, i, strings.Repeat("out ", 2000))),
+			claudeBlocks(id+"b", sec+3, fmt.Sprintf(`{"type":"text","text":"answer %d"}`, i)),
+		)
+	}
+	writeLines(t, file, lines...)
+	s := Session{Agent: "claude", ID: "turns", Path: file}
+
+	first, err := TranscriptOf(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := 0
+	for _, p := range first.Parts {
+		if turn(p) {
+			read++
+		}
+	}
+	if !first.Cut || read >= turns || read == 0 {
+		t.Fatalf("the first read should hold some turns, not all: cut %v, %d of %d", first.Cut, read, turns)
+	}
+	got, err := Counted(s, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Turns != turns || got.TurnsBefore != 0 {
+		t.Fatalf("first read counts %d turns, %d before; the file has %d", got.Turns, got.TurnsBefore, turns)
+	}
+	if len(got.Parts) != len(first.Parts) {
+		t.Fatal("counting changed what was read")
+	}
+
+	// a read from part n, as a search's or the rest's, knows the turns before n
+	n := len(first.Parts) + 3
+	later, err := TranscriptAfter(s, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err = Counted(s, later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the turns among the first n parts, from the first read and the next
+	rest, err := TranscriptAfter(s, len(first.Parts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := 0
+	for _, p := range append(append([]Part{}, first.Parts...), rest.Parts...)[:n] {
+		if turn(p) {
+			before++
+		}
+	}
+	if got.Turns != turns || got.TurnsBefore != before || before == 0 {
+		t.Fatalf("from %d: %d turns, %d before; want %d, %d", n, got.Turns, got.TurnsBefore, turns, before)
+	}
+
+	// a whole session's turns are its own: nothing more is read
+	short := claudeFile(t, claudeUser(0, `"hi"`), claudeBlocks("m", 1, `{"type":"text","text":"hello"}`))
+	whole, _ := TranscriptOf(short)
+	if got, _ := Counted(short, whole); got.Turns != 0 || got.TurnsBefore != 0 {
+		t.Fatalf("a whole session was counted again: %+v", got)
+	}
+}

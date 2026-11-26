@@ -335,6 +335,16 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
+		// the first read of a long session counts its turns in the whole
+		// file, for the sheet's "turn i / N" (usrname1833 on Discord); a
+		// count that fails leaves N to what was read
+		if after <= 0 {
+			if sub := q.Get("sub"); sub != "" {
+				t, _ = sessions.SubagentCounted(s, sub, t)
+			} else {
+				t, _ = sessions.Counted(s, t)
+			}
+		}
 		writeJSON(rw, t)
 	})
 	// markdown is a session's whole conversation as a Markdown file (#1276),
