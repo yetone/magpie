@@ -93,6 +93,26 @@ export const FakePlugin = async ({ client }) => ({
       cfg.provider[ID].api = root + "/v2"
       cfg.provider[ID].models["fake-claude"].provider.api = root + "/v1"
     }
+    // $FAKE_AGY: the provider as agy-cli 0.1.141 and later declares it
+    // (#7889): its package Anthropic's, its models on Messages, beside one
+    // image model on openai-compatible (gemini-3.1-flash-image), which
+    // gives the provider a chat address too
+    if (process.env.FAKE_AGY) {
+      const p = cfg.provider[ID]
+      p.npm = "@ai-sdk/anthropic"
+      p.models = {
+        "fake-hydrogen": { name: "Fake Hydrogen", provider: { npm: "@ai-sdk/anthropic" }, reasoning: true, limit: { context: 2000, output: 200 } },
+        "fake-image": { name: "Fake Image", provider: { npm: "@ai-sdk/openai-compatible" }, modalities: { input: ["text", "image"], output: ["image"] }, limit: { context: 0, output: 0 } },
+      }
+      if (process.env.FAKE_AGY === "google") {
+        p.npm = "@ai-sdk/google"
+        p.models["fake-hydrogen"].provider.npm = "@ai-sdk/google"
+      }
+      if (process.env.FAKE_AGY === "openai") {
+        p.npm = "@ai-sdk/openai"
+        p.models["fake-hydrogen"].provider.npm = "@ai-sdk/openai"
+      }
+    }
     // $FAKE_KIRO: a Claude model named as Kiro's plugin names it, on
     // Anthropic's Messages API
     if (process.env.FAKE_KIRO) cfg.provider[ID].models["claude-opus-5.5"] = { name: "Claude Opus 5.5", provider: { npm: "@ai-sdk/anthropic" }, reasoning: true, modalities: { input: ["text", "image"], output: ["text"] }, limit: { context: 200000, output: 32000 } }
@@ -100,7 +120,7 @@ export const FakePlugin = async ({ client }) => ({
     // $FAKE_FAST=1: fake-1 has a fast one, as Cursor's plugin 0.1.x lists
     // a model's -fast (=tier: see the models hook)
     if (process.env.FAKE_FAST === "1") cfg.provider[ID].models["fake-1-fast"] = { name: "Fake One Fast", limit: { context: 1000, output: 100 } }
-    if (process.env.FAKE_RESPONSES) cfg.provider[ID].models["fake-resp"] = { name: "Fake Responses", provider: { npm: "@ai-sdk/openai" }, limit: { context: 4000, output: 400 } }
+    if (process.env.FAKE_RESPONSES && !process.env.FAKE_AGY) cfg.provider[ID].models["fake-resp"] = { name: "Fake Responses", provider: { npm: "@ai-sdk/openai" }, limit: { context: 4000, output: 400 } }
     // $FAKE_ALSO: a model on chat completions whose vendor serves it on
     // Responses and Anthropic's messages too, as Open Design's amr-link
     // serves every model (plugins#888)
@@ -430,6 +450,7 @@ export const FakePlugin = async ({ client }) => ({
       // $FAKE_MODELS_LOG: each time the hook is asked is a line there
       if (process.env.FAKE_MODELS_LOG) (await import("node:fs")).appendFileSync(process.env.FAKE_MODELS_LOG, "asked " + (auth?.refresh ?? auth?.key ?? "-") + "\n")
       if (auth?.refresh === "r-dead" || auth?.key === "dead") throw new Error("the vendor refused the sign-in")
+      if (process.env.FAKE_AGY) return p.models
       if (auth?.refresh === "r-models-gone") throw Object.assign(new Error("the vendor refused the sign-in"), { signIn: "expired" })
       // a sign-in past its time, said in words only, as Grok's plugin says it
       if (auth?.refresh === "r-models-expired") throw new Error("FakeCo's sign-in has expired; run `fake login`")
