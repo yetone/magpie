@@ -71,7 +71,7 @@ func grokModelTables(agent, v1 string, had grokHad, wrote, wrotePct map[string]i
 		}
 		if p, ok := grokOwnPercent(m, had.percents, wrotePct); ok {
 			kvs = append(kvs, edit.KV{Path: "auto_compact_threshold_percent", Value: p})
-		} else if p := grokPercent(grokCompactAt(st, m), window); p > 0 && !had.sessionPercent {
+		} else if p := grokPercentAt(grokCompactAt(st, m), window, st.CompactPercent(agent)); p > 0 && !had.sessionPercent {
 			gavePct[m.ID] = p
 			kvs = append(kvs, edit.KV{Path: "auto_compact_threshold_percent", Value: p})
 		}
@@ -121,6 +121,16 @@ func grokPercent(tokens, window int) int {
 		return 0
 	}
 	return max(1, tokens*100/window)
+}
+
+// grokPercentAt is grokPercent with the percent of that threshold the
+// user picked for the agent (settings.AgentCompactPcts), 0 for none: 65
+// under Full window, where the threshold is the whole window, is 65.
+func grokPercentAt(tokens, window, pct int) int {
+	if pct <= 0 || pct >= 100 || tokens <= 0 || window <= 0 {
+		return grokPercent(tokens, window)
+	}
+	return max(1, min(tokens, window)*pct/window)
 }
 
 // grokOwnWindow is a context_window the user set in magpie's table for m

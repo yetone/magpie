@@ -368,6 +368,16 @@ const claudeContextEnv = "CLAUDE_CODE_MAX_CONTEXT_TOKENS"
 // model, which Anthropic runs to its whole window.
 const claudeCompactEnv = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
 
+// claudeCompactPctEnv is the percent of its auto-compact window at which
+// Claude Code compacts (2.1.327's autocompact threshold: floor(window ×
+// pct / 100), never past the window less 13K, its default; 1 to 100, any
+// other value ignored). magpie writes the percent the user picked for
+// Claude Code (settings.AgentCompactPcts; moooyo on Discord), and leaves
+// one the user set themselves. 2.1.332 reads it only while the window has a
+// source other than "auto": magpie's models ("unknown-model") or a window
+// set anywhere; an Anthropic model with none compacts at the API's limit.
+const claudeCompactPctEnv = "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"
+
 // claudeOutputEnv is the longest reply Claude Code asks a model for. One it
 // doesn't know (any but Claude's own names) it asks for 32000 at most
 // (claudeUnknownOutput), whatever the model can write, so a model that
@@ -1113,6 +1123,40 @@ func claudeIn(at place) *Agent {
 		}
 		return nil
 	}
+	// the compaction percent magpie last wrote, kept apart from the
+	// user's own in the same way
+	pctKey := at.key("claude.compact_pct")
+	pctOurs := func() bool {
+		cur := env(claudeCompactPctEnv)
+		return cur != "" && cur == stashShared()[pctKey]
+	}
+	dropPct := func() error {
+		defer forget(pctKey)
+		if pctOurs() {
+			return edit.DelJSON(path, "env."+claudeCompactPctEnv)
+		}
+		return nil
+	}
+	// writePct has Claude Code compact at the percent of its window the
+	// user picked for it (settings.AgentCompactPcts), whatever the
+	// window: magpie's, the user's own autoCompactWindow, or the model's
+	// whole one. None picked, Claude Code compacts where it does itself.
+	writePct := func() error {
+		if env(claudeCompactPctEnv) != "" && !pctOurs() {
+			forget(pctKey)
+			return nil
+		}
+		p := settings.Load().CompactPercent("claude")
+		if p == 0 || p == 100 {
+			return dropPct()
+		}
+		v := strconv.Itoa(p)
+		stash(map[string]string{pctKey: v})
+		if env(claudeCompactPctEnv) == v {
+			return nil
+		}
+		return edit.SetJSON(path, edit.KV{Path: "env." + claudeCompactPctEnv, Value: v})
+	}
 	// budgeted is set by writeWindow, which runs before writeCompact,
 	// while each model has its own window under modelSettings (claudePlan):
 	// the variable would take precedence over them, so it goes
@@ -1809,6 +1853,9 @@ func claudeIn(at place) *Agent {
 		if err := dropCompact(); err != nil {
 			return "", err
 		}
+		if err := dropPct(); err != nil {
+			return "", err
+		}
 		// the window and capabilities stay as Claude Desktop's Code tab
 		// needs them while Desktop is on magpie (#1458)
 		if err := desktopOnly(); err != nil {
@@ -2173,6 +2220,9 @@ func claudeIn(at place) *Agent {
 		}
 		onboard()
 		if err := writeCompact(); err != nil {
+			return err
+		}
+		if err := writePct(); err != nil {
 			return err
 		}
 		if err := writePicker(); err != nil {
@@ -2751,6 +2801,9 @@ func claudeIn(at place) *Agent {
 				return err
 			}
 			if err := writeCompact(); err != nil {
+				return err
+			}
+			if err := writePct(); err != nil {
 				return err
 			}
 			if err := writePicker(); err != nil {

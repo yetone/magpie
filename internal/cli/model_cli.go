@@ -112,6 +112,12 @@ const modelUsage = `usage:
                                                  settings on the Agents page,
                                                  is the same switch; a provider's own Compact at (its
                                                  editor) comes before it
+  magpie model compact-pct <agent> [<percent>|default]
+                                                 where in its window one agent compacts, such as 65: Codex,
+                                                 Claude Code, Grok Build or Qwen Code (claude, codex, grok,
+                                                 qwen); the window is the one Long conversations gives it.
+                                                 default leaves the agent's own; a value you set in the
+                                                 agent's own config stays
   magpie model context-cap [<size>|off|all|own]  the longest context window any model is told, such as 200k:
                                                  agents' lists and /v1/models say no more for every model
                                                  that has no window of its own (magpie model context); a
@@ -165,6 +171,8 @@ func modelCmd(args []string) error {
 		return modelSuffix(args[1:])
 	case "compact", "full-context":
 		return modelCompact(args[1:])
+	case "compact-pct", "compact-percent":
+		return modelCompactPct(args[1:])
 	case "window", "agent-context":
 		return modelAgentWindow(args[1:])
 	case "context-cap", "ctx-cap":
@@ -927,6 +935,43 @@ func agentCompact(agent string, args []string) error {
 		words = grokOwnWords
 	}
 	fmt.Println(green.Render("✓"), agent+":", words)
+	return nil
+}
+
+// modelCompactPct says or sets where in its window an agent compacts
+// (settings.AgentCompactPcts), a percent; default leaves the agent's own.
+func modelCompactPct(args []string) error {
+	usage := "magpie model compact-pct " + strings.Join(settings.CompactPctAgents, "|") + " [<1 to 99>|default]"
+	if len(args) == 0 || !slices.Contains(settings.CompactPctAgents, args[0]) {
+		return fmt.Errorf("%s", usage)
+	}
+	agent := args[0]
+	if len(args) == 1 {
+		if p := settings.Load().CompactPercent(agent); p > 0 {
+			fmt.Println(fmt.Sprintf("%d%%", p), muted.Render(fmt.Sprintf("· %s compacts at %d%% of its window · magpie model compact-pct %s default", agent, p, agent)))
+		} else {
+			fmt.Println("default", muted.Render(fmt.Sprintf("· %s compacts where it does itself · magpie model compact-pct %s <percent>", agent, agent)))
+		}
+		return nil
+	}
+	var p int
+	switch v := strings.TrimSuffix(strings.ToLower(args[1]), "%"); v {
+	case "default", "off", "none", "0":
+	default:
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 99 {
+			return fmt.Errorf("%s, not %q", usage, args[1])
+		}
+		p = n
+	}
+	if err := provider.SetAgentCompactPct(agent, p); err != nil {
+		return err
+	}
+	if p == 0 {
+		fmt.Println(green.Render("✓"), agent+": compacts where it does itself")
+	} else {
+		fmt.Println(green.Render("✓"), fmt.Sprintf("%s: compacts at %d%% of its window", agent, p))
+	}
 	return nil
 }
 

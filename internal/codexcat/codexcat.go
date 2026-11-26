@@ -479,6 +479,12 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 				w = min(c, m.Compact)
 			}
 			e.Context = &c
+			// at the percent of that window the user picked for Codex
+			// (AgentCompactPcts), the whole window's under Full window:
+			// Codex has no percent of its own, only this limit in tokens
+			if p := work.CompactPercent("codex"); p > 0 && p < 100 {
+				w = settings.AtPercent(w, p)
+			}
 			if w < c {
 				e.AutoCompact = &w
 			}
@@ -489,6 +495,7 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			// vendor's "too long" it only errors again until a manual
 			// /compact (jiangguochao666 on X). The threshold alone is
 			// one Codex compacts at (ModelInfo::auto_compact_token_limit)
+			w = settings.AtPercent(w, work.CompactPercent("codex"))
 			e.AutoCompact = &w
 		}
 		e.Truncation.Mode, e.Truncation.Limit = "tokens", 10000
@@ -1270,11 +1277,22 @@ func listedEntry(m catalog.Model, priority int, work settings.Settings, autoRevi
 		} else if work.CompactAt > 0 {
 			w = work.Working(c)
 		}
+		// and the percent of it the user picked for Codex
+		// (AgentCompactPcts)
+		w = settings.AtPercent(w, work.CompactPercent("codex"))
 		if w < c {
 			e["auto_compact_token_limit"] = w
 		}
-	} else if w := m.Compact; w > 0 || work.CompactAt > 0 && !work.FullContext {
+	} else if w, p := m.Compact, work.CompactPercent("codex"); w > 0 || work.CompactAt > 0 && !work.FullContext || p > 0 && p < 100 {
 		w = cmp.Or(w, work.CompactAt)
+		if w == 0 || p > 0 && p < 100 {
+			// the percent picked is of the vendor's own window, else of
+			// the threshold the user set
+			if n, ok := e["context_window"].(float64); ok && n > 0 && (w == 0 || int(n) < w) {
+				w = int(n)
+			}
+			w = settings.AtPercent(w, p)
+		}
 		// no window magpie knows: the user's threshold still holds,
 		// under the vendor's own window and limit where it says them
 		if n, ok := e["context_window"].(float64); ok && n > 0 && int(n) <= w {

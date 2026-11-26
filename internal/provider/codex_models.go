@@ -869,6 +869,10 @@ func buildCodexListTag(kind string) string {
 	if n := settings.Load().ForAgent("codex").Compact(); n != settings.WorkingWindow {
 		ms = append(ms, catalog.Model{ID: "~compact", Context: n})
 	}
+	// and the percent of that window Codex compacts at (AgentCompactPcts)
+	if p := settings.Load().CompactPercent("codex"); p > 0 {
+		ms = append(ms, catalog.Model{ID: "~compactpct", Context: p})
+	}
 	// and the model Codex's auto-review runs on (#938)
 	if v := codexcat.AutoReviewModel(); v != "" {
 		ms = append(ms, catalog.Model{ID: "~autoreview:" + v})

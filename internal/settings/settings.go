@@ -1072,6 +1072,14 @@ type Settings struct {
 	// (molianyin4227 on Discord: models differ, so one size for every
 	// agent fits none). An agent with none follows those two (ForAgent).
 	AgentCompacts map[string]AgentCompact `json:"agentCompacts,omitempty"`
+	// AgentCompactPcts is where in its window an agent compacts, as a
+	// percent, by its kind (CompactPctAgents; moooyo on Discord: compact
+	// once 65% of the context is used). The window is the one Long
+	// conversations gives the agent (the working window, a size typed, a
+	// model's own Compact at, or the whole window under Full window), so
+	// 65 under Full window is 65% of the model's whole context. An agent
+	// with none compacts where it does by default. See CompactPercent.
+	AgentCompactPcts map[string]int `json:"agentCompactPcts,omitempty"`
 	// AgentContexts is the context window an agent is told for a model, when
 	// it is not the one every agent is told (ul3140773077392 on X: dsh
 	// compacts earlier than Codex does at the same window, so its window
@@ -1869,6 +1877,34 @@ type AgentCompact struct {
 // model tables (auto_compact_threshold_percent of the model's window).
 // Only these take an AgentCompact.
 var CompactAgents = []string{"codex", "claude", "grok"}
+
+// CompactPctAgents are the agents that take a percent of their window to
+// compact at (AgentCompactPcts), each by a knob of its own read from its
+// source: Claude Code's CLAUDE_AUTOCOMPACT_PCT_OVERRIDE (a percent of its
+// auto-compact window, never past the window less 13K), Codex's
+// auto_compact_token_limit (tokens, so the percent of the window it is
+// given), Grok Build's auto_compact_threshold_percent and Qwen Code's
+// context.autoCompactThreshold (a fraction of the window).
+var CompactPctAgents = []string{"codex", "claude", "grok", "qwen"}
+
+// CompactPercent is the percent of its window the agent of that kind
+// compacts at (AgentCompactPcts), 0 for its own default.
+func (s Settings) CompactPercent(kind string) int {
+	if p := s.AgentCompactPcts[kind]; p > 0 && p <= 100 {
+		return p
+	}
+	return 0
+}
+
+// AtPercent is n tokens at p percent, rounded down so the agent never
+// compacts later than p, and n as it is for p of 0 (the agent's default)
+// or 100.
+func AtPercent(n, p int) int {
+	if p <= 0 || p >= 100 || n <= 0 {
+		return n
+	}
+	return max(1, n*p/100)
+}
 
 // ForAgent is s as the agent of that kind reads Long conversations: its
 // own AgentCompact in CompactAt and FullContext, when it has one.

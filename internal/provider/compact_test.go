@@ -198,3 +198,43 @@ func TestSetAgentCompact(t *testing.T) {
 		t.Fatalf("others left: %+v", s.AgentCompacts)
 	}
 }
+
+// An agent's compaction percent is set for it alone, tells the agents once
+// a change, and refuses an agent with no knob for it and a value that is
+// no percent, changing nothing.
+func TestSetAgentCompactPct(t *testing.T) {
+	limitsHome(t)
+	told := 0
+	catalog.Changed = func() { told++ }
+	t.Cleanup(func() { catalog.Changed = nil })
+	for _, step := range []struct {
+		agent string
+		pct   int
+		want  map[string]int
+		told  int
+	}{
+		{"claude", 65, map[string]int{"claude": 65}, 1},
+		{"qwen", 80, map[string]int{"claude": 65, "qwen": 80}, 2},
+		{"claude", 65, map[string]int{"claude": 65, "qwen": 80}, 2},
+		{"claude", 0, map[string]int{"qwen": 80}, 3},
+		{"qwen", 0, nil, 4},
+	} {
+		if err := SetAgentCompactPct(step.agent, step.pct); err != nil {
+			t.Fatal(err)
+		}
+		if got := settings.Load().AgentCompactPcts; !maps.Equal(got, step.want) || (got == nil) != (step.want == nil) || told != step.told {
+			t.Fatalf("%s %d: %v, told %d; want %v, %d", step.agent, step.pct, got, told, step.want, step.told)
+		}
+	}
+	for _, bad := range []struct {
+		agent string
+		pct   int
+	}{{"opencode", 65}, {"gemini", 65}, {"codex", 101}, {"codex", -1}} {
+		if err := SetAgentCompactPct(bad.agent, bad.pct); err == nil {
+			t.Fatalf("%s %d taken", bad.agent, bad.pct)
+		}
+	}
+	if s := settings.Load(); s.AgentCompactPcts != nil || told != 4 {
+		t.Fatalf("a refused value changed something: %v, told %d", s.AgentCompactPcts, told)
+	}
+}

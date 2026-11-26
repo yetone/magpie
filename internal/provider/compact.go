@@ -270,6 +270,39 @@ func SetAgentCompact(agent string, c *settings.AgentCompact) error {
 	return nil
 }
 
+// SetAgentCompactPct has an agent of settings.CompactPctAgents compact at
+// pct percent of its window (settings.AgentCompactPcts); 0 takes it away,
+// and the agent compacts where it does by default again.
+func SetAgentCompactPct(agent string, pct int) error {
+	if !slices.Contains(settings.CompactPctAgents, agent) {
+		return errorf("%q takes no percent of its window to compact at", agent)
+	}
+	if pct < 0 || pct > 100 {
+		return errorf("a compaction threshold is a percent from 1 to 100, not %d", pct)
+	}
+	s := settings.Load()
+	if s.AgentCompactPcts[agent] == pct {
+		return nil
+	}
+	s.AgentCompactPcts = maps.Clone(s.AgentCompactPcts)
+	if pct == 0 {
+		delete(s.AgentCompactPcts, agent)
+	} else {
+		if s.AgentCompactPcts == nil {
+			s.AgentCompactPcts = map[string]int{}
+		}
+		s.AgentCompactPcts[agent] = pct
+	}
+	if len(s.AgentCompactPcts) == 0 {
+		s.AgentCompactPcts = nil
+	}
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
 // SetCompactAt has every model without a threshold of its own compacted at
 // n tokens, Full window turned off; 0 is the working window again
 // (settings.WorkingWindow).

@@ -96,3 +96,35 @@ func TestModelAgentWindowCmd(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+// magpie model compact-pct claude 65 has Claude Code compact at 65% of its
+// window (moooyo on Discord) and no other agent; default takes it away; an
+// agent with no knob for it, a percent out of range or a word is refused,
+// and changes nothing.
+func TestModelCompactPctCmd(t *testing.T) {
+	groupsHome(t)
+	catalog.Changed = nil
+	if err := modelCmd([]string{"compact-pct", "claude", "65"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := modelCmd([]string{"compact-pct", "qwen", "80%"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := modelCmd([]string{"compact-pct", "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.Load().AgentCompactPcts; got["claude"] != 65 || got["qwen"] != 80 || len(got) != 2 {
+		t.Fatalf("after claude 65, qwen 80%%: %v", got)
+	}
+	for _, bad := range [][]string{{"compact-pct"}, {"compact-pct", "opencode", "65"}, {"compact-pct", "claude", "100"}, {"compact-pct", "claude", "-5"}, {"compact-pct", "claude", "half"}} {
+		if err := modelCmd(bad); err == nil {
+			t.Fatalf("took %v", bad)
+		}
+	}
+	if err := modelCmd([]string{"compact-pct", "claude", "default"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.Load().AgentCompactPcts; got["claude"] != 0 || got["qwen"] != 80 {
+		t.Fatalf("after claude default: %v", got)
+	}
+}

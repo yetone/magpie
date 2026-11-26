@@ -25,12 +25,14 @@ package agent
 import (
 	"encoding/json"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/jsonc"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 const (
@@ -39,6 +41,11 @@ const (
 	qwenModelAt = "model.baseUrl"
 	qwenAuth    = "security.auth.selectedType"
 	qwenEnv     = "env." + qwenEnvKey
+	// qwenCompactPct is the share of a model's window Qwen Code compacts
+	// at, a fraction over 0 and at most 1 (0.21.9's computeThresholds:
+	// the smaller of it times contextWindowSize and the window less what
+	// a summary needs; 0.85 when unset). One setting for every model.
+	qwenCompactPct = "context.autoCompactThreshold"
 	// qwenEnvKey names the variable magpie's provider entries take their
 	// key from: qwen-specific so a shell or ~/.qwen/.env value of the
 	// name is unlikely to shadow the settings' (their priority over it is
@@ -234,10 +241,44 @@ func qwenIn(at place) *Agent {
 		return qwenPrune(path, "security")
 	}
 
+	// setPct writes the share of the window Qwen Code compacts at, the
+	// percent the user picked for it (settings.AgentCompactPcts), while
+	// magpie's models are in it (with); without them, or with none
+	// picked, magpie's comes out. One the user set is theirs, left as it
+	// is: a value is magpie's only while it is what magpie last wrote.
+	keyPct := "qwen:" + path + ":" + qwenCompactPct
+	setPct := func(with bool) error {
+		cur, has := edit.GetJSON(path, qwenCompactPct)
+		if has && (cur == "" || cur != stashShared()[keyPct]) {
+			forget(keyPct)
+			return nil
+		}
+		p := settings.Load().CompactPercent("qwen")
+		if !with || p == 0 || p == 100 {
+			forget(keyPct)
+			if !has {
+				return nil
+			}
+			if err := edit.DelJSON(path, qwenCompactPct); err != nil {
+				return err
+			}
+			return qwenPrune(path, "context")
+		}
+		v := strconv.FormatFloat(float64(p)/100, 'f', -1, 64)
+		stash(map[string]string{keyPct: v})
+		if cur == v {
+			return nil
+		}
+		return edit.SetJSON(path, edit.KV{Path: qwenCompactPct, Value: json.RawMessage(v)})
+	}
+
 	// setProviders writes modelProviders.openai with the user's own and,
 	// when with, magpie's after them; none left takes the array out. A
 	// with=false when none were magpie's changes nothing.
 	setProviders := func(with bool) error {
+		if err := setPct(with); err != nil {
+			return err
+		}
 		var ms []any
 		var had bool
 		for _, c := range qwenCustoms(path) {

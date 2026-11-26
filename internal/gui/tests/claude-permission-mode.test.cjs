@@ -107,7 +107,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.keyboard.press("Escape");
       await page.locator('.row.agent[data-id="codex"] .ag-link').click();
       await page.locator('.row.agent[data-id="codex"] .ag-prefs').waitFor();
-      assert.equal(await page.locator('.row.agent[data-id="codex"] .own-fields').count(), 0);
+      // Codex's Advanced holds its compaction percent (compact-pct), never a permission mode
+      assert.equal(await page.locator('.row.agent[data-id="codex"] .own-fields .own-field').count(), 0);
       assert.deepEqual(errors, []);
     });
   }

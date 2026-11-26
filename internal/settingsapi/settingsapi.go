@@ -395,6 +395,8 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.FullContext = cur.FullContext     // set on its own (full-context)
 	in.CompactAt = cur.CompactAt         // and so is the threshold
 	in.AgentCompacts = cur.AgentCompacts // and each agent's own (agent-compact)
+	// and where in its window each compacts (agent-compact-pct)
+	in.AgentCompactPcts = cur.AgentCompactPcts
 	in.AgentContexts = cur.AgentContexts // and the windows each is told (agent-contexts)
 	in.ContextCap = cur.ContextCap       // and the longest window of every model (context-cap)
 	in.ContextCapAll = cur.ContextCapAll // and whether it holds the user's own windows

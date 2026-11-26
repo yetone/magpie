@@ -185,19 +185,81 @@ function claudeAttributionRow(options) {
   return row;
 }
 
+// Where in its window the agent compacts, a percent (moooyo on Discord:
+// compact once 65% of the context is used), for the agents with a knob of
+// their own for it (settings.CompactPctAgents). The window is the one Long
+// conversations gives the agent; Default leaves the agent's own. Seldom
+// changed, so it sits under Advanced.
+const PCT_AGENTS = ["codex", "claude", "grok", "qwen"];
+const PCTS = [50, 60, 65, 70, 75, 80, 85, 90];
+function compactPctRow(a) {
+  const kind = kindOf(a);
+  if (!PCT_AGENTS.includes(kind)) return null;
+  const label = "Compact at";
+  const row = el("div", "row pref compact-pct");
+  row.dataset.agent = kind;
+  const who = el("div", "who"), val = el("div", "val");
+  who.append(el("div", "name", t(label)));
+  row.append(who, val);
+  const name = (p) => p ? t("{n}% of the window", { n: p }) : t("Default");
+  let drawn;
+  const draw = () => {
+    const cur = prefs ? (prefs.agentCompactPcts || {})[kind] || 0 : -1;
+    if (cur === drawn) return;
+    drawn = cur;
+    const b = el("button", "sess-pick");
+    b.type = "button";
+    b.setAttribute("aria-label", t(label));
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-expanded", "false");
+    b.append(el("span", "", cur < 0 ? "—" : name(cur)), svg(CHEV, 11, 1.6));
+    b.disabled = cur < 0;
+    b.onclick = (e) => {
+      e.stopPropagation();
+      if (b.classList.contains("open")) return closeProtoMenu();
+      const ps = cur && !PCTS.includes(cur) ? [...PCTS, cur].sort((x, y) => x - y) : PCTS;
+      openProtoMenu(b, [0, ...ps].map((p) => ({ v: String(p), name: name(p), note: "" })), String(cur), (v) => {
+        if (Number(v) === cur) return;
+        writingPrefs(api("settings/agent-compact-pct", { agent: kind, pct: Number(v) })).then((ns) => {
+          prefs = ns;
+          renderSettings();
+          if (row.isConnected) draw();
+        }).catch(settingsErr);
+      }, label, "sess-menu", "right");
+    };
+    val.replaceChildren(b);
+  };
+  draw();
+  // drawn again with the settings, each time they are (renderAgentPrefs)
+  const box = document.getElementById("fullContextSegs");
+  let placed = false;
+  const seen = new MutationObserver(() => {
+    if (!row.isConnected && placed) return seen.disconnect();
+    placed ||= row.isConnected;
+    draw();
+  });
+  if (box) seen.observe(box, { childList: true });
+  return row;
+}
+
 // The user's own settings of the agent's (agent.Field.Own: Claude Code's
 // permission mode, EricChenChannel on X), seldom changed, so folded under
 // Advanced after the sheet's list; written in the agent's own config, never
-// taken back when magpie lets go of the agent.
+// taken back when magpie lets go of the agent. The compaction percent
+// (compactPctRow) comes first in the same fold.
 function ownFieldsFold(list, a) {
   const own = a.own || [];
-  if (!own.length) return;
-  queueMicrotask(() => {
+  const pct = compactPctRow(a);
+  if (!own.length && !pct) return;
+  // built at once where the list is placed already (Details measures its
+  // height right after), else once the sheet has placed it
+  const build = () => {
     if (!list.parentNode) return;
     list.parentNode.querySelector(":scope > .own-fields")?.remove();
     const fold = el("details", "prefs-more own-fields");
     const inner = el("div", "list prefs");
     fold.append(el("summary", "", t("Advanced")), inner);
+    if (pct) inner.append(pct);
     for (const f of own) {
       const label = f.label[0].toUpperCase() + f.label.slice(1);
       const row = el("div", "row pref own-field");
@@ -232,7 +294,9 @@ function ownFieldsFold(list, a) {
       inner.append(row);
     }
     list.after(fold);
-  });
+  };
+  if (list.parentNode) build();
+  else queueMicrotask(build);
 }
 
 // Its own context windows come in the same sheet, last (agentwindow.js).

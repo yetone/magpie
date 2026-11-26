@@ -2150,6 +2150,23 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// where in its window an agent compacts, a percent
+	// (settings.AgentCompactPcts): 0 is the agent's own default
+	mux.HandleFunc("POST /api/settings/agent-compact-pct", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Agent string
+			Pct   int
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetAgentCompactPct(in.Agent, in.Pct); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// the windows one agent is told, apart from every other's
 	// (settings.AgentContexts): Contexts replaces them, none takes them away
 	mux.HandleFunc("POST /api/settings/agent-contexts", func(rw http.ResponseWriter, r *http.Request) {
