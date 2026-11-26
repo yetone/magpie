@@ -3863,6 +3863,11 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .editor .plugin-option .segs { flex: none; }
 .editor .acct-proxy .who { font-size: 12px; font-weight: 500; color: var(--fg-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor .acct-proxies > .hint { margin-top: 0; }
+/* the account each agent uses (nb5p on Discord): the agent, then its account */
+.editor .agent-accts { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.editor .agent-acct { display: grid; grid-template-columns: minmax(0, 9em) minmax(0, auto); align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.editor .agent-acct .who { font-size: 12px; font-weight: 500; color: var(--fg-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor .agent-acct > .rt-cond { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* a key's own price rate (@tnt12231 on X): its name, then the rate */
 .editor .key-rates { display: grid; gap: 8px; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .editor .key-rates > .hint { margin-top: 0; }

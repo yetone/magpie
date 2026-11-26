@@ -12,6 +12,7 @@ import (
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // A ChatGPT backend slow to hand over its model list doesn't hold magpie's
@@ -74,16 +75,42 @@ func TestCodexModelListBuildsProvidersOnce(t *testing.T) {
 	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"models":[{"slug":"gpt-5.5","priority":1}]}`))
 	})
+	// package agent lists the agents (usage.Agents), and isn't linked here
+	was := usage.PluginAgents
+	usage.PluginAgents = func() []usage.Known {
+		return []usage.Known{{ID: "codex", Names: []string{"codex"}, UA: []string{"codex_cli_rs"}}}
+	}
+	t.Cleanup(func() { usage.PluginAgents = was })
 	h := New().Handler()
-	n := provider.AllBuilt.Load()
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", CodexPath+"/models?client_version=0.159.2", nil)
-	req.Header.Set("Authorization", "Bearer chatgpt-token")
-	h.ServeHTTP(rec, req)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"fake/m1"`) || !strings.Contains(rec.Body.String(), `"gpt-5.5"`) {
-		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	list := func(when string) {
+		t.Helper()
+		n := provider.AllBuilt.Load()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", CodexPath+"/models?client_version=0.159.2", nil)
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		req.Header.Set("User-Agent", "codex_cli_rs/0.159.2")
+		h.ServeHTTP(rec, req)
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"fake/m1"`) || !strings.Contains(rec.Body.String(), `"gpt-5.5"`) {
+			t.Fatalf("%s: %d %s", when, rec.Code, rec.Body.String())
+		}
+		if got := provider.AllBuilt.Load() - n; got != 1 {
+			t.Fatalf("%s: the providers were built %d times for one list, want 1", when, got)
+		}
 	}
-	if got := provider.AllBuilt.Load() - n; got != 1 {
-		t.Fatalf("the providers were built %d times for one list, want 1", got)
+	list("no agent set to an account")
+	// Codex set to one key of fake (Accounts by agent): the gateway's look
+	// at it is the list's one build too
+	p, _ := provider.Find("fake")
+	p.Keys = []provider.KeyAccount{{Name: "Codex", Key: "k-codex"}}
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
 	}
+	if err := provider.SetAgentAccount("fake", "codex", "Codex"); err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.AgentAccounts("codex")) != 1 {
+		t.Fatal("codex isn't set to the key")
+	}
+	provider.Changed() // the look above's build is not the list's
+	list("codex set to an account")
 }

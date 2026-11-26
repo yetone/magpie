@@ -837,8 +837,7 @@ func codexAccounts(r *http.Request, model string) (string, bool) {
 	// may not use spent, a model it may not asked for. Neither list set,
 	// the relay is the key's as it always was
 	_, keyHeld := keyHolds(r)
-	_, accHeld := accountHolds(r)
-	if keyHeld || accHeld {
+	if keyHeld || accountHoldsOn(r, "codex") {
 		return id, true
 	}
 	// Codex's sign-in known to be out (of its allowance, no credits): a

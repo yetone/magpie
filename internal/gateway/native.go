@@ -107,7 +107,8 @@ func (s *Server) native(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusNotFound, fmt.Sprintf("magpie has no provider %q turned on", id))
 		return
 	}
-	p := *found
+	// on the account or key its agent is set to use (agentHeld)
+	p := nativeAgentAccount(r, *found)
 	if !p.IsRemoteMagpie() && isArk(p) && nativeArkPath(r.Method, path) {
 		s.nativeArk(w, r, p, call, fail)
 		return

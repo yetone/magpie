@@ -173,6 +173,51 @@ const heldToNone = "\x00"
 // Everything that holds a request to its key's accounts
 // (AllowsAccount) holds it to the group's then, by the one rule.
 func (who Identity) HeldToGroup(group string, accounts []string) Identity {
+	if out, ok := who.heldTo(accounts); ok {
+		out.Group, out.agentOnly = group, false
+		return out
+	}
+	return who
+}
+
+// HeldToAgent is who held to the accounts agent was set to use (accounts,
+// "<provider>/<ref>", one a provider), by HeldToGroup's rule: a provider
+// one names is used on that account or key alone, while it is one the
+// caller's key may use as well; every other provider as before. Agent is
+// set, for the error to say whose choice held the request.
+func (who Identity) HeldToAgent(agent string, accounts []string) Identity {
+	if out, ok := who.heldTo(accounts); ok {
+		out.Agent, out.agentOnly = agent, len(who.Accounts) == 0 || who.agentOnly
+		return out
+	}
+	return who
+}
+
+// AgentOnly says every account who is held to is the one its agent was
+// set to use (HeldToAgent), none a gateway key's or a routing group's.
+func (who Identity) AgentOnly() bool { return who.agentOnly }
+
+// KeyHeld is Restricted less the accounts an agent was set to use: a key
+// or a group holds who to some models or accounts. A request held by its
+// agent's accounts alone is routed as one held to none, those accounts
+// aside (the gateway's keyHolds).
+func (who Identity) KeyHeld() bool {
+	return len(who.Models) > 0 || len(who.Accounts) > 0 && !who.agentOnly
+}
+
+// NamesProvider says who's accounts name some account of provider pid.
+func (who Identity) NamesProvider(pid string) bool {
+	for _, a := range who.Accounts {
+		if p, _, ok := strings.Cut(strings.TrimSpace(a), "/"); ok && strings.EqualFold(p, pid) {
+			return true
+		}
+	}
+	return false
+}
+
+// heldTo is HeldToGroup's and HeldToAgent's rule, false when accounts
+// names none.
+func (who Identity) heldTo(accounts []string) (Identity, bool) {
 	named := map[string][]string{} // a provider the group names, in lower case: its entries as written
 	var order []string
 	for _, a := range accounts {
@@ -187,7 +232,7 @@ func (who Identity) HeldToGroup(group string, accounts []string) Identity {
 		named[pid] = append(named[pid], a)
 	}
 	if len(order) == 0 {
-		return who
+		return who, false
 	}
 	var out []string
 	for _, a := range who.Accounts {
@@ -207,8 +252,8 @@ func (who Identity) HeldToGroup(group string, accounts []string) Identity {
 			out = append(out, pid+"/"+heldToNone)
 		}
 	}
-	who.Accounts, who.Group = out, group
-	return who
+	who.Accounts = out
+	return who, true
 }
 
 // AccountsShown is a key's accounts as words say them: those it may use

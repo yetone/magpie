@@ -73,7 +73,7 @@ func codexOwnOffMagpie(r *http.Request, body []byte, model string) (to *http.Req
 	if _, keyHeld := keyHolds(r); keyHeld {
 		return nil, ""
 	}
-	if _, accHeld := accountHolds(r); accHeld {
+	if accountHoldsOn(r, "codex") {
 		return nil, ""
 	}
 	if !codexOwnModel(model) {

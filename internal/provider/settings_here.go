@@ -28,7 +28,7 @@ var settingFields = []string{
 	// on or off
 	"Off",
 	// routing
-	"Fallback", "Routing", "Sink", "UseFirst", "NoStandIn", "Affinity",
+	"Fallback", "Routing", "Sink", "UseFirst", "NoStandIn", "Affinity", "AgentAccounts",
 	// limits and rests
 	"MaxConcurrency", "MaxAccounts", "AccountConcurrency", "AccountWeights", "QueueLimit", "QueueWait",
 	"MaxRPM", "MaxImages", "QuotaRest", "QuotaResetAt", "RestCap", "LimitRestOff",

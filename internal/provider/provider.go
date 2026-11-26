@@ -637,6 +637,11 @@ type Provider struct {
 	// group rate). A key not in it has 1; a rate in KeyPriceRates is
 	// never multiplied (see key_rate.go).
 	KeyRateFactors map[string]float64 `json:"keyRateFactors,omitempty"`
+	// AgentAccounts is the account or key, by its id (AccountIDs), each
+	// agent set to one uses alone, by the agent's id (nb5p on Discord: one
+	// relay key for Claude Code, another for Codex); an agent not in it
+	// uses every one (agent_accounts.go)
+	AgentAccounts map[string]string `json:"agentAccounts,omitempty"`
 	// zeroRate marks a PriceRate of 0 that is a rate, a free group's, not
 	// the price as listed; set by atKeyRate alone
 	zeroRate bool
@@ -1073,6 +1078,7 @@ func (p Provider) clone() Provider {
 	p.KeyPriceRates = maps.Clone(p.KeyPriceRates)
 	p.KeyRateFactors = maps.Clone(p.KeyRateFactors)
 	p.KeyBalanceAuth = maps.Clone(p.KeyBalanceAuth)
+	p.AgentAccounts = maps.Clone(p.AgentAccounts)
 	if p.AccountWindowCaps != nil {
 		m := make(map[string]map[string]int, len(p.AccountWindowCaps))
 		for k, v := range p.AccountWindowCaps {
@@ -1199,6 +1205,7 @@ func accountSettings(a, pk Provider) Provider {
 	a.UseFirst = pk.UseFirst
 	a.NoStandIn = pk.NoStandIn
 	a.AccountNames = pk.AccountNames
+	a.AgentAccounts = pk.AgentAccounts // the account each agent uses
 	a.MaxConcurrency, a.PinUpstream = pk.MaxConcurrency, pk.PinUpstream
 	a.MaxAccounts = pk.MaxAccounts
 	a.AccountConcurrency, a.QueueLimit, a.QueueWait = pk.AccountConcurrency, pk.QueueLimit, pk.QueueWait
@@ -2005,6 +2012,7 @@ func normalize(p Provider) Provider {
 	p.KeyOwnBalances = normalKeyOwnBalances(p.KeyOwnBalances)
 	p.KeyPriceRates = normalKeyPriceRates(p.KeyPriceRates)
 	p.KeyRateFactors = normalKeyRateFactors(p.KeyRateFactors)
+	p.AgentAccounts = normalAgentAccounts(p.AgentAccounts)
 	p.KeyBalanceAuth = normalKeyBalanceAuth(p.KeyBalanceAuth, p)
 	if TopUpRateOK(p.TopUpRate) != "" {
 		p.TopUpRate = 0

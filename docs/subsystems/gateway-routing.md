@@ -781,6 +781,61 @@ the accounts of one provider, and the user made a group per account.
 `TestGroupAccountsAndAKeysAccounts`, `TestGroupAccountsSaved`,
 `TestHeldToGroup`, `group-accounts.test.cjs`.
 
+## An agent on one account of its own
+
+An agent may be set to use one account or key of a provider
+(`Provider.AgentAccounts`, agent id to the account's stable id or key
+fingerprint; nb5p on Discord: Claude Code on one key of a relay, Codex on
+another, so the relay's dashboard shows each one's use). A routing group
+was the only way before, and a group shows to the agent as one model, so
+the agent lost its usual model list. An agent not set uses the provider as
+every caller does.
+
+- `agentHeld` in
+  [`agent_accounts.go`](../../internal/gateway/agent_accounts.go), in the
+  handler chain after `keyLimited`, narrows the request's identity by the
+  group's rule (`access.Identity.HeldToAgent`, beside `HeldToGroup`):
+  `provider.AgentAccounts(callerOf(r).agent)` gives one
+  `<provider>/<id>` a provider, and every gate that holds a request to its
+  accounts (`accountAllowed`, `allowedCandidates`, `onKeys`, `allowedKey`)
+  holds it there, on every route: chat, responses, messages,
+  `count_tokens`, embeddings, images and video, and the fallbacks.
+  `Identity.Agent` names the agent.
+- Strict, as a group member's account (`memberHeld`): while the agent's
+  account rests, is off or refuses, the request goes to the model's
+  fallbacks, never to the provider's other keys. With none, a 429 or the
+  vendor's error comes back as usual; with the account off it is a 403
+  naming the agent and where it is set (`agentAccountsError`), and nothing
+  upstream is asked.
+- It holds alongside a gateway key's accounts and a group's: the strict
+  intersection, `<provider>/\x00` when they share none of a provider.
+  Then the provider serves neither, refused as a key held away from a
+  provider's every account is, and the 403 names the agent's setting too
+  (`keyAccountsError`).
+- An agent's account is not a gateway key's restriction: `Identity.KeyHeld`
+  leaves it out (`agentOnly`), so `keyHolds`' fast paths (own sign-in first,
+  spreading, the subagent and dsh pickers, the redact route) behave as for an
+  unheld request. The Codex own-sign-in route and the Codex backend relay
+  step aside only when the agent's accounts name `codex`
+  (`accountHoldsOn`). Models are not held: the agent's list is the
+  provider's whole list, narrowed only where a key's would be.
+- The native route (`NativePath`) is skipped by `agentHeld`, and takes the
+  agent's account itself (`nativeAgentAccount`).
+- One the provider no longer has (a key taken out, an account signed out)
+  holds nothing, and the agent uses the provider as before;
+  `provider.ReplaceKey` moves the setting to the new key.
+- The provider editor's Advanced has Accounts by agent for a provider of
+  two or more accounts or keys (`agentChoices` in `/api/providers`,
+  `agentaccounts.js`, imported by `agentAccountsRow`): a line for each agent
+  set to one, its account's menu ("All accounts" lets it go), and Add agent.
+  The choices are written on Save, before the provider's own save,
+  through `POST /api/provider/agentaccount` (`provider.SetAgentAccount`).
+
+`TestAgentAccountsHoldEachAgentToItsKey`,
+`TestAgentAccountsRestingKeyFallsBack`, `TestAgentAccountsWithAGatewayKey`,
+`TestHeldToAgent`, `TestSetAgentAccount`, `TestAgentAccountRoute`,
+`agent-accounts.test.cjs`.
+
 ## A route group bound to chosen gateway keys
 
 A routing group may be bound to some gateway keys (`Group.Keys`, key ids;

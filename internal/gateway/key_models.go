@@ -11,6 +11,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // A gateway key may be held to some models (#882, access.Key.Models): it
@@ -51,7 +52,9 @@ func keyHolds(r *http.Request) (access.Identity, bool) {
 		who.KeyID = "" // nor do the keys a group is bound to (groupBarred)
 		return who, true
 	}
-	return who, who.Restricted() || len(who.Spent) > 0
+	// the accounts its agent was set to use alone (HeldToAgent) hold which
+	// account serves it, as accountHolds says, not what it may ask for
+	return who, who.KeyHeld() || len(who.Spent) > 0
 }
 
 // keyAllows is whether the calling key may use one of p's models, nil when
@@ -201,6 +204,15 @@ func spentAmong(who access.Identity, cs []candidate) (access.SpentScope, bool) {
 func accountHolds(r *http.Request) (access.Identity, bool) {
 	who := access.Caller(r.Context())
 	return who, len(who.Accounts) > 0
+}
+
+// accountHoldsOn is accountHolds for a way to provider pid that goes
+// around routing (Codex's own sign-in): held by a key's or a group's
+// accounts, on every provider as ever; by those its agent was set to use
+// alone (HeldToAgent), only on a provider they name.
+func accountHoldsOn(r *http.Request, pid string) bool {
+	who, held := accountHolds(r)
+	return held && (!who.AgentOnly() || who.NamesProvider(pid))
 }
 
 // allows is who.Allows, a found group named by either of its ids: a key
@@ -766,16 +778,34 @@ func keyModelError(who access.Identity, model string) string {
 // account or key its key may not use is told — or its routing group,
 // held to some accounts (who.Group).
 func keyAccountsError(who access.Identity, model string) string {
+	if who.AgentOnly() {
+		return agentAccountsError(who, model)
+	}
+	also := ""
+	if who.Agent != "" {
+		// the key's accounts and the agent's share none
+		also = fmt.Sprintf(" %s is set to use %s alone (the provider's settings in magpie, Advanced, Accounts by agent).",
+			usage.AgentName(who.Agent), access.AccountsShown(provider.AccountNames(), provider.AgentAccounts(who.Agent)))
+	}
 	if who.Group != "" {
 		msg := fmt.Sprintf("The routing group %q is held to some accounts, and none of the accounts or keys behind %s is one of them; it may use %s. Change the group's accounts in magpie's Routing page",
 			who.Group, model, keyAccountNames(who))
 		if who.KeyName != "" {
 			msg += fmt.Sprintf(" (and the gateway key %q's in its Gateway page)", who.KeyName)
 		}
-		return msg + ", or use an account it has."
+		return msg + ", or use an account it has." + also
 	}
 	return fmt.Sprintf("The gateway key %q is not allowed to use the accounts behind %s: no account or key behind it is one the key may use; it may use %s. Change the key's accounts in magpie's Gateway page, or use an account it has.",
-		who.KeyName, model, keyAccountNames(who))
+		who.KeyName, model, keyAccountNames(who)) + also
+}
+
+// agentAccountsError is keyAccountsError for a request held by the
+// accounts its agent was set to use alone (HeldToAgent): the account or
+// key set for it is off, resting with no other to take its place, or
+// doesn't serve the model.
+func agentAccountsError(who access.Identity, model string) string {
+	return fmt.Sprintf("%s is set to use %s alone, and none of the accounts or keys behind %s is one of them. Change it in the provider's settings in magpie (Advanced, Accounts by agent), or use a model it serves.",
+		usage.AgentName(who.Agent), keyAccountNames(who), model)
 }
 
 // groupsHeldError is what a request is told when every account or key

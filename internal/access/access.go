@@ -356,6 +356,15 @@ type Identity struct {
 	// Group is the routing group, by name, whose own accounts hold the
 	// request as well (HeldToGroup); "" when none does.
 	Group string
+	// Agent is the agent whose own account or key of some providers
+	// (provider.Provider.AgentAccounts, nb5p on Discord) holds the request
+	// as well (HeldToAgent); "" when none does.
+	Agent string
+	// agentOnly is set when every account the request is held to is the
+	// agent's (HeldToAgent on an identity held to none): it holds which
+	// account serves, never what a key held to some is kept from
+	// (KeyHeld).
+	agentOnly bool
 	// Spent are the key's limits of some models (Limit.Models) with
 	// nothing left, as the gateway found them for this request: their
 	// models are left out of its candidates, a routing group's members

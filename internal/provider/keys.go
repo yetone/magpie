@@ -737,6 +737,11 @@ func ReplaceKey(id, keyRef, key string) (was, now string, err error) {
 	moveKeyed(p.KeyPriceRates, keyRef, now)
 	moveKeyed(p.KeyRateFactors, keyRef, now)
 	moveKeyed(p.KeyBalanceAuth, keyRef, now)
+	for agent, ref := range p.AgentAccounts {
+		if strings.EqualFold(ref, keyRef) {
+			p.AgentAccounts[agent] = now // the agent set to the key keeps it
+		}
+	}
 	return keyRef, now, Save(*p)
 }
 

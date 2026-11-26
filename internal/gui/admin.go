@@ -75,7 +75,7 @@ var adminGroupActions = []string{
 // actions on this computer's apps (show, move, adopt, restartapp, …).
 var adminProviderActions = []string{
 	"save", "delete", "on", "off", "name", "efforts", "images", "arrange",
-	"accountmodels", "keylisted", "accountcap", "accountname", "windowcap",
+	"accountmodels", "agentaccount", "keylisted", "accountcap", "accountname", "windowcap",
 	"accountconcurrency", "keyspendcap", "keyownbalance", "keybalancerefill",
 	"keyexpiring", "accountweight", "route", "affinity", "sink", "usefirst",
 	"test", "teststop", "detect", "balance", "models", "list",
