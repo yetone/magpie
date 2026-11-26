@@ -288,3 +288,27 @@ func TestGoogleDecisionKeyLists(t *testing.T) {
 		t.Fatalf("keys for %s: %d asked, %d barred", GoogleDecision, len(out), len(barred))
 	}
 }
+
+// bunnybit0121 on X (#7789): Google's Decisions API names a noul's two
+// criteria true_description and false_description (NoulCriteria in
+// google-genai), and refused System One's true and false with 400
+// "Unknown parameter 'false' at 'questions.b.criteria'". They go as
+// Google names them; criteria given in Google's names, or a noul with
+// none, go as they are, and Google's names win over System One's.
+func TestGoogleNoulCriteria(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{`{"true":"billing","false":"other"}`, `{"true_description":"billing","false_description":"other"}`},
+		{`{"true":"billing"}`, `{"true_description":"billing"}`},
+		{`{"true_description":"billing","false_description":"other"}`, `{"true_description":"billing","false_description":"other"}`},
+		{`{"true":"mine","true_description":"google's"}`, `{"true_description":"google's"}`},
+	} {
+		ask := `{"model":"gemini-decision-1","state":"The export crashes the app.","questions":{"b":{"type":"noul","instructions":"Is it about billing?","criteria":` + c.in + `}}}`
+		sameJSON(t, c.in, DecideAsk(ViaGoogle, GoogleDecision, []byte(ask)),
+			`{"model":"gemini-decision-1","input":"The export crashes the app.","questions":{"b":{"type":"noul","instructions":"Is it about billing?","criteria":`+c.want+`}}}`)
+	}
+	none := `{"model":"gemini-decision-1","state":"x","questions":{"b":{"type":"noul","instructions":"?"}}}`
+	sameJSON(t, "no criteria", DecideAsk(ViaGoogle, GoogleDecision, []byte(none)), strings.Replace(none, `"state"`, `"input"`, 1))
+	// a choice whose options are named true and false keeps them
+	choice := `{"model":"gemini-decision-1","state":"x","questions":{"b":{"type":"choice","instructions":"?","criteria":{"true":"yes","false":"no"}}}}`
+	sameJSON(t, "choice", DecideAsk(ViaGoogle, GoogleDecision, []byte(choice)), strings.Replace(choice, `"state"`, `"input"`, 1))
+}

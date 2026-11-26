@@ -135,8 +135,12 @@ func DecideAnswer(via string, b []byte) []byte {
 // blocks after it, and any other URL a block at that uri. Its questions
 // are System One's, noul, choice and score, but a choice's option with no
 // description (null, as magpie's "none of these" goes) has an empty one,
-// which Google takes. Everything else goes as it is, for Google to refuse
-// what it has no place for with a 400 naming it.
+// which Google takes, and a noul's criteria named true and false, as
+// System One and Pi name them, are Google's true_description and
+// false_description (NoulCriteria in google-genai; Google refused
+// "Unknown parameter 'false' at 'questions.b.criteria'", bunnybit0121 on
+// X, #7789). Everything else goes as it is, for Google to refuse what it
+// has no place for with a 400 naming it.
 func googleAsk(q map[string]any, body []byte) []byte {
 	state, ok := q["state"]
 	if !ok {
@@ -171,10 +175,24 @@ func googleAsk(q map[string]any, body []byte) []byte {
 	if qs, ok := q["questions"].(map[string]any); ok {
 		for _, v := range qs {
 			x, _ := v.(map[string]any)
-			if c, ok := x["criteria"].(map[string]any); ok && x["type"] == "choice" {
+			c, ok := x["criteria"].(map[string]any)
+			if !ok {
+				continue
+			}
+			switch x["type"] {
+			case "choice":
 				for k, d := range c {
 					if d == nil {
 						c[k] = ""
+					}
+				}
+			case "noul":
+				for from, to := range map[string]string{"true": "true_description", "false": "false_description"} {
+					if d, ok := c[from]; ok {
+						if _, given := c[to]; !given {
+							c[to] = d
+						}
+						delete(c, from)
 					}
 				}
 			}
