@@ -31,14 +31,8 @@ type Target struct {
 	// Field, when it is set, says the instructions are not the file itself
 	// but the string at this key path of the JSON file Instructions names
 	// (WorkBuddy's personalization.customPrompt): instr_field.go.
-	Field string
-	MCP   *mcpFile
-	// MCP2 is a second MCP file for an agent that runs more than one
-	// runtime, each reading its own format: Cindy's Pi reads
-	// pi-agent-home/mcp.json (fmtPiNative) beside its Codex config.toml.
-	// syncMCP2 writes the same servers there, tracked by the applied list
-	// MCP shares.
-	MCP2   *mcpFile
+	Field  string
+	MCP    *mcpFile
 	Skills string // the folder the agent finds skills in
 	// SkillsAlso are agents whose skills this one reads as well, as
 	// OpenCode reads Claude Code's.
@@ -433,13 +427,18 @@ func targetOf(a *agent.Agent) *Target {
 		t.Override = filepath.Join(pd, "AGENTS.override.md")
 		if a.Dir != "" {
 			t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "codex-home", "config.toml"), Format: fmtCodex}
-			// Cindy's Pi runs with PI_CODING_AGENT_DIR at pi-agent-home in
-			// the same folder (reconcilePiDurableRuns, the CINDY_PI_API_KEY
-			// env block in Cindy 0.1.94's app.asar); native Pi reads its
-			// servers from mcp.json there (pimcp.go), its own JSON shape, so
-			// the Codex-only write never reached a Cindy Pi session, Cindy's
-			// default runtime (POM_JUMPING on X, v0.1.4777).
-			t.MCP2 = &mcpFile{Path: filepath.Join(a.Dir, "pi-agent-home", "mcp.json"), Format: fmtPiNative}
+			// Cindy's Pi gets no file: each session runs with
+			// PI_CODING_AGENT_DIR at a folder of its own,
+			// pi-agent-home/run-tmp/<random hex>, made and removed by
+			// Cindy, and with --no-extensions unless the user installed a
+			// Pi package (startSession in maker-core's agents/pi/index.ts,
+			// Cindy 0.1.148). Its bundled Pi is 0.84.4, older than 0.99,
+			// the first to read mcp.json itself (pimcp.go). Its MCP servers
+			// come only from Cindy's cindy-bridge extension, given them in
+			// CINDY_PI_MCP_BRIDGE from Cindy's own database
+			// (custom_mcp_servers), which magpie never writes.
+			// pi-agent-home/mcp.json, written from v0.1.4777, was read by
+			// nothing (cindyLeftovers takes magpie's servers out of it).
 		}
 	case "craft-agents":
 		// Craft Agents reads user-wide skills from ~/.agents/skills

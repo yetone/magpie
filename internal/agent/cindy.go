@@ -83,6 +83,19 @@ func cindyHas(path, gw string) (has, known bool) {
 	return n > 0, true
 }
 
+// CindyFolders are the data folders of both of Cindy's builds, here or
+// not: Cindy, the cn build's (Electron's default, from productName), and
+// CindyGlobal, the global build's, under the user's config folder
+// (Electron's appData: ~/Library/Application Support, %APPDATA%,
+// $XDG_CONFIG_HOME or ~/.config).
+func CindyFolders() []string {
+	d, err := os.UserConfigDir()
+	if err != nil {
+		return nil
+	}
+	return []string{filepath.Join(d, "Cindy"), filepath.Join(d, "CindyGlobal")}
+}
+
 // cindyDirs are where Cindy keeps its data (~/Library/Application
 // Support/Cindy on a Mac, CindyGlobal for its global build), those there
 // first: there once Cindy was installed and opened.

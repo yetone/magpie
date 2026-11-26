@@ -64,8 +64,9 @@ const hubOnDemandOver = 10
 // words can't leave one out again (they named four of the six, 11-18).
 // Cindy isn't one (T_t__biu on X, #7873, Cindy 0.1.146): the only runtime
 // of its own that reaches /mcp/magpie/hub/cindy is its Codex (codex-home's
-// config.toml; its Pi is given the servers direct, its Claude Code reads
-// ~/.claude.json, hub/claude). That Codex defers MCP tools only for a model
+// config.toml; its Pi gets MCP servers only from Cindy's own database,
+// which magpie never writes, and its Claude Code reads ~/.claude.json,
+// hub/claude). That Codex defers MCP tools only for a model
 // whose catalog entry has supports_search_tool, and Cindy's catalog
 // (catalogWithModels in maker-host) copies the flag only for a GPT slug
 // that matches its own bundled catalog: a model of magpie's under any other
