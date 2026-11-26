@@ -145,14 +145,23 @@ max_steps_per_turn = 100
 		t.Fatalf("sync after reset: %v\n%s", err, read())
 	}
 
-	// its own model from magpie: magpie's tables go too
+	// its own model from magpie: the lead alone moves, magpie's tables stay
+	// beside it in /model (yingxianyu on X: the switch went off with them)
 	f.Set("magpie/deepseek/flash")
 	if err := f.Set("kimi-code/kimi-for-coding"); err != nil {
 		t.Fatal(err)
 	}
 	valid()
-	if strings.Contains(read(), "magpie") {
+	if f.Get() != "kimi-code/kimi-for-coding" || table("providers.magpie") == nil || table(`models."magpie/deepseek/flash"`) == nil {
 		t.Fatalf("own:\n%s", read())
+	}
+	// and Default takes magpie out
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	valid()
+	if strings.Contains(read(), "magpie") {
+		t.Fatalf("default from own:\n%s", read())
 	}
 }
 

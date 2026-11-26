@@ -108,11 +108,40 @@ func miniMaxAt(at place, dir string) *Agent {
 		}
 		return edit.SetYAML(path, kvs...)
 	}
+	// dropEntry takes magpie's entry out, and an empty custom_provider left
+	// where magpie's was the one
+	dropEntry := func() error {
+		if err := edit.DelYAML(path, mcodeEntry); err != nil {
+			return err
+		}
+		if t, ok := edit.GetYAMLText(path, "custom_provider"); ok && strings.TrimSpace(t) == "{}" {
+			return edit.DelYAML(path, "custom_provider")
+		}
+		return nil
+	}
+	// joined: magpie's entry is in the config, on, whichever model the
+	// sessions start on. MiniMax Code's /model lists the user's own models
+	// beside magpie's, so one of their own picked there or on the Agents
+	// page leaves it connected, as Kimi Code (yingxianyu on X: a pick of
+	// the user's own turned Kimi Code's switch off by itself)
+	joined := func() bool {
+		_, ok := edit.GetYAMLText(path, mcodeEntry)
+		return ok && get(mcodeEntry+".enabled") != "false"
+	}
 	return atomic(&Agent{
 		ID: "minimax-code", Name: "MiniMax Code", Icon: "minimax-color", Aliases: []string{"mcode"}, Spelled: prefixed,
 		UA:  []string{mcodeUA, "minimaxcode"},
 		Bin: "mcode", Dir: dir, Path: path,
 		ListOnly: true,
+		Joined:   joined,
+		// Disconnect on a default of the user's own takes magpie's entry
+		// out and leaves the default; one of magpie's goes back by the field
+		Unwire: func() error {
+			if !joined() || onMagpie() {
+				return nil
+			}
+			return dropEntry()
+		},
 		Sync: func() error {
 			if _, ok := edit.GetYAMLText(path, mcodeEntry); !ok {
 				return nil
@@ -174,6 +203,7 @@ func miniMaxAt(at place, dir string) *Agent {
 					return setDefault(mcodeProvider+"/"+mcodeKey(provider.Flattened(), ref), "")
 				}
 				// the variant goes with the model it was picked for
+				own := v != ""
 				variant := ""
 				if onMagpie() {
 					was, wasVariant := unstash(key+"defaultModel"), unstash(key+"defaultModelVariant")
@@ -183,20 +213,19 @@ func miniMaxAt(at place, dir string) *Agent {
 					if v == was {
 						variant = wasVariant
 					}
-				} else if v == get("defaultModel") {
-					variant = get("defaultModelVariant")
+				} else if v == "" || v == get("defaultModel") {
+					// on one of the user's own (Disconnect too): it stays
+					v, variant = get("defaultModel"), get("defaultModelVariant")
 				}
 				if err := setDefault(v, variant); err != nil {
 					return err
 				}
-				if err := edit.DelYAML(path, mcodeEntry); err != nil {
-					return err
+				if own {
+					// one of the user's own: the default alone moves,
+					// magpie's models stay in /model beside it (joined)
+					return nil
 				}
-				// nor an empty custom_provider left where magpie's was the one
-				if t, ok := edit.GetYAMLText(path, "custom_provider"); ok && strings.TrimSpace(t) == "{}" {
-					return edit.DelYAML(path, "custom_provider")
-				}
-				return nil
+				return dropEntry()
 			},
 			Options: func(cur map[string]string) []Option {
 				return withVia(miniMaxOwnOptions(path, cur["model"]), "minimax-code", magpieID+"/")

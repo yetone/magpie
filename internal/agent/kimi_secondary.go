@@ -367,11 +367,22 @@ func kimiSecDropEmpty(path string) error {
 
 // kimiSubagentFields are the subagents' model, pool and effort, for the new
 // Kimi Code. wired reports whether magpie's provider is in the config: a
-// magpie model can go in only then, its table there.
-func kimiSubagentFields(path string, wired func() bool, own func(string) []Option) []Field {
+// magpie model can go in only then, its table there. join, where there is
+// one, puts magpie's provider and models in beside the lead the user is on,
+// for a magpie model set while they aren't: switched on again after the
+// lead was one of the user's own and the subagents magpie's, the
+// subagents go back on magpie's model with the lead kept (yingxianyu on X).
+func kimiSubagentFields(path string, wired func() bool, join func() error, own func(string) []Option) []Field {
 	read := func() (kimiSec, map[string]kimiModelInfo) {
 		s, m, _ := kimiDoc(path)
 		return s, m
+	}
+	// joinFor joins magpie when names has one of its models and it isn't in
+	joinFor := func(names ...string) error {
+		if join == nil || wired() || !slices.ContainsFunc(names, func(k string) bool { return strings.HasPrefix(k, magpieID+"/") }) {
+			return nil
+		}
+		return join()
 	}
 	// check refuses a name Kimi would not resolve: one of magpie's whose
 	// table isn't there (not connected, or gone from the catalog)
@@ -398,6 +409,9 @@ func kimiSubagentFields(path string, wired func() bool, own func(string) []Optio
 		Key: "subagent_model", Label: "subagent model", Quiet: true,
 		Get: func() string { s, _ := read(); return s.def() },
 		Set: func(v string) error {
+			if err := joinFor(v); err != nil {
+				return err
+			}
 			was, models := read()
 			now := was
 			if v == "" {
@@ -438,13 +452,16 @@ func kimiSubagentFields(path string, wired func() bool, own func(string) []Optio
 			return strings.Join(s.pool(), "\n")
 		},
 		Set: func(v string) error {
-			was, models := read()
 			var names []string
 			for _, k := range strings.Split(v, "\n") {
 				if k = strings.TrimSpace(k); k != "" && !slices.Contains(names, k) {
 					names = append(names, k)
 				}
 			}
+			if err := joinFor(names...); err != nil {
+				return err
+			}
+			was, models := read()
 			if err := check(models, names...); err != nil {
 				return err
 			}
@@ -507,9 +524,9 @@ func kimiSubagentFields(path string, wired func() bool, own func(string) []Optio
 // kimiSubagents are kimiSubagentFields for the new Kimi Code; kimi-cli has
 // no subagent pool, and a stopped WSL distro's (cold) has none until it runs
 // again: each of the three reads the config, which would start it (#3896).
-func kimiSubagents(path string, legacy, cold bool, wired func() bool) []Field {
+func kimiSubagents(path string, legacy, cold bool, wired func() bool, join func() error) []Field {
 	if legacy || cold {
 		return nil
 	}
-	return kimiSubagentFields(path, wired, func(cur string) []Option { return kimiOwnOptions(path, cur) })
+	return kimiSubagentFields(path, wired, join, func(cur string) []Option { return kimiOwnOptions(path, cur) })
 }

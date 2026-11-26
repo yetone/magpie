@@ -152,12 +152,21 @@ default_model = "kimi-code/kimi-for-coding"
 	if sub.Get() != "kimi-code/kimi-for-coding" || pool.Get() != "" {
 		t.Fatalf("read: %q %q", sub.Get(), pool.Get())
 	}
-	// not connected: magpie's models have no tables Kimi could resolve
-	if err := sub.Set("magpie/think/deep"); err == nil {
-		t.Fatal("a magpie model went in with magpie not connected")
-	}
+	// not connected: magpie's models aren't offered
 	if slices.ContainsFunc(kimiOptionValues(sub, a.Values()), func(v string) bool { return strings.HasPrefix(v, "magpie/") }) {
 		t.Fatal("magpie's models offered before it is connected")
+	}
+	// one set all the same (switched on again, its subagents put back)
+	// brings magpie's provider and models in beside the lead, so Kimi
+	// resolves it; never a name it lacks a table for
+	if err := sub.Set("magpie/think/deep"); err != nil {
+		t.Fatal(err)
+	}
+	if s := kimiSubagentsValid(t, path); s["default_model"] != "magpie/think/deep" || a.Values()["model"] != "kimi-code/kimi-for-coding" {
+		t.Fatalf("subagents on magpie's: %v, lead %q", s, a.Values()["model"])
+	}
+	if err := sub.Set("kimi-code/kimi-for-coding"); err != nil {
+		t.Fatal(err)
 	}
 	if err := a.Apply("model", "magpie/think/deep"); err != nil {
 		t.Fatal(err)

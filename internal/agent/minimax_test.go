@@ -206,14 +206,23 @@ func TestMiniMaxCode(t *testing.T) {
 		t.Fatalf("reset:\n%s", raw)
 	}
 
-	// one of the user's own from magpie: magpie's entry goes, no variant
+	// one of the user's own from magpie: the default alone moves, no
+	// variant, magpie's entry stays beside it in /model
 	f.Set("magpie/think/deep")
 	if err := f.Set("custom_provider:work/deep-reasoner-1"); err != nil {
 		t.Fatal(err)
 	}
 	c, raw = readMiniMax(t, path)
-	if c.DefaultModel != "custom_provider:work/deep-reasoner-1" || c.DefaultModelVariant != "" || c.CustomProvider["magpie"].Kind != "" {
+	if c.DefaultModel != "custom_provider:work/deep-reasoner-1" || c.DefaultModelVariant != "" || c.CustomProvider["magpie"].Kind != "custom" {
 		t.Fatalf("own:\n%s", raw)
+	}
+	// and the default from there takes magpie's entry out, theirs kept
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	c, raw = readMiniMax(t, path)
+	if c.DefaultModel != "custom_provider:work/deep-reasoner-1" || c.CustomProvider["magpie"].Kind != "" || c.CustomProvider["work"].Kind != "custom" {
+		t.Fatalf("default from own:\n%s", raw)
 	}
 }
 
