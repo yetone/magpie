@@ -256,3 +256,113 @@ func TestSkillsWhereSharedWithKimi(t *testing.T) {
 		t.Errorf("pdf stays: %v", err)
 	}
 }
+
+// Young on Discord: the ChatGPT app's Work registers only Codex's own
+// folder as a skill root (readCapabilityRoots, codex-home-skills), so a
+// library skill Codex had through ~/.agents/skills alone never reached a
+// ChatGPT chat. Codex gets its own link of each one, ticked or not, to
+// the library's one folder (Codex lists it once, by its real path); the
+// other readers of the folder still get no second one.
+func TestChatGPTWorkFindsSharedSkills(t *testing.T) {
+	h := sandbox(t)
+	os.RemoveAll(filepath.Join(h, ".config/goose"))
+	os.Remove(filepath.Join(h, "bin/goose"))
+	os.Remove(filepath.Join(h, "bin/goose.exe"))
+	shared := filepath.Join(h, ".agents/skills")
+	cx := func(name string) string { return filepath.Join(h, ".codex/skills", name) }
+	gm := func(name string) string { return filepath.Join(h, ".gemini/skills", name) }
+	same := func(name string) bool {
+		return ours(cx(name), name) && realDir(cx(name)) == realDir(skillDir(name))
+	}
+
+	// kept in ~/.agents/skills, brought into the library: ticked for
+	// Claude alone, and for Codex too
+	skill(t, filepath.Join(shared, "orch"), "orch", "Orchestrate")
+	skill(t, filepath.Join(shared, "ship"), "ship", "Ship")
+	ok(t)(ImportSkill("orch"))
+	ok(t)(ImportSkill("ship"))
+	ok(t)(SkillAgents("orch", []string{"claude"}))
+	ok(t)(SkillAgents("ship", []string{"claude", "codex", "gemini"}))
+	for _, n := range []string{"orch", "ship"} {
+		if !same(n) {
+			t.Errorf("codex hasn't its own link of %s, kept in ~/.agents/skills", n)
+		}
+		if _, err := os.Lstat(gm(n)); !os.IsNotExist(err) {
+			t.Errorf("gemini got a second %s: %v", n, err)
+		}
+		if a := alwaysOf(t, n); !slices.Contains(a, "codex") {
+			t.Errorf("%s: always %v", n, a)
+		}
+	}
+
+	// off on this computer: codex's own goes, back when on again
+	ok(t)(SkillHere("orch", false))
+	if _, err := os.Lstat(cx("orch")); !os.IsNotExist(err) {
+		t.Errorf("codex keeps orch, off here: %v", err)
+	}
+	ok(t)(SkillHere("orch", true))
+	if !same("orch") {
+		t.Error("orch on again isn't codex's")
+	}
+
+	// put in ~/.agents/skills by the setting
+	src := filepath.Join(h, "src/skills")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"claude"}))
+	if _, err := os.Lstat(cx("pdf")); !os.IsNotExist(err) {
+		t.Errorf("codex has pdf, ticked for claude alone: %v", err)
+	}
+	ok(t)(SetSkillsWhere(SkillsInShared))
+	if !ours(filepath.Join(shared, "pdf"), "pdf") || !same("pdf") {
+		t.Error("with skills in ~/.agents/skills too, codex hasn't its own pdf")
+	}
+	if _, err := os.Lstat(gm("pdf")); !os.IsNotExist(err) {
+		t.Errorf("gemini got a second pdf: %v", err)
+	}
+	// with the router on it is a link of its own still, not one the
+	// router lists
+	ok(t)(SetSkillRouter(true))
+	if !same("pdf") || !same("orch") {
+		t.Error("the router took codex's own link of a skill in ~/.agents/skills")
+	}
+	ok(t)(SetSkillRouter(false))
+	// off again: the setting's skill unticked for codex goes from its folder
+	ok(t)(SetSkillsWhere(SkillsInAgents))
+	if _, err := os.Lstat(cx("pdf")); !os.IsNotExist(err) {
+		t.Errorf("codex keeps pdf, no longer in ~/.agents/skills: %v", err)
+	}
+	if !same("orch") || !same("ship") {
+		t.Error("codex lost the skills kept in ~/.agents/skills")
+	}
+
+	// codex's own skill by a name it has through ~/.agents/skills, not
+	// ticked for it: left as it is, unsaid
+	skill(t, filepath.Join(shared, "plan"), "plan", "Plan")
+	write(t, filepath.Join(h, ".codex/skills/plan/SKILL.md"), "---\nname: plan\ndescription: Codex's own\n---\n")
+	ok(t)(ImportSkill("plan"))
+	r, err := Sync()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.ContainsFunc(r.Problems, func(p Problem) bool { return p.What == "skill:plan" }) {
+		t.Errorf("problems: %+v", r.Problems)
+	}
+	if ours(cx("plan"), "plan") || !strings.Contains(read(t, cx("plan")+"/SKILL.md"), "Codex's own") {
+		t.Error("codex's own plan was written over")
+	}
+
+	// the user's own skill by the name, other files, in ~/.agents/skills:
+	// codex has one of its own, and gets no second one beside it
+	write(t, filepath.Join(shared, "mine", "SKILL.md"), "---\nname: mine\ndescription: Not the library's\n---\n")
+	skill(t, filepath.Join(src, "mine"), "mine", "Mine")
+	r, err = InstallSkills(src, []string{"mine"}, []string{"claude", "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(r.Problems, func(p Problem) bool { return p.Agent == "codex" && p.Own }) {
+		t.Errorf("problems: %+v", r.Problems)
+	}
+	if _, err := os.Lstat(cx("mine")); !os.IsNotExist(err) {
+		t.Errorf("codex has the library's mine beside the user's: %v", err)
+	}
+}

@@ -40,8 +40,9 @@ func TestDimSkillsShared(t *testing.T) {
 	if !ours(shared, "pdf") {
 		t.Error("~/.agents/skills/pdf isn't the library's")
 	}
-	if _, err := os.Lstat(cx); !os.IsNotExist(err) {
-		t.Error("codex has a second link to it")
+	// codex's own link stays: ChatGPT's Work reads its folder alone
+	if !ours(cx, "pdf") || realDir(cx) != realDir(shared) {
+		t.Error("codex hasn't its own link to the library's")
 	}
 	ok(t)(SkillAgents("pdf", []string{"codex"}))
 	if !ours(cx, "pdf") {

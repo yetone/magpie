@@ -98,16 +98,20 @@ func TestSharedAgentsSkills(t *testing.T) {
 			t.Errorf("the library's %s isn't a link to %s", n, want)
 		}
 	}
-	// the agents that had it have the library's; Codex and Gemini CLI read
-	// ~/.agents/skills, where all three are kept, so a link in their own
-	// folders would be each skill twice (#595): they get none, and Codex's
-	// byte copy of its own is kept aside with the backups
+	// the agents that had it have the library's; Gemini CLI reads
+	// ~/.agents/skills, where all three are kept, so a link in its own
+	// folder would be each skill twice (#595): it gets none. Codex, whose
+	// folder is all ChatGPT's Work reads, gets its own link to the very
+	// folder, and its byte copy of its own is kept aside with the backups
 	if !ours(filepath.Join(h, ".pi/agent/skills/orchestration"), "orchestration") {
 		t.Error("pi's orchestration isn't the library's")
 	}
-	for _, d := range []string{".codex/skills/orchestration", ".gemini/skills/grilling", ".codex/skills/orca-cli"} {
-		if _, err := os.Lstat(filepath.Join(h, d)); !os.IsNotExist(err) {
-			t.Errorf("%s is there, besides the shared folder's: %v", d, err)
+	if _, err := os.Lstat(filepath.Join(h, ".gemini/skills/grilling")); !os.IsNotExist(err) {
+		t.Errorf(".gemini/skills/grilling is there, besides the shared folder's: %v", err)
+	}
+	for _, n := range []string{"orchestration", "grilling", "orca-cli"} {
+		if p := filepath.Join(h, ".codex/skills", n); !ours(p, n) || realDir(p) != realDir(skillDir(n)) {
+			t.Errorf("codex's %s isn't its own link to the library's", n)
 		}
 	}
 	if m, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "codex", "skills", "orca-cli", "SKILL.md")); len(m) != 1 {

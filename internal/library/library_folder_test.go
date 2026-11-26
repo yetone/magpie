@@ -145,6 +145,8 @@ func TestFoundInLibraryFolder(t *testing.T) {
 // #595: a library skill kept in ~/.agents/skills is had by every agent
 // that reads that folder: none of them gets a link of its own besides
 // (the skill twice), one made before goes, and the page says they have it.
+// But Codex, whose folder is all ChatGPT's Work reads (ownFolderToo): its
+// link stays, to the very folder, which Codex lists once.
 func TestSharedSkillNotLinkedTwice(t *testing.T) {
 	h := sandbox(t)
 	os.RemoveAll(filepath.Join(h, ".config/goose"))
@@ -163,10 +165,11 @@ func TestSharedSkillNotLinkedTwice(t *testing.T) {
 	// it is put in the shared folder too (npx skills add, a link of the user's)
 	symlink(t, ext, filepath.Join(h, ".agents/skills/lint"))
 	ok(t)(Sync())
-	for _, d := range []string{".codex/skills/lint", ".gemini/skills/lint"} {
-		if _, err := os.Lstat(filepath.Join(h, d)); !os.IsNotExist(err) {
-			t.Errorf("%s is still there: %v", d, err)
-		}
+	if _, err := os.Lstat(filepath.Join(h, ".gemini/skills/lint")); !os.IsNotExist(err) {
+		t.Errorf(".gemini/skills/lint is still there: %v", err)
+	}
+	if !ours(filepath.Join(h, ".codex/skills/lint"), "lint") {
+		t.Error("codex lost its own link")
 	}
 	if !ours(filepath.Join(h, ".pi/agent/skills/lint"), "lint") {
 		t.Error("pi, which doesn't read the shared folder, lost it")
@@ -179,10 +182,14 @@ func TestSharedSkillNotLinkedTwice(t *testing.T) {
 	if !slices.Contains(always, "codex") || !slices.Contains(always, "gemini") || slices.Contains(always, "pi") || slices.Contains(always, "claude") {
 		t.Errorf("always: %v", always)
 	}
-	// ticked again, it still gets no link of its own
-	ok(t)(SkillAgents("lint", []string{"codex", "claude"}))
-	if _, err := os.Lstat(filepath.Join(h, ".codex/skills/lint")); !os.IsNotExist(err) {
-		t.Errorf("codex got a link again: %v", err)
+	// ticked again, gemini still gets no link of its own; codex, unticked,
+	// keeps its
+	ok(t)(SkillAgents("lint", []string{"gemini", "claude"}))
+	if _, err := os.Lstat(filepath.Join(h, ".gemini/skills/lint")); !os.IsNotExist(err) {
+		t.Errorf("gemini got a link again: %v", err)
+	}
+	if !ours(filepath.Join(h, ".codex/skills/lint"), "lint") {
+		t.Error("codex lost its own link, unticked")
 	}
 	if !ours(filepath.Join(h, ".claude/skills/lint"), "lint") {
 		t.Error("claude didn't get it")

@@ -735,17 +735,6 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		}
 	}
 	cp := l.copies(t, sharers)
-	wanted := func(s *Skill) bool {
-		if s == nil {
-			return false
-		}
-		// the folder is ~/.agents/skills itself: what the setting puts
-		// there (skills_shared.go) stays
-		if l.keepsShared(s) && realDir(t.Skills) == realDir(sharedSkillsDir()) {
-			return true
-		}
-		return s.gives(id) || slices.ContainsFunc(sharers, s.gives)
-	}
 	// an agent that reads ~/.agents/skills as well as its own folder finds
 	// a skill magpie put there for another (Kimi Code) already: a link in
 	// its own too would be the skill twice
@@ -759,7 +748,10 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		}
 		return own
 	}
-	inShared := func(s *Skill) bool {
+	// whether the library's own skill s reaches the agent through
+	// ~/.agents/skills: kept there, put there by the setting, or magpie's
+	// link there for the agent whose folder it is
+	fromShared := func(s *Skill) bool {
 		if s == nil || !t.readsSharedDir() || realDir(t.Skills) == shared {
 			return false
 		}
@@ -774,9 +766,24 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			return true
 		}
 		p := filepath.Join(sharedSkillsDir(), s.Name)
-		if slices.ContainsFunc(all, func(o *Target) bool {
+		return slices.ContainsFunc(all, func(o *Target) bool {
 			return o.Skills != "" && realDir(o.Skills) == shared && s.gives(o.Agent.ID)
-		}) && (ours(p, s.Name) || realDir(p) == realDir(skillDir(s.Name))) {
+		}) && (ours(p, s.Name) || realDir(p) == realDir(skillDir(s.Name)))
+	}
+	// an agent read in one place by the shared folder and in another by
+	// its own folder alone (ownFolderToo: Codex, whose folder is all
+	// ChatGPT's Work reads) is given its own link of each such skill too,
+	// ticked or not: the reader of both finds one skill, both paths
+	// leading to the library's one folder
+	ownToo := ownFolderToo(id)
+	inShared := func(s *Skill) bool {
+		if s == nil || !t.readsSharedDir() || realDir(t.Skills) == shared {
+			return false
+		}
+		if skipsJunctions(id) && linked(filepath.Join(sharedSkillsDir(), s.Name)) {
+			return false
+		}
+		if !ownToo && fromShared(s) {
 			return true
 		}
 		// the user's own skill by that name kept in the shared folder
@@ -792,9 +799,24 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		q, _ := rivals().rival(s.Name)
 		return q != ""
 	}
+	// (one off on this computer, or whose folder is gone, is given to no
+	// agent here, as gives says)
+	alsoOwn := func(s *Skill) bool { return ownToo && s != nil && !s.OffHere && !s.Dangling && fromShared(s) }
+	wanted := func(s *Skill) bool {
+		if s == nil {
+			return false
+		}
+		// the folder is ~/.agents/skills itself: what the setting puts
+		// there (skills_shared.go) stays
+		if l.keepsShared(s) && realDir(t.Skills) == realDir(sharedSkillsDir()) {
+			return true
+		}
+		return s.gives(id) || slices.ContainsFunc(sharers, s.gives) || alsoOwn(s)
+	}
 	// the skills the router lists here (skill_router.go): no link of
-	// their own
-	routed := l.routedFor(t, sharers, cp, inShared)
+	// their own. One the agent finds in ~/.agents/skills anyway isn't
+	// listed, and one it is given its own link of too (alsoOwn) keeps it
+	routed := l.routedFor(t, sharers, cp, func(s *Skill) bool { return inShared(s) || alsoOwn(s) })
 	// and the ones the user types still, each by a stub of its own
 	slash := slashFor(t, all, sharers, routed)
 	dropStubs(t, slash, res)
@@ -821,7 +843,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		res.changed(id)
 	}
 	for _, s := range l.Skills {
-		if !s.gives(id) {
+		if !s.gives(id) && !alsoOwn(s) {
 			continue
 		}
 		// an agent gone from here is given nothing: what it has still
@@ -934,6 +956,11 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			// library's, kept aside; one that differs is the user's to
 			// settle (UseLibrarySkill, KeepAgentSkill)
 			if !sameTree(p, skillDir(s.Name)) {
+				// not ticked for it, only had through ~/.agents/skills
+				// (alsoOwn): its own stays, unsaid
+				if !s.gives(id) {
+					continue
+				}
 				res.Problems = append(res.Problems, Problem{Agent: id, What: "skill:" + s.Name, Own: true,
 					Error: fmt.Sprintf("%s already has a skill of its own called %s", t.Agent.Name, s.Name)})
 				continue

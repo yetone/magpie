@@ -1229,6 +1229,18 @@ func takesCopies(id string) bool { return id == "trae-cn" }
 // 1.4.0 (core/package-manager.ts, qybaihe/mu b71cd18).
 var readsShared = []string{"codex", "gemini", "opencode", "deveco", "crush", "dsh", "ds-bot", "commandcode", "devin", "droid", "cline", "grok", "kigi", "grok-app", "fx", "alma", "kimi", "omo", "zcode", "mu"}
 
+// ownFolderToo are the readers of ~/.agents/skills that are read by
+// something else too that reads their own folder alone, so each library
+// skill they have through the shared folder is linked in their own as
+// well. Codex: the ChatGPT app (26.1117.41037) registers only
+// $CODEX_HOME/skills and its plugins' folders as the skill roots of its
+// local Work executor (readCapabilityRoots, "codex-home-skills", in its
+// app.asar), so a ChatGPT chat in Work finds no skill kept only in
+// ~/.agents/skills (Young on Discord). Codex's own sessions (codex
+// 0.171.0-alpha.13 in that app, 0.172.0) read both and list a skill
+// reached by both once, by its real path.
+func ownFolderToo(id string) bool { return id == "codex" }
+
 // Pi reads ~/.agents/skills from 0.54.0 (2026-02-19, its CHANGELOG: "Added
 // default skill auto-discovery for .agents/skills locations … global
 // skills from ~/.agents/skills"; userAgentsSkillsDir in

@@ -59,7 +59,7 @@ func (l *Library) inSharedHere(s *Skill) bool {
 
 // syncShared puts each skill the setting keeps there into ~/.agents/skills,
 // before the agents that read it are synced (they then get no second
-// link). One given to an agent whose folder that is (Kimi Code) is that
+// link, but Codex: ownFolderToo). One given to an agent whose folder that is (Kimi Code) is that
 // agent's sync's, which puts it there its own way; sweepShared takes out
 // what the setting no longer keeps.
 func (l *Library) syncShared(all []*Target, res *Result) {
