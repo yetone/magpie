@@ -1972,6 +1972,8 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .rl-say { display: grid; }
 .rl-say > span { grid-area: 1 / 1; white-space: nowrap; }
 .rl-say > span:not(.on) { visibility: hidden; }
+.reset-days { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--muted); }
+.reset-days input.words.compact-num { width: 52px; text-align: center; }
 .sess-pick span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sess-pick svg { flex: none; opacity: .7; transition: transform .15s var(--ease); }
 .sess-pick:hover { background: var(--pill); }

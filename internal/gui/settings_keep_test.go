@@ -191,6 +191,8 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CodexAutoReset:       []string{"me@example.com"},
 		CodexAutoResetOnly:   map[string]string{"me@example.com": "expiring"},
 		CodexResetLead:       180,
+		CodexResetDaysLeast:  1,
+		CodexResetDaysMost:   7,
 		CodexNoCredits:       []string{"me@example.com"},
 		CodexCreditsLast:     []string{"two@example.com"},
 		CodexCreditsFirst:    []string{"three@example.com"},

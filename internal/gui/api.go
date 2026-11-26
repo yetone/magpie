@@ -2508,6 +2508,21 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// which Codex resets are spent by themselves, by the days they have
+	// left: at least Least and at most Most, 0 for no bound (both 0 is
+	// every one, the default)
+	mux.HandleFunc("POST /api/settings/codex-reset-days", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Least, Most int }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetCodexResetDays(in.Least, in.Most); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// whether a Codex account spends its credits once its allowance is
 	// used up, the Usage card's toggle, set on its own, and with Last
 	// whether only after everything else (left as it is when not sent)

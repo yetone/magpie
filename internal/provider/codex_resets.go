@@ -125,21 +125,47 @@ type codexResetCreditsWireCredit struct {
 // one that never runs out comes after all that do. id is "" when none is
 // left.
 func (w codexResetCreditsWire) first() (id string, at *time.Time) {
+	return w.firstWhere(func(*time.Time) bool { return true })
+}
+
+// firstWhere is first of the credits whose expiry (nil: never) ok takes.
+func (w codexResetCreditsWire) firstWhere(ok func(*time.Time) bool) (id string, at *time.Time) {
 	for _, c := range w.Credits {
 		if c.Status != "available" || c.ID == "" {
 			continue
 		}
-		var t *time.Time
-		if c.ExpiresAt != nil {
-			if p, err := time.Parse(time.RFC3339, *c.ExpiresAt); err == nil {
-				t = &p
-			}
+		t := c.expires()
+		if !ok(t) {
+			continue
 		}
 		if id == "" || t != nil && (at == nil || t.Before(*at)) {
 			id, at = c.ID, t
 		}
 	}
 	return id, at
+}
+
+// expires is when the credit runs out, nil when it never does (or that
+// can't be read, as its card says too).
+func (c codexResetCreditsWireCredit) expires() *time.Time {
+	if c.ExpiresAt == nil {
+		return nil
+	}
+	p, err := time.Parse(time.RFC3339, *c.ExpiresAt)
+	if err != nil {
+		return nil
+	}
+	return &p
+}
+
+// expiresOf is when credit runs out (nil: never).
+func (w codexResetCreditsWire) expiresOf(credit string) *time.Time {
+	for _, c := range w.Credits {
+		if c.ID == credit {
+			return c.expires()
+		}
+	}
+	return nil
 }
 
 // held says whether credit is one of those still to be used.
@@ -163,13 +189,7 @@ func (w codexResetCreditsWire) each() []ResetCard {
 		if c.Status != "available" || c.ID == "" {
 			continue
 		}
-		r := ResetCard{ID: c.ID}
-		if c.ExpiresAt != nil {
-			if p, err := time.Parse(time.RFC3339, *c.ExpiresAt); err == nil {
-				r.Until = &p
-			}
-		}
-		out = append(out, r)
+		out = append(out, ResetCard{ID: c.ID, Until: c.expires()})
 	}
 	sortResetCards(out)
 	return out
@@ -203,6 +223,11 @@ func codexResets(ctx context.Context, base, token, accountID string, count int) 
 	return out
 }
 
+// resetNoneInDays is magpie's own outcome, never the vendor's: no reset
+// held has the days left the user lets one used by itself have
+// (settings' ResetDays), so none was spent.
+const resetNoneInDays = "none_in_days"
+
 // ResetOutcome is what spending a reset did: Code is the vendor's word for
 // it (reset, nothing_to_reset, no_credit, already_redeemed) and Windows
 // how many windows started again. Claude's resets are gone (9bf6d4352,
@@ -226,6 +251,8 @@ func (o ResetOutcome) Text() string {
 		return "no reset left on the account"
 	case "already_redeemed", "already_used":
 		return "that reset was already used"
+	case resetNoneInDays:
+		return "no reset has the days left set for one used by itself, so none was used"
 	}
 	return o.Code
 }
@@ -295,8 +322,20 @@ func spendCodexReset(ctx context.Context, user, credit, why string) (ResetOutcom
 		if credit == "" {
 			return ResetOutcome{Code: "no_credit"}, nil
 		}
+		if why == ResetUsedWeek {
+			// the soonest of those with the days left the user lets a
+			// reset used by itself have (ResetDays)
+			credit, _ = w.firstWhere(func(t *time.Time) bool { return resetInDays(t, time.Now()) })
+			if credit == "" {
+				return ResetOutcome{Code: resetNoneInDays}, nil
+			}
+		}
 	} else if !w.held(credit) {
 		return ResetOutcome{}, errors.New("that reset is no longer on the account, so none was used")
+	}
+	if why != ResetUsedByHand && !resetInDays(w.expiresOf(credit), time.Now()) {
+		// judged again here, at the spend: by itself, never one out of range
+		return ResetOutcome{Code: resetNoneInDays}, nil
 	}
 	out, err := consumeCodexReset(ctx, base, tok, accountID, credit, newRedeemID())
 	if err != nil {

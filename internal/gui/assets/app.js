@@ -18245,11 +18245,13 @@ function resetsWords(r, q) {
     // whether the one that runs out first is kept from going to waste:
     // with Auto-use on it is used shortly before it does (#624, #719)
     // or, the week's alone, when the week runs out (tongzhenbao on X)
+    // and not when its days left are out of those set (ResetDays)
     if (q && autoResetKept(q)) {
-      const { expiring: x, week } = autoResetWhen(q);
+      const { expiring: o, week: k } = autoResetWhen(q), x = o && resetInDays(resetLeadMinutes() * 6e4), week = k && resetInDays(at - Date.now());
       w.append(el("span", "resets-kept" + (x || week ? " on" : ""), " · " + t(x ? "auto-used before it expires" : week ? "auto-used when the week runs out" : "not auto-used")));
       w.title += "\n" + t(x ? "Auto-use is on: the reset that runs out first is used {lead} before it does, if this account's windows have been used, so what they have left can be used until then and it isn't lost; at once if the account is held up until after then."
         : week ? "Auto-use is on for a used-up week: a reset is used by itself when this account's week is used up, before its credits are spent. One about to run out is otherwise lost unless it's used by hand or the week runs out before then."
+        : o || k ? "Auto-use is on, but the reset that runs out first has more or fewer days left than those set for one used by itself: it's lost unless it's used by hand before then."
         : "Auto-use is off: the reset that runs out first is lost unless it's used by hand before then.", resetLeadVars());
     }
   } else if (r.each?.length) w.title = resetsEach(r);
@@ -18380,8 +18382,8 @@ function autoResetTitle(on) {
 }
 
 // How long before a reset runs out it is used (codexResetLead; the owner, 10-30):
-// half an hour unless set or out of range, as the gateway reads it. RESET_LEADS in minutes.
-const RESET_LEADS = [3, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440];
+// half an hour unless set or out of range, as the gateway reads it (the
+// choices, RESET_LEADS, are autoresetown.js's).
 function resetLeadMinutes(s = state?.settings) {
   const m = s?.codexResetLead;
   return Number.isInteger(m) && m >= 3 && m <= 1440 ? m : 30;
@@ -18390,6 +18392,10 @@ function resetLeadWords(m) {
   return m < 60 || m % 60 ? t("{n} min", { n: m }) : t("{n} h", { n: m / 60 });
 }
 const resetLeadVars = (s) => ({ lead: resetLeadWords(resetLeadMinutes(s)) });
+// resetInDays: whether a reset ms from running out may be used by itself,
+// by the days set for that (codexResetDaysLeast/Most, 0 no bound), as
+// settings' ResetInDays (shangyuan0818 on X)
+const resetInDays = (ms, s = state?.settings) => ms >= (s?.codexResetDaysLeast || 0) * 864e5 && ms <= (s?.codexResetDaysMost || 1e9) * 864e5;
 
 // autoResetBrief: the say and its switch beside an account's name in brief (#801).
 function autoResetBrief(q) {

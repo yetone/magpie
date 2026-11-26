@@ -437,6 +437,8 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.CodexAutoReset = cur.CodexAutoReset
 	in.CodexAutoResetOnly = cur.CodexAutoResetOnly // and at which of the two times
 	in.CodexResetLead = cur.CodexResetLead         // and how early before one expires (codex-reset-lead)
+	// and which resets, by the days they have left (codex-reset-days)
+	in.CodexResetDaysLeast, in.CodexResetDaysMost = cur.CodexResetDaysLeast, cur.CodexResetDaysMost
 	// and which of them spend their credits, set there too
 	in.CodexNoCredits = cur.CodexNoCredits
 	in.CodexCreditsLast = cur.CodexCreditsLast   // and which only after everything else

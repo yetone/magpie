@@ -189,7 +189,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(posts.length, 3, "2 isn't posted");
         assert.equal(await page.locator("#status.err").textContent(), await page.evaluate((lang) => I18N[lang]?.["Minutes is a whole number from 3 to 1440"] || "Minutes is a whole number from 3 to 1440", lang));
         assert.equal((await page.locator("#codexResetLeadRow .rl-say > .on").textContent()).trim(), await say(page, lang, 7));
-        assert(await page.evaluate(() => RESET_LEADS[0] === 3 && RESET_LEADS.at(-1) === 1440), "the words say the range RESET_LEADS has");
+        assert.match(await fs.readFile(path.join(__dirname, "../assets/autoresetown.js"), "utf8"), /\nconst RESET_LEADS = \[3, [^\]]*, 1440\];/, "the words say the range RESET_LEADS has");
         // Escape: nothing posted
         await ownField();
         await own.fill("9");

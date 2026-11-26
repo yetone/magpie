@@ -154,6 +154,23 @@ func SetCodexResetLead(minutes int) error {
 	return settings.Save(s)
 }
 
+// SetCodexResetDays sets the days a reset may have left before it runs
+// out for one to be used by itself, at either time and for every account:
+// at least least and at most most, each from 0 (no bound) to
+// settings.CodexResetDaysLimit, least no more than a most set. Using one
+// by hand is never held to them.
+func SetCodexResetDays(least, most int) error {
+	if least < 0 || most < 0 || least > settings.CodexResetDaysLimit || most > settings.CodexResetDaysLimit {
+		return fmt.Errorf("a reset's days left are from 0 to %d, not %d to %d", settings.CodexResetDaysLimit, least, most)
+	}
+	if most > 0 && least > most {
+		return fmt.Errorf("at least %d days left is more than at most %d", least, most)
+	}
+	s := settings.Load()
+	s.CodexResetDaysLeast, s.CodexResetDaysMost = least, most
+	return settings.Save(s)
+}
+
 var autoReset = autoResets{file: "codex-autoreset.json"}
 
 type autoResets struct {
@@ -205,8 +222,21 @@ func AutoUseCodexReset(ctx context.Context, user string) (ResetOutcome, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		return weekUsedUp(windows, now), resets != nil && resets.Count > 0, nil
+		return weekUsedUp(windows, now), resets.anyInDays(now), nil
 	}, func() (ResetOutcome, error) { return useCodexReset(ctx, who, ResetUsedWeek) })
+}
+
+// anyInDays says whether r holds a reset that may be used by itself at
+// now (resetInDays). When the list read isn't every reset counted, any
+// held does, and the spend's own read of them decides (spendCodexReset).
+func (r *ResetCredits) anyInDays(now time.Time) bool {
+	if r == nil || r.Count <= 0 {
+		return false
+	}
+	if len(r.Each) != r.Count {
+		return true
+	}
+	return slices.ContainsFunc(r.Each, func(c ResetCard) bool { return resetInDays(c.Until, now) })
 }
 
 // use spends one of user's resets by itself if look finds its week used

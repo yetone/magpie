@@ -18,6 +18,7 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
        magpie quota reset [<codex account>] [--card <n>] [--yes]
        magpie quota auto-reset [<codex account>] [week|expiring] [on|off]
        magpie quota auto-reset lead [<minutes or hours, like 30m or 3h>|default]
+       magpie quota auto-reset days [<least>-<most>, like 0-7|default]
        magpie quota credits [<codex account>] [on|first|last|off]
        magpie quota alert [<percent>|off] [--balance <amount>|off]
        magpie quota wait <provider|account> [--timeout <duration>] [--quiet]
@@ -47,6 +48,12 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
   quota auto-reset lead 2h spends the one about to expire two hours before it does
   instead, for every account, from 15m to 24h; default puts back the half hour, and
   alone it says what is set. Earlier loses what the windows have left then.
+  quota auto-reset days 0-7 lets a reset be spent by itself, at either time, only
+  while it has at most 7 days left before it expires (counted from now, by the
+  clock), and 3- only while it has at least 3; the soonest of those goes first,
+  one that never expires only with no most. It is for every account, a reset spent
+  by hand isn't held to it, default lets every one again, and alone it says what
+  is set.
   quota credits off keeps a Codex account from spending its credits: once one of
   its windows is used up, by magpie's latest reading (refreshed about every
   minute), routing holds it as used up until that window renews and the request
@@ -329,6 +336,9 @@ func quotaAutoResetCmd(args []string) error {
 	if len(args) > 0 && strings.EqualFold(args[0], "lead") {
 		return quotaResetLeadCmd(args[1:])
 	}
+	if len(args) > 0 && strings.EqualFold(args[0], "days") {
+		return quotaResetDaysCmd(args[1:])
+	}
 	user, when, set, on := "", "", false, false
 	for _, a := range args {
 		switch strings.ToLower(a) {
@@ -435,6 +445,72 @@ func quotaResetLeadCmd(args []string) error {
 	}
 	fmt.Println(green.Render("✓"), "a reset about to expire unused is used", leadWords(settings.Load().ResetLead()), "before it does, for every account with auto-reset's expiring on")
 	return nil
+}
+
+// quotaResetDaysCmd: magpie quota auto-reset days [<least>-<most>|default]
+// — the days a reset may have left before it expires to be spent by
+// itself, for every account (shangyuan0818 on X); either side empty is no
+// bound.
+func quotaResetDaysCmd(args []string) error {
+	switch {
+	case len(args) > 1:
+		return fmt.Errorf("one range at a time, like: magpie quota auto-reset days 0-7")
+	case len(args) == 0:
+		fmt.Println("a reset is used by itself", resetDaysWords())
+		return nil
+	}
+	a := strings.ToLower(strings.TrimSpace(args[0]))
+	least, most := 0, 0
+	switch a {
+	case "help", "-h", "--help":
+		fmt.Println(quotaUsage)
+		return nil
+	case "default", "any", "0", "0-", "-", "0-0":
+	default:
+		lo, hi, ok := strings.Cut(a, "-")
+		var err error
+		if !ok {
+			return fmt.Errorf("days look like 0-7, 3- or -7 (the least and most days left), or default, not %q", args[0])
+		}
+		if least, err = daysBound(lo); err == nil {
+			most, err = daysBound(hi)
+		}
+		if err != nil {
+			return fmt.Errorf("days look like 0-7, 3- or -7, whole days from 0 to %d, not %q", settings.CodexResetDaysLimit, args[0])
+		}
+	}
+	if err := provider.SetCodexResetDays(least, most); err != nil {
+		return err
+	}
+	fmt.Println(green.Render("✓"), "a reset is used by itself", resetDaysWords()+", for every account with auto-reset on")
+	return nil
+}
+
+// daysBound reads one side of a days range: empty is 0, no bound.
+func daysBound(s string) (int, error) {
+	if s == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("not whole days: %q", s)
+	}
+	return n, nil
+}
+
+// resetDaysWords says which resets are used by themselves, by days left.
+func resetDaysWords() string {
+	s := settings.Load()
+	switch least, most := s.CodexResetDaysLeast, s.CodexResetDaysMost; {
+	case least == 0 && most == 0:
+		return "whatever days it has left (the default)"
+	case most == 0:
+		return "only with at least " + plural(least, "day") + " left before it expires"
+	case least == 0:
+		return "only with at most " + plural(most, "day") + " left before it expires"
+	default:
+		return fmt.Sprintf("only with %d to %d days left before it expires", least, most)
+	}
 }
 
 // leadWords says a lead as 30m or 3h.

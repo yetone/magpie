@@ -446,6 +446,17 @@ type Settings struct {
 	// say, how early is the same trade for each. Read through
 	// ResetLead, which takes a value out of range for the default.
 	CodexResetLead int `json:"codexResetLead,omitempty"`
+	// CodexResetDaysLeast and CodexResetDaysMost are the days a Codex
+	// reset may have left before it runs out for it to be used by itself,
+	// at either time (shangyuan0818 on X: 0 to 7, only the cards about to
+	// go spent when the week runs out): at least the first, at most the
+	// second, 0 for no bound. Days are 24 hours from now on the wall
+	// clock, not calendar days, so the zone the computer is in changes
+	// nothing. A reset that never runs out has no days left to count and
+	// is in range only with no most. Used by hand, any reset goes. Read
+	// through ResetDays.
+	CodexResetDaysLeast int `json:"codexResetDaysLeast,omitempty"`
+	CodexResetDaysMost  int `json:"codexResetDaysMost,omitempty"`
 	// CodexNoCredits are the ChatGPT accounts (lower-case) that don't
 	// spend their credits: once a usage window is used up, routing holds
 	// the account as used up and goes on to the user's other accounts,
@@ -1563,6 +1574,31 @@ func (s Settings) ResetLead() time.Duration {
 		m = CodexResetLeadDefault
 	}
 	return time.Duration(m) * time.Minute
+}
+
+// CodexResetDaysLimit is the most either of CodexResetDaysLeast and
+// CodexResetDaysMost can be set to: a year, past any reset ChatGPT grants.
+const CodexResetDaysLimit = 365
+
+// ResetDays is how long a Codex reset may have left before it runs out
+// for it to be used by itself: at least least, at most most, most 0 for
+// no bound. A value written by hand below 0 counts as 0, and one past
+// CodexResetDaysLimit as it; least past most is taken as written, so no
+// reset is used by itself, never as no range at all.
+func (s Settings) ResetDays() (least, most time.Duration) {
+	day := func(n int) time.Duration { return time.Duration(min(max(n, 0), CodexResetDaysLimit)) * 24 * time.Hour }
+	return day(s.CodexResetDaysLeast), day(s.CodexResetDaysMost)
+}
+
+// ResetInDays says whether a Codex reset that runs out at until (nil:
+// never) is in ResetDays' range at now, by the wall clock.
+func (s Settings) ResetInDays(until *time.Time, now time.Time) bool {
+	least, most := s.ResetDays()
+	if until == nil {
+		return most == 0
+	}
+	left := until.Round(0).Sub(now.Round(0))
+	return left >= least && (most == 0 || left <= most)
 }
 
 // SearchCountDefault is the pages a search is answered with when

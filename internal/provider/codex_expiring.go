@@ -140,9 +140,10 @@ func (e *expiringResets) check(user string, now time.Time, look func() ([]QuotaW
 	}
 	q := SubscriptionQuota{Windows: windows}
 	at := expiringResetSpent(until, now, usedUp(q, now), BackAt(q, now))
-	if at.After(now) || !windowsUsed(windows) {
+	if at.IsZero() || at.After(now) || !windowsUsed(windows) {
 		// not yet, or nothing to start again yet: the account may be used,
-		// or held up, before it runs out
+		// or held up, before it runs out; or out of the days set for a
+		// reset used by itself (ResetDays) when it would be
 		e.next[key] = nextResetLook(until, now)
 		return ResetOutcome{}, nil
 	}
@@ -214,18 +215,31 @@ func (e *expiringResets) wake(now time.Time) time.Duration {
 // too when the account is stopped (a window that stops it used up) and
 // back, when it is free again (zero: not known), isn't before then — what
 // the windows have left can't be used before the reset is spent anyway,
-// and spending it frees the account. Zero when it has run out already.
-// Routing goes by the same time (Allowance.Restarts; #717, #718), so the
-// two can't drift apart.
+// and spending it frees the account. Zero when it has run out already,
+// or when it has more or fewer days left then than the user lets a reset
+// used by itself have (settings' ResetDays; shangyuan0818 on X): it is
+// never spent by itself. Routing goes by the same time
+// (Allowance.Restarts; #717, #718), so the two can't drift apart.
 func expiringResetSpent(until, now time.Time, stopped bool, back time.Time) time.Time {
 	if !until.After(now) {
 		return time.Time{}
 	}
 	at := until.Add(-resetLead())
 	if !at.After(now) || stopped && (back.IsZero() || !back.Before(at)) {
-		return now
+		at = now
+	}
+	if !resetInDays(&until, at) {
+		return time.Time{}
 	}
 	return at
+}
+
+// resetInDays says whether a reset that runs out at until (nil: never)
+// may be used by itself at at, by the days the user lets such a reset
+// have left (settings' ResetDays): with none set, every one may. Shared:
+// routing reads it on every request.
+func resetInDays(until *time.Time, at time.Time) bool {
+	return settings.Shared().ResetInDays(until, at)
 }
 
 // resetRunsOut is when the reset an account will spend by itself before

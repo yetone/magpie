@@ -209,8 +209,9 @@ until codex exec …; do magpie quota wait codex || break; done</pre></div>
     <p>レート制限のリセットを持つ Codex アカウントは、その回数を表示します。</p>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="q-reset">コピー</button><pre id="q-reset">magpie quota reset                 # spends one held reset; asks first
 magpie quota auto-reset on
+magpie quota auto-reset days 0-7
 magpie quota credits off</pre></div>
-    <ul><li><code>magpie quota reset</code> は一回使って、アカウントの現在の枠を再開させます。取り消せないので先に確認します。<code>--yes</code> なら確認しません。</li><li><code>magpie quota auto-reset on</code> は、週の枠を使い切りほかのアカウントも受けられないときに自分で一回使います（週に一回まで、5 時間枠の使い切りでは使いません）。期限切れ間近のものは、枠を使っていれば期限の約 30 分前に使います。既定はオフです。</li><li><code>magpie quota credits off</code> は、枠を使い切った Codex アカウントにクレジットを使わせません。ルーティングは使い切りとして扱い、リクエストはほかのアカウント、グループ、フォールバックへ回ります。既定のオンなら作業が続きます。</li></ul>
+    <ul><li><code>magpie quota reset</code> は一回使って、アカウントの現在の枠を再開させます。取り消せないので先に確認します。<code>--yes</code> なら確認しません。</li><li><code>magpie quota auto-reset on</code> は、週の枠を使い切りほかのアカウントも受けられないときに自分で一回使います（週に一回まで、5 時間枠の使い切りでは使いません）。期限切れ間近のものは、枠を使っていれば期限の約 30 分前に使います。既定はオフです。</li><li><code>magpie quota auto-reset days 0-7</code> は、期限まで残り 0〜7 日（今から数えて）のものだけを自動で使います（<code>3-</code> は 3 日以上、<code>default</code> は制限なし）。範囲内で期限の早いものから使い、期限のないものは上限がないときだけ対象です。手動で使うときは制限されません。Codex エディタの詳細設定 › リセットでも設定できます。</li><li><code>magpie quota credits off</code> は、枠を使い切った Codex アカウントにクレジットを使わせません。ルーティングは使い切りとして扱い、リクエストはほかのアカウント、グループ、フォールバックへ回ります。既定のオンなら作業が続きます。</li></ul>
 
     <p><a href="/docs/ja/usage">エージェントごとのトークン使用量とコスト</a>：エージェント・モデル・アカウント・セッションごとの費用と、中継サービスの実際の価格。</p>
 

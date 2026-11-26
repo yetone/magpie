@@ -9193,11 +9193,13 @@ A Codex account that holds rate-limit resets says how many.
 ```
 magpie quota reset                 # spends one held reset; asks first
 magpie quota auto-reset on
+magpie quota auto-reset days 0-7
 magpie quota credits off
 ```
 
 - `magpie quota reset` spends one, starting the account's current windows again. It can't be undone, so it asks first; `--yes` doesn't.
 - `magpie quota auto-reset on` lets the account spend one by itself when its weekly window is used up and no other account can take a request, one a week at most (the five hours running out never does), and spend the one about to expire about half an hour before it does, if the account's windows have been used. Off until turned on.
+- `magpie quota auto-reset days 0-7` lets a reset be spent by itself only when it has 0 to 7 days left before it expires, counted from now (`3-` at least 3, `default` any); the soonest to expire in that range goes first, and one that never expires counts only with no most. Spending one by hand isn't held to it. Also in the Codex editor's Advanced, under Resets.
 - `magpie quota credits off` keeps a Codex account from spending its credits once a window is used up: routing holds it as used up and the request goes to the other accounts, groups and fallbacks. On, the default, lets the task go on.
 
 [Token usage and cost per agent](https://usemagpie.ai/docs/usage): what each agent, model, account and session spent, and a relay's real price.

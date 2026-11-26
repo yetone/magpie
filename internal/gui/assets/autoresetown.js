@@ -72,7 +72,60 @@ window.autoResetOwnPaint = function (s) {
     after = r;
   }
   renderResetLead(s, head.hidden);
+  renderResetDays(s, head.hidden);
 };
+
+// renderResetDays: the days a reset may have left before it expires to be
+// used by itself, from and to, for every account (settings/codex-reset-days;
+// shangyuan0818 on X). Empty is no bound; both empty, every one, the
+// default. Enter or leaving the two saves, Escape puts a field back.
+const RESET_DAYS_MOST = 365;
+// RESET_LEADS: the lead's choices in minutes, 3 to 1440 as the gateway takes it
+const RESET_LEADS = [3, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440];
+function renderResetDays(s, hidden) {
+  const row = $("#codexResetDaysRow");
+  if (!row) return;
+  row.hidden = hidden;
+  const pick = $("#codexResetDaysPick");
+  // a redraw leaves a field being typed in
+  if (pick.contains(document.activeElement)) return;
+  const was = [s.codexResetDaysLeast || 0, s.codexResetDaysMost || 0];
+  const box = el("div", "reset-days");
+  const fields = ["At least", "At most"].map((name, n) => {
+    const i = input(was[n] ? String(was[n]) : "", n ? "∞" : "0");
+    i.className = "words compact-num";
+    i.inputMode = "numeric";
+    i.setAttribute("aria-label", t(name) + " · " + t("days left"));
+    i.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") i.value = was[n] ? String(was[n]) : "";
+      if (e.key === "Enter" || e.key === "Escape") i.blur();
+    };
+    // saved as the pair is left, not as the first is: from 3–7 to 10–20
+    // is never 10–7 on the way
+    i.onblur = () => setTimeout(() => box.contains(document.activeElement) || save());
+    return i;
+  });
+  box.append(fields[0], el("span", "", "–"), fields[1], el("span", "", t("days left")));
+  pick.replaceChildren(box);
+  async function save() {
+    const [least, most] = fields.map((i) => i.value.trim()).map((v) => (/^\d+$/.test(v) ? Number(v) : v ? NaN : 0));
+    if (!(least <= RESET_DAYS_MOST && most <= RESET_DAYS_MOST) || most && least > most) {
+      status(t("Days are whole numbers from 0 to 365, the first no more than the second"), "err");
+      return renderSettings();
+    }
+    if (least === was[0] && most === was[1]) return;
+    try {
+      prefs = await writingPrefs(api("settings/codex-reset-days", { least, most }));
+      if (state) state.settings = prefs;
+      renderSettings();
+      if (quotas) renderQuotas(); // the cards' words say it too
+    } catch (err) {
+      statusTErr(err);
+      renderSettings();
+    }
+  }
+}
 
 // renderResetLead: how long before a reset about to run out unused it is
 // used, under the accounts' switches, one for them all; a pick from the
