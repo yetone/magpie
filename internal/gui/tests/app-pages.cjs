@@ -19,6 +19,18 @@ const LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect 
 const RIVER = "@magpie-community/opencode-river-auth";
 const KILO = "@magpie-community/agent-kilo";
 
+// Usage's cards: several accounts of one subscription (the head's fold,
+// its ⋯), keys with a balance each
+const at = (h) => new Date(now + h * 36e5).toISOString();
+const win = (name, used, h) => ({ name, used, resetsAt: at(h) });
+const QUOTAS = [
+  { provider: "codex", name: "Codex", kind: "subscription", icon: "codex-color", plan: "Plus", user: "c1@example.com", windows: [win("5 hours", 20, 2), win("7 days", 40, 90)] },
+  { provider: "codex", name: "Codex", kind: "subscription", icon: "codex-color", plan: "Plus", user: "c2@example.com", windows: [win("5 hours", 90, 2), win("7 days", 10, 90)] },
+  { provider: "kimi", name: "Kimi", icon: "kimi", user: "k1@example.com", windows: [win("Weekly", 42, 70)] },
+  { provider: "openrouter", name: "OpenRouter", icon: "openrouter", user: "key-a", windows: [], balance: "$4.00" },
+  { provider: "openrouter", name: "OpenRouter", icon: "openrouter", user: "key-b", windows: [], balance: "$9.50" },
+];
+
 function server(lang) {
   const listings = [
     { package: RIVER, name: "River", providers: ["river"], community: true, github: { stars: 7, owner: "a" }, summary: { en: "River pay-as-you-go inference." } },
@@ -51,7 +63,7 @@ function server(lang) {
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, url: "http://127.0.0.1:3999", calls: [] }, plugins: [] });
     if (url.pathname === "/api/groups") return json({ groups: [], pools: [], models: [] });
     if (url.pathname === "/api/gateway/trace") return json({ routes: [] });
-    if (url.pathname === "/api/usage/quotas") return json([]);
+    if (url.pathname === "/api/usage/quotas") return json(QUOTAS);
     if (url.pathname === "/api/usage/requests") return json(ledger(url.searchParams.get("period")));
     if (url.pathname === "/api/usage") return json({ calls: 7, errors: 0, input: 23100, output: 859, cache_read: 0, cache_write: 0, reasoning: 0, cost: 0.004, unpriced: 0, accounts, callerKeys: [], agents, models, series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });
     if (url.pathname === "/api/library") return json(lib);
@@ -81,8 +93,12 @@ function server(lang) {
 const PAGES = [
   ["plugins", `#view-plugins .pm-card[data-pkg="${KILO}"] .pm-ver`],
   ["library", "#view-library .lib-body .row-head"],
-  ["usage", "#usageAccounts .row.stat"],
-  ["requests", "#ledSpeed .led-spd-check", async (page) => {
+  ["usage", "#subscriptionUsage .subscription-card .subscription-head .quota-more"],
+  // the card's fold the other way: every account in full
+  ["usage:open", "#subscriptionUsage .subscription-card .subscription-head .quota-more[aria-expanded=true]", async (page) => {
+    await page.locator('#subscriptionUsage .subscription-card[data-provider="codex"] .subscription-head .quota-more').click();
+  }],
+  ["usage:requests", "#ledSpeed .led-spd-check", async (page) => {
     await page.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
     await page.locator("#ledSpeed .led-spd tbody tr").first().waitFor();
     await page.locator("#ledSpeed .led-spd-by .opt").nth(1).click();
@@ -95,9 +111,9 @@ const PAGES = [
 async function visitPages(page, each) {
   await page.goto("http://magpie.test/");
   for (const [view, ready, then] of PAGES) {
-    // Requests is Usage's second tab: Usage is open already, and a
-    // second click on it folds its tabs away
-    if (view !== "requests") await page.locator(view === "settings" ? "#prefs" : `#nav button[data-view="${view}"]`).first().click();
+    // a step on the page open already (usage:requests is Usage's second
+    // tab): a second click on its sidebar item folds its tabs away
+    if (!view.includes(":")) await page.locator(view === "settings" ? "#prefs" : `#nav button[data-view="${view}"]`).first().click();
     if (then) await then(page);
     await page.locator(ready).first().waitFor().catch((e) => { throw new Error(view + ": " + ready + " never drew: " + e.message); });
     await page.evaluate(() => document.fonts.ready);

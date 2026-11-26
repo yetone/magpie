@@ -2932,3 +2932,18 @@ older assets folder, where the wheel leaves the page at 0.
 ```sh
 node --test internal/gui/tests/view-slow-frames.test.cjs
 ```
+
+## Controls laid out whole
+
+`button-text-center.test.cjs` walks Plugins, Library, Usage (its cards
+both ways and Requests' speed table by provider), Providers and Settings in
+all five languages, Chromium and WebKit, and holds every control's one line
+of words within 0.5px of its box's middle, against the same words centred
+in a box of that height in the same font (`btn-align.cjs`). Its third test
+reads app.css: no rule for a class given beside `text` comes before
+`.text`'s own, which would win over it. `control-overlap.test.cjs` walks
+the same pages (`app-pages.cjs`) at 1180px and 420px and fails when two
+controls a pointer can reach cross, opacity 0 included, or when a control's
+middle is under something else (`control-room.cjs`). `MAGPIE_ASSETS`
+selects older assets for the failing comparison; `BTN_LOG=1` prints every
+measurement. The API is faked.

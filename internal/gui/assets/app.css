@@ -1173,7 +1173,7 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .quota-acct-fold { align-self: center; display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; margin: -2px -5px -2px -3px; padding: 0; border-radius: 4px; color: var(--faint); transition: background .12s, color .12s; }
 .subscription-account :is(.user, .acct-eye) + .quota-acct-fold { margin-left: auto; }
 /* one account's card folds from its head's end, before its ⋯ (PILIHU2023 on X) */
-.subscription-head > .quota-acct-fold { margin-left: auto; }
+.subscription-head > .quota-acct-fold { margin-left: auto; margin-right: 0; }
 .subscription-head > :is(.plan, .quota-every, .quota-sum) ~ .quota-acct-fold { margin-left: 2px; }
 .quota-acct-fold:hover { background: var(--pill); color: var(--fg-2); }
 .quota-acct-fold svg { transform: rotate(180deg); transition: transform .15s var(--ease-out); }
@@ -1358,6 +1358,7 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .text.quota-every { flex: none; margin: -2px -7px -2px 0; padding: 1px 7px; font-size: 10.5px; }
 .subscription-account .plan + .quota-every, .subscription-head .plan + .quota-every { margin-left: 4px; }
 .subscription-account :is(.user, .acct-eye) + .quota-every, .subscription-head .quota-every { margin-left: auto; }
+.subscription-head .quota-every { margin-right: 0; }
 /* Hide accounts' eye by an account's name: that one shown while the rest
    stay hidden, for this window (yogurt36); in sight on hover or focus, and
    while it shows its account */
@@ -1516,11 +1517,13 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .row.stat .us-more.open { opacity: 1; background: var(--pill); color: var(--fg); }
 @media (hover: none) { .row.stat .us-more { opacity: 1; margin: 0 -4px 0 -2px; } }
 /* a Usage card's ⋯, its menu (jen_celeus on X): at the head's end, shown as
-   the card is hovered, and always where nothing hovers. Room is kept for it
-   either way: drawn over what ends there, it hid the end of "Show the other
-   accounts in brief" (normalcoder_ on X) */
-.subscription-head { position: relative; padding-right: 18px; }
-.subscription-head .us-more { position: absolute; top: 50%; right: -6px; width: 22px; height: 22px; margin-top: -11px; background: var(--card); opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+   the card is hovered, and always where nothing hovers. In the head's flow,
+   after what is pushed to its end, so its room is kept by the layout: placed
+   absolutely in a padding the fold before it reached 7px into, it covered the
+   end of "Show the other accounts in brief" (normalcoder_ on X, the owner
+   11-26). Nothing before it reaches into the gap. */
+.subscription-head .us-more { position: relative; flex: none; width: 22px; height: 22px; margin: -4px -6px -4px auto; background: var(--card); opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+.subscription-head > :is(.plan, .quota-every, .quota-sum, .quota-more, .quota-acct-fold) ~ .us-more { margin-left: -4px; }
 .subscription-head .us-more:hover { background: var(--pill); }
 .subscription-card:hover .subscription-head .us-more { opacity: 1; }
 .subscription-head .us-more:focus-visible { opacity: 1; }
@@ -2476,7 +2479,7 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 .row-head { display: flex; align-items: center; height: 26px; }
 .label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 /* several accounts: the button opening the ones in brief, in the head */
-.subscription-card .quota-more { margin: -4px -7px -4px auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--muted); }
+.subscription-card .quota-more { margin: -4px 0 -4px auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--muted); }
 .subscription-card .quota-more:hover { color: var(--fg); }
 /* a provider's keys: their sum in the head, the rest of them behind a button at the foot */
 .subscription-head .quota-sum { margin-left: auto; flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -4933,6 +4936,7 @@ body.panel .modal { padding: 16px 12px; }
   body.web .icon { width: 44px; height: 44px; }
   /* a Usage card's ⋯ is drawn at its head's size and taken at 44 by its own ::after */
   body.web .subscription-head .us-more { width: 22px; height: 22px; }
+  body.web .subscription-head > :is(.plan, .quota-every, .quota-sum, .quota-more, .quota-acct-fold) ~ .us-more { margin-left: 4px; } /* 11px from what is before it: its ::after's own */
   body.web .subscription-head .us-more::after { content: ""; position: absolute; inset: -11px -6px -11px -11px; } /* the card's edge, never past it */
   body.web .update { min-height: 36px; }
   body.web .view {
