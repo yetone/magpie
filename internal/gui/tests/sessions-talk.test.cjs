@@ -158,6 +158,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const talk = page.locator(".sess-sheet .sess-talk");
       await talk.locator(".cx-part").first().waitFor();
       assert.deepEqual(calls.filter((c) => c.path === "transcript"), [{ path: "transcript", agent: "pi", id: "p-1" }]);
+      // the turn's steps, drawn as its fold opens
+      await talk.locator(".sess-steps > summary").click();
       assert.equal(await talk.locator(".cx-part").count(), PARTS.length);
       if (lang === "en") {
         assert.deepEqual(await talk.locator(".cx-part .cx-role").allTextContents(), [w.you, w.thinking, w.call, w.result, w.asst]);

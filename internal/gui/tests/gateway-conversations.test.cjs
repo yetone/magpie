@@ -122,6 +122,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const top = await row.evaluate((e) => e.getBoundingClientRect().top);
       await page.locator(".sess-talk-btn").click();
       await page.locator(".sess-talk .sess-steps").first().waitFor();
+      assert.equal(await page.locator(".sess-talk .cx-part").count(), 2, "the ask and the answer; the steps wait for their folds");
+      for (const s of await page.locator(".sess-talk details.sess-steps > summary").all()) await s.click();
       assert.equal(await page.locator(".sess-talk .cx-part").count(), 5);
       assert.equal(await page.locator(".sess-talk details.cx-part").getAttribute("open"), null);
       assert.equal(await row.evaluate((e) => e.getBoundingClientRect().top), top, "no click scroll");

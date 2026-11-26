@@ -1722,10 +1722,13 @@ magpie.plugin("sessions", (ctx) => {
         turn.rest.push(it);
       }
     }
+    // the first part a search found is known before anything is drawn, so
+    // the fold that holds it is drawn with its steps
+    const hit = find ? parts.find((p) => (!p.kind || p.kind === "text" || p.kind === "context") && needleOf(p.text || "").includes(find)) : null;
     let found = null;
     const node = (it, n) => {
       if (it.words) n.dataset.turn = "1";
-      if (find && !found && (!it.p.kind || it.p.kind === "text" || it.p.kind === "context") && needleOf(it.p.text || "").includes(find)) { n.classList.add("sess-found"); found = n; }
+      if (it.p === hit) { n.classList.add("sess-found"); found = n; }
       return n;
     };
     const open = stepsOpen.get(box.dataset.talk) || new Set();
@@ -1743,9 +1746,20 @@ magpie.plugin("sessions", (ctx) => {
         const d = el("details", "sess-steps");
         const sum = el("summary");
         sum.append(el("span", "", t(steps.length === 1 ? "1 step" : "{n} steps", { n: steps.length })), svg(CHEV, 11, 1.6));
-        d.append(sum, ...steps.map((it) => node(it, stepSaid(it))));
+        d.append(sum);
+        // a fold's steps are drawn when it is first opened: a long
+        // session's thinking and tool output stay out of the page until
+        // asked for (usrname1833 on Discord)
+        let drawn = false;
+        const fill = () => { if (!drawn) { drawn = true; d.append(...steps.map((it) => node(it, stepSaid(it)))); } };
+        if (open.has(i) || steps.some((it) => it.p === hit)) fill();
+        // drawn on the click, before the fold opens, so it never opens
+        // empty; what the click does is kept at once, since toggle comes a
+        // task later and a sheet drawn again before it would undo the click
+        sum.addEventListener("click", () => { fill(); if (d.open) open.delete(i); else open.add(i); });
         d.open = open.has(i);
-        d.addEventListener("toggle", () => { if (d.open) open.add(i); else open.delete(i); });
+        // a fold drawn over since says nothing about the one now shown
+        d.addEventListener("toggle", () => { if (!d.isConnected) return; if (d.open) { fill(); open.add(i); } else open.delete(i); });
         out.push(d);
       }
       if (fi >= 0) {

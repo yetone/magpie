@@ -3,7 +3,9 @@
 // user's words and the agent's last words in a turn stand out, in the
 // interface's font and larger than the rest, and everything between them
 // (thinking, tool calls and results, what the agent said on the way) folds
-// to one line, "N steps", with a chevron. A click on it shows the steps,
+// to one line, "N steps", with a chevron. A fold's steps are drawn only
+// when it is first opened, so a long session's page holds what was said
+// and one line a turn. A click on the line shows the steps,
 // each to its first lines; a click on a long one (or Enter) shows it whole,
 // and again folds it back. What was unfolded stays so when the sheet is
 // drawn again. A turn with no last words shows its fold only. A search
@@ -110,7 +112,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const y0 = await page.evaluate(() => scrollY);
 
       // each turn: the user's words, its steps on one line, its last words
-      assert.equal(await talk.locator(".cx-part").count(), PARTS.length, "every part is still drawn");
+      assert.equal(await talk.locator(".cx-part").count(), 5, "what was said is drawn: three asks, two answers");
       assert.equal(await talk.locator("[data-turn]").count(), 3, "the turns the head counts");
       const order = await talk.evaluate((b) => [...b.children].filter((n) => !n.matches(".cx-none, .cx-src")).map((n) =>
         n.matches(".sess-steps") ? "steps" : n.matches(".sess-ask") ? "ask:" + n.querySelector(".cx-t").textContent : n.matches(".sess-final") ? "final:" + n.querySelector(".cx-t").textContent : "other"));
@@ -120,6 +122,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         [await tr("{n} steps", { n: 6 }), await tr("{n} steps", { n: 2 }), await tr("1 step")]);
       assert.equal(await folds.locator(":scope > summary svg").count(), 3, "each fold has its chevron");
       assert.deepEqual(await folds.evaluateAll((ds) => ds.map((d) => d.open)), [false, false, false], "folded at first");
+      assert.deepEqual(await folds.evaluateAll((ds) => ds.map((d) => d.children.length)), [1, 1, 1], "a shut fold's steps aren't drawn yet");
       // a closed fold is its one line: WebKit's isVisible counts a closed <details>' children as shown, so measure it
       for (const h of await folds.evaluateAll((ds) => ds.map((d) => d.getBoundingClientRect().height))) assert(h < 40, `a closed fold is ${h}px tall`);
       for (const n of await talk.locator(".sess-ask, .sess-final").all()) assert(await n.isVisible());
@@ -169,6 +172,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.keyboard.press("Enter");
       assert.equal(await call.getAttribute("aria-expanded"), "true", "Enter shows it whole too");
 
+      // every fold opened, every part is there once
+      for (const s of await folds.locator(":scope > summary").all()) if (!(await s.evaluate((x) => x.parentNode.open))) await s.click();
+      assert.equal(await talk.locator(".cx-part").count(), PARTS.length, "every part once its fold is open");
+      for (const s of (await folds.locator(":scope > summary").all()).slice(1)) await s.click();
+      assert.deepEqual(await folds.evaluateAll((ds) => ds.map((d) => d.open)), [true, false, false], "the clicks shut the last two");
       // drawn again, what was unfolded stays so
       await talk.evaluate((b) => b.again());
       assert.deepEqual(await folds.evaluateAll((ds) => ds.map((d) => d.open)), [true, false, false]);
@@ -197,6 +205,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(await found.textContent(), /Zanzibar key/);
       assert(await found.isVisible(), "the fold that holds it is open");
       assert.deepEqual(await page.locator(".sess-sheet details.sess-steps").evaluateAll((ds) => ds.map((d) => d.open)), [true, false, false]);
+      assert.deepEqual(await page.locator(".sess-sheet details.sess-steps").evaluateAll((ds) => ds.map((d) => d.children.length)), [7, 1, 1], "only the fold that holds it is drawn");
       await page.keyboard.press("Escape");
 
       if (lang !== "en") {

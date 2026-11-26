@@ -738,8 +738,13 @@ turn's last assistant text). A turn with no last words shows its fold only.
 In the fold each step is a line (thinking, context) or its first three lines
 (`brief`), and a click or Enter shows it whole. Which folds and steps were
 opened survives a redraw (`stepsOpen`, `stepFull`); a search hit inside a fold
-opens it. Every part stays in the DOM, so `[data-turn]` still counts the
-turns. Verification: browser `sessions-talk-steps.test.cjs`.
+opens it. A fold's steps are drawn when it is first opened (the summary's
+click, before the fold shows, so it never opens empty), or at once when it is
+open from before or holds the hit. `[data-turn]` is on the user's messages,
+always drawn, so it still counts the turns. With 300 turns of 8 tool calls,
+the sheet has 4,233 nodes instead of 30,933. It opens in 199ms instead of
+245ms in Chromium, and 227ms instead of 361ms in WebKit. Verification: browser
+`sessions-talk-steps.test.cjs`.
 
 A transcript holds the first `transcriptMax` (400,000) characters of its
 parts, thinking and tool output included, and says `cut` when there was

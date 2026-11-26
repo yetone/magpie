@@ -102,7 +102,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const y0 = await page.evaluate(() => scrollY);
 
         await rest.click();
-        await page.waitForFunction(() => document.querySelectorAll(".sess-sheet .sess-talk .cx-part").length === 9);
+        await page.waitForFunction(() => document.querySelectorAll(".sess-sheet .sess-talk .sess-final").length === 2);
         assert.deepEqual(asked, ["p-1", "p-1@6"]);
         assert.equal(await rest.count(), 1, "still more to read");
         assert(await rest.evaluate((b) => b === document.activeElement), "the button keeps the focus");
@@ -112,6 +112,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await talk.getByText("You're welcome.").waitFor();
         assert.deepEqual(asked, ["p-1", "p-1@6", "p-1@9"]);
         assert.equal(await rest.count(), 0, "the end: no button");
+        for (const s of await talk.locator("details.sess-steps > summary").all()) await s.click();
         assert.equal(await talk.locator(".cx-part").count(), PARTS.length, "every part once");
         assert.equal(await talk.locator("[data-turn]").count(), 3, "every turn");
         const finals = await talk.locator(".sess-final .cx-t").allTextContents();

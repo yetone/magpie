@@ -98,8 +98,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const talk = page.locator(".sess-sheet .sess-talk");
         await talk.locator(".cx-part").first().waitFor();
         assert.deepEqual(calls, ["c-1"]);
+        // the steps are drawn as their folds open
+        for (const s of await talk.locator("details.sess-steps > summary").all()) await s.click();
         assert.equal(await talk.locator(".cx-part").count(), PARTS.length);
-        await talk.evaluate((b) => b.querySelectorAll("details.sess-steps").forEach((d) => { d.open = true; }));
 
         const got = await talk.locator(".cx-part").evaluateAll((ps) => ps.map((p, i) => {
           const m = p.querySelector(".cx-h .cx-model");
