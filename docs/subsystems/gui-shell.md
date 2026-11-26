@@ -689,6 +689,18 @@ remain in the list, preserves them across summary refreshes, and offers a
 retry after a failed read. See `TestRecentCallBodiesOnDemand` and
 `recent-call-bodies.test.cjs`.
 
+With Settings › Privacy's "Show request content" off (`hideRequestText`,
+llxth1 on X; on by default, as these views are local, masked and in
+memory only), the gateway keeps no call's bodies (see
+[gateway routing](gateway-routing.md)'s Prompt row), and
+`/api/gateway/call` answers `{"hidden": true}` with the call's headers
+while the ring has it, never reading the archive. The Gateway page's
+Recent calls, the Routing page's Request and response and the context
+card's text view say so with a way to the switch
+(`hiddenContentNote`, `ctxtext.js`'s `gone`), and drop the bodies they
+fetched before when it changes (`hidRead`, checked as each draws). See
+`TestRoutingRequestOpensItsBodies` and `request-text-hidden.test.cjs`.
+
 A request on the Routing page opens to the same bodies (Fate on Discord):
 its story's head has "Request and response", which fetches
 `GET /api/gateway/call?route=…` (`Server.RouteCall`) only when pressed.

@@ -361,6 +361,28 @@ func TestRestoreOnQuitKeptUnlessSent(t *testing.T) {
 	}
 }
 
+// Show request content (llxth1 on X): a save from a page that doesn't send
+// hideRequestText (the tray panel, or a page from before it) keeps it off,
+// and one that sends it false turns it back on.
+func TestHideRequestTextKeptUnlessSent(t *testing.T) {
+	cur := settings.Defaults()
+	cur.HideRequestText = true
+	in, err := Merge([]byte(`{"theme":"dark"}`), cur, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !in.HideRequestText {
+		t.Error("a save that didn't send hideRequestText showed request content again")
+	}
+	in, err = Merge([]byte(`{"theme":"dark","hideRequestText":false}`), cur, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.HideRequestText {
+		t.Error("hideRequestText sent false left it on")
+	}
+}
+
 // netube99 on X: Settings → Images refused minimax-cn/MiniMax-H3-Image with
 // "no model … to generate images" when the key serves no chat model.
 func TestImageGenAcceptsMiniMaxImageModel(t *testing.T) {

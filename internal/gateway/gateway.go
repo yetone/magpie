@@ -727,8 +727,12 @@ func (s *Server) Recent() []Call {
 // RouteCall is the call the Routing page's request route was, while it is
 // still in the ring.
 func (s *Server) RouteCall(route int64) (Call, bool) {
+	hide := HidesRequestText()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if hide {
+		s.forgetRingText()
+	}
 	for i := len(s.recent) - 1; i >= 0; i-- {
 		if route != 0 && s.recent[i].Route == route {
 			return s.recent[i], true
@@ -739,8 +743,12 @@ func (s *Server) RouteCall(route int64) (Call, bool) {
 
 // RecentCall is the call numbered id while it is still in the ring.
 func (s *Server) RecentCall(id uint64) (Call, bool) {
+	hide := HidesRequestText()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if hide {
+		s.forgetRingText()
+	}
 	for _, c := range s.recent {
 		if c.ID == id {
 			return c, true
@@ -759,8 +767,17 @@ func (s *Server) record(c Call) {
 		archive(c)
 		c.wire = nil
 	}
+	// Show request content off: the ring keeps no call's bodies, and lets
+	// go of those kept before (request_text.go)
+	hide := HidesRequestText()
+	if hide {
+		c = withoutText(c)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if hide {
+		s.forgetRingText()
+	}
 	s.calls++
 	c.ID = s.calls
 	s.recent = keepRecent(s.recent, c)

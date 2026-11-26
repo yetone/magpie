@@ -155,6 +155,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		AllowIPs:             []string{"203.0.113.7"},
 		FetchPrivate:         []string{"nas.lan"},
 		GitHubToken:          "ghp_kept",
+		HideRequestText:      true,
 		RequestArchive:       true,
 		RequestArchiveMaxMB:  64,
 		RequestArchiveMB:     2048,

@@ -21,8 +21,19 @@ const GONE = {
   missing: "Not in the request archive: it is saved just after the call, the oldest are removed past the archive's size, or the save failed (magpie's log says why)",
   cut: "The request archive kept only the start of this request, so it can't be read",
   unread: "The request archive's copy couldn't be read or masked, so none of it is shown",
+  hidden: "Show request content is off in Settings › Privacy: magpie keeps none of what requests said",
 };
-const gone = (why, n) => el("p", "ctx-view-gone", t(GONE[why] || GONE.off, { n }));
+// gone: why the text isn't here; off by the switch, the way to it
+// (llxth1 on X)
+const gone = (why, n) => {
+  const p = el("p", "ctx-view-gone", t(GONE[why] || GONE.off, { n }));
+  if (why !== "hidden") return p;
+  const go = el("button", "text", t("Settings › Privacy"));
+  go.type = "button";
+  go.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); openSettingsAt(e, "privacy", "#hideRequestTextRow"); };
+  p.append(" ", go);
+  return p;
+};
 // a stretch of text, and a button for the next
 function longText(text) {
   const box = el("div", "ctx-text-box");

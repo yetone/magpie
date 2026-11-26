@@ -28,6 +28,10 @@ type PromptReply struct {
 // ReplyBody is the reply to request route id as the Recent calls keep it,
 // with the protocol it was written in; false once the call has left them.
 func (s *Server) ReplyBody(id int64) (provider.Protocol, []byte, bool, bool) {
+	if HidesRequestText() {
+		s.forgetRequestText()
+		return "", nil, false, false
+	}
 	c, ok := s.RouteCall(id)
 	if !ok || c.ResponseBody == "" {
 		return "", nil, false, false

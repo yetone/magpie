@@ -3528,6 +3528,9 @@ function routingPage(part) {
   // request archive's copy, when it was on. Nothing more is recorded for
   // it: without the archive an older request says how to keep them.
   const bodiesGot = new Map(); // route id → { busy } | its bodies | { gone } | { error }
+  // Show request content as the bodies were read (llxth1 on X): switched
+  // in Settings › Privacy, the bodies read before go
+  let hidRead = !!prefs?.hideRequestText;
   const wireOpen = new Set(); // route ids whose HTTP headers are open
   async function loadBodies(id) {
     const pending = { busy: true };
@@ -3553,9 +3556,10 @@ function routingPage(part) {
       if (bodiesKey) { bodiesKey = ""; bodies.replaceChildren(); }
       return;
     }
+    if (prefs && !!prefs.hideRequestText !== hidRead) { hidRead = !hidRead; bodiesGot.clear(); bodiesKey = ""; }
     if (!bodiesGot.has(r.id)) loadBodies(r.id);
     const got = bodiesGot.get(r.id);
-    const key = JSON.stringify([document.documentElement.lang, r.id, r.archive || "", !!providers?.gateway?.archive?.on, got.busy ? "busy" : got.gone ? "gone" : got.error ? "error" : "in", wireOpen.has(r.id)]);
+    const key = JSON.stringify([document.documentElement.lang, r.id, r.archive || "", !!providers?.gateway?.archive?.on, got.busy ? "busy" : got.gone ? "gone" : got.error ? "error" : got.hidden ? "hidden" : "in", wireOpen.has(r.id)]);
     if (key === bodiesKey) return;
     bodiesKey = key;
     if (got.busy) { bodies.replaceChildren(el("div", "none", t("Fetching…"))); return; }
@@ -3579,12 +3583,16 @@ function routingPage(part) {
         : t("magpie keeps the request and response of only the last 40 requests, until it quits. To keep every request's, turn on Request archive at the top of Usage › Requests.")));
       return;
     }
-    const grid = el("div", "call-details");
-    grid.append(
-      callBodyPanel("Request Body", got.requestBody, got.requestTruncated, undefined, "rt|" + r.id + "|req"),
-      callBodyPanel("Response Body", got.responseBody, got.responseTruncated, "rt|" + r.id),
-    );
-    bodies.replaceChildren(grid);
+    // Show request content off (llxth1 on X): no bodies, the headers kept
+    if (got.hidden) bodies.replaceChildren(hiddenContentNote());
+    else {
+      const grid = el("div", "call-details");
+      grid.append(
+        callBodyPanel("Request Body", got.requestBody, got.requestTruncated, undefined, "rt|" + r.id + "|req"),
+        callBodyPanel("Response Body", got.responseBody, got.responseTruncated, "rt|" + r.id),
+      );
+      bodies.replaceChildren(grid);
+    }
     // the headers both ways, folded (wireHeadersView, usage/page.js)
     if (got.headers) bodies.append(wireHeadersView(got.headers, wireOpen.has(r.id), () => {
       if (wireOpen.has(r.id)) wireOpen.delete(r.id); else wireOpen.add(r.id);

@@ -12,6 +12,7 @@ import (
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // A request on the Routing page opens to its own request and response
@@ -83,5 +84,24 @@ func TestRoutingRequestOpensItsBodies(t *testing.T) {
 		if code, _ := get(id); code != http.StatusNotFound {
 			t.Fatalf("route %d the ring hasn't: %d", id, code)
 		}
+	}
+	// Show request content off (llxth1 on X): the call says its bodies
+	// aren't kept, with its headers still, and the ring lets go of them
+	if err := settings.Save(settings.Settings{HideRequestText: true}); err != nil {
+		t.Fatal(err)
+	}
+	code, got := get(routes[0].ID)
+	if _, h := got["headers"]; code != http.StatusOK || got["hidden"] != true || !h || got["requestBody"] != nil || got["responseBody"] != nil {
+		t.Fatalf("hidden: %d %v", code, got)
+	}
+	for _, c := range s.Recent() {
+		if c.RequestBody != "" || c.ResponseBody != "" {
+			t.Fatalf("hidden: the ring kept %+v", c)
+		}
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/gateway/call?id=999999", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"hidden":true`) || strings.Contains(w.Body.String(), "headers") {
+		t.Fatalf("hidden, not in the ring: %d %s", w.Code, w.Body)
 	}
 }

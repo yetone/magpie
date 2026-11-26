@@ -95,6 +95,17 @@ func TestContextTextFromTheArchive(t *testing.T) {
 	if code, body := get("/api/context/reply?id=41&day=2026-10-02"); code != http.StatusNotFound || !strings.Contains(body, `"archive":"unread"`) || strings.Contains(body, phone) {
 		t.Fatalf("unmasked: %d %s", code, body)
 	}
+	broken()
+	// Show request content off (llxth1 on X): the card's text and reply
+	// say so, and the archive's copy isn't read for them
+	if err := settings.Save(settings.Settings{Redact: true, RedactPersonal: true, RequestArchiveLocal: true, HideRequestText: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, url := range []string{"/api/context/text?id=41&kind=chat&item=0&day=2026-10-02", "/api/context/reply?id=41&day=2026-10-02"} {
+		if code, body := get(url); code != http.StatusNotFound || !strings.Contains(body, `"archive":"hidden"`) || strings.Contains(body, "ships") {
+			t.Fatalf("hidden %s: %d %s", url, code, body)
+		}
+	}
 }
 
 // failingMasker is a masker that can't mask: Safely takes its panic as a

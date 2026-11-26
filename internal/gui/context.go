@@ -1070,6 +1070,15 @@ func contextRoutesAPI(mux *http.ServeMux) {
 				return
 			}
 		}
+		// Show request content off (llxth1 on X): none, from memory or
+		// the archive; the archive's own page still opens what it saved
+		if gateway.HidesRequestText() {
+			if gw := served.Load(); gw != nil {
+				gw.PromptText(id, "", false) // lets go of what was kept
+			}
+			writeGone(rw, "hidden")
+			return
+		}
 		var pt gateway.PromptText
 		ok := false
 		if gw := served.Load(); gw != nil {

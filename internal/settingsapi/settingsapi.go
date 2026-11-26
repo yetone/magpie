@@ -40,7 +40,7 @@ var Keys = []string{
 	"proxy", "pluginProxy", "updateProxy", "updateSource",
 	// privacy
 	"redact", "redactPersonal", "redactKinds", "redactWords", "redactWordsAnyCase", "redactWordsWhole", "redactShape",
-	"noStats", "noUsageStats", "otel",
+	"hideRequestText", "noStats", "noUsageStats", "otel",
 	// warm-ups and check-ins
 	"codexWarmup", "claudeWarmup", "agyWarmup", "codexWarmAt", "claudeWarmAt", "codexWarmAts", "claudeWarmAts",
 	"workbuddyCheckin", "traeCheckin", "minimaxCheckin", "qoderCheckin", "checkinAt",
@@ -206,6 +206,10 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// nor whether they match only as whole words
 	if _, sent := fields["redactWordsWhole"]; !sent {
 		in.RedactWordsWhole = cur.RedactWordsWhole
+	}
+	// nor whether request content is shown (llxth1 on X)
+	if _, sent := fields["hideRequestText"]; !sent {
+		in.HideRequestText = cur.HideRequestText
 	}
 	// nor whether a key goes as a made-up one of its form
 	if _, sent := fields["redactShape"]; !sent {

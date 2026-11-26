@@ -347,6 +347,11 @@ type Settings struct {
 	Port int `json:"port,omitempty"`
 	// LANKeyID remembers the default named key created when sharing is enabled.
 	LANKeyID string `json:"lanKeyId,omitempty"`
+	// HideRequestText is Settings › Privacy's Show request content turned
+	// off (llxth1 on X): the gateway keeps no request's text or bodies in
+	// memory, and the Routing and Gateway pages show none
+	// (gateway/request_text.go). The request archive is apart from it.
+	HideRequestText bool `json:"hideRequestText,omitempty"`
 	// RequestArchive keeps each call the gateway serves — its headers and
 	// bodies both ways, secrets taken out — in the S3 bucket sync keeps
 	// its backup in (gateway/archive.go), for looking into a request later.

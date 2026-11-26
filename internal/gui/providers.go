@@ -1894,6 +1894,17 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			} else if route, err := strconv.ParseInt(r.URL.Query().Get("route"), 10, 64); err == nil {
 				c, ok = gw.RouteCall(route)
 			}
+			if gateway.HidesRequestText() {
+				// Show request content off (llxth1 on X): the call's
+				// headers while the ring has it, and that its bodies
+				// aren't kept; nor read from the archive here
+				out := map[string]any{"hidden": true}
+				if ok {
+					out["headers"] = c.Headers()
+				}
+				writeJSON(rw, out)
+				return
+			}
 			if ok {
 				writeJSON(rw, map[string]any{
 					"requestBody": c.RequestBody, "responseBody": c.ResponseBody,

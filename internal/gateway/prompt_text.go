@@ -47,6 +47,11 @@ type keptBody struct {
 // keepBody keeps a request's masked body for its prompt's text, dropping
 // the oldest past promptBodies or promptBodiesMax.
 func (t *trace) keepBody(id int64, from provider.Protocol, body []byte, plain bool) {
+	// Show request content off: none is kept (request_text.go)
+	if HidesRequestText() {
+		t.dropBodies()
+		return
+	}
 	// its pictures kept apart, so a conversation of pictures keeps its
 	// text (leanImages)
 	body = leanImages(body, true)
@@ -123,6 +128,10 @@ const PromptKept = promptBodies
 // entry's text is there when withText; false when the request's body is no
 // longer kept, or its prompt can't be read.
 func (s *Server) PromptText(id int64, kind string, withText bool) (PromptText, bool) {
+	if HidesRequestText() {
+		s.forgetRequestText()
+		return PromptText{}, false
+	}
 	kb, ok := s.trace.keptBodyOf(id)
 	if !ok || !slices.Contains(partOrder, kind) {
 		return PromptText{}, false

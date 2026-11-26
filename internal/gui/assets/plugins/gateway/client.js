@@ -21,6 +21,9 @@ let connectFolded = true;
 try { connectFolded = localStorage.getItem("magpie.gwConnectFolded") !== "0"; } catch {}
 const expandedCalls = new Set(); // recent-call ids whose wire bodies are open
 const callBodies = new Map(); // callRow → its bodies, read when it is opened (#1521)
+// Show request content as the bodies were read (llxth1 on X): switched
+// in Settings › Privacy, the bodies read before go
+let hidRead = !!prefs?.hideRequestText;
 const wireOpen = new Set(); // recent-call ids whose HTTP headers are open
 // recent calls drawn a page at a time, as many as the plugin's setting
 // says (callsPage)
@@ -793,6 +796,7 @@ const callRow = (c) => (c.id ? `#${c.id}` : `${c.time}|${c.agent}|${c.model}`);
 
 function renderActivity() {
   const g = providers.gateway;
+  if (prefs && !!prefs.hideRequestText !== hidRead) { hidRead = !hidRead; callBodies.clear(); }
   // what calls left the ring keep, they let go of
   const ids = new Set(g.calls.map(callRow));
   for (const id of callBodies.keys()) if (!ids.has(id)) callBodies.delete(id);
@@ -840,14 +844,15 @@ function renderActivity() {
     if (open) {
       if (!callBodies.has(id)) loadCallBodies(c, id);
       const body = callBodies.get(id);
-      const details = el("div", body.busy || body.error ? "" : "call-details");
+      const details = el("div", body.busy || body.error || body.hidden ? "" : "call-details");
       if (body.busy) details.append(el("div", "none", t("Fetching…")));
       else if (body.error) {
         details.append(el("div", "call-archive-err", body.error));
         const retry = el("button", "text", t("Try again"));
         retry.onclick = () => { loadCallBodies(c, id); renderActivity(); };
         details.append(retry);
-      } else details.append(
+      } else if (body.hidden) details.append(hiddenContentNote());
+      else details.append(
         callBodyPanel("Request Body", body.requestBody, body.requestTruncated, undefined, id + "|req"),
         callBodyPanel("Response Body", body.responseBody, body.responseTruncated, id),
       );
@@ -1269,6 +1274,17 @@ function sseBodyPanel(label, raw, truncated, id) {
   };
   draw();
   return panel;
+}
+
+// hiddenContentNote: a call's bodies with Show request content off
+// (llxth1 on X), which the gateway didn't keep; the way to the switch
+function hiddenContentNote() {
+  const p = el("div", "none call-hidden", t("Show request content is off in Settings › Privacy: magpie keeps none of what requests said"));
+  const go = el("button", "text", t("Settings › Privacy"));
+  go.type = "button";
+  go.onclick = (e) => { e.stopPropagation(); openSettingsAt(e, "privacy", "#hideRequestTextRow"); };
+  p.append(" ", go);
+  return p;
 }
 
 // id, given, is a response's, whose stream reads as its events; key names

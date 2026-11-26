@@ -22264,6 +22264,10 @@ function renderRedact(s, keep) {
   rowIn(find, t("Rules"), masking ? t("Keys, tokens, emails and numbers whose checksum adds up: patterns that are certain, checked on every request") : why, always).id = "maskRulesRow";
   if (window.hideAccounts) rowIn(share, t("Hide accounts"), t("Email addresses and account names on every page are blurred, for a screenshot to share"),
     onOff(window.hideAccounts.on(), (on) => { window.hideAccounts.set(on); renderSettings(); }));
+  // what the last requests said, on Routing and Gateway (llxth1 on X);
+  // off, the gateway keeps none of it (gateway/request_text.go)
+  rowIn(share, t("Show request content"), t("What the last requests said, on the Routing and Gateway pages, kept in memory only. Off, magpie keeps none of it"),
+    onOff(!s.hideRequestText, (on) => savePrefs({ ...keep, hideRequestText: !on }))).id = "hideRequestTextRow";
   rowIn(share, t("Turn off telemetry for all agents"), t("Over each agent's own Telemetry switch, an agent found later too"),
     onOff(s.agentTelemetryOff, (off) => writingPrefs(api("settings/agent-telemetry", { off })).then((ns) => {
       prefs = state.settings = ns;

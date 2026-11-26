@@ -207,6 +207,14 @@ func contextReplyAPI(mux *http.ServeMux) {
 			http.Error(rw, "invalid route id", http.StatusBadRequest)
 			return
 		}
+		// Show request content off: none, as for the prompt's text
+		if gateway.HidesRequestText() {
+			if gw := served.Load(); gw != nil {
+				gw.ReplyBody(id) // lets go of what was kept
+			}
+			writeGone(rw, "hidden")
+			return
+		}
 		out := gateway.PromptReply{ID: id, From: "memory"}
 		var (
 			from provider.Protocol
