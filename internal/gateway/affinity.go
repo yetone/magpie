@@ -134,6 +134,11 @@ type Affinity struct {
 	// "strict" (Stays: Strict, kept whatever it is), "lead" (put with the
 	// key or account its session's main conversation is on: withSession).
 	Why string `json:"why"`
+	// Spread is, for a new conversation ("first") a session kept whole put
+	// on the key or account the fewest others are on (leastHeld), how many
+	// were ahead of it: the order's next Spread, passed over for the
+	// conversations they hold, which the Routing page says on their rows.
+	Spread int `json:"spread,omitempty"`
 	// Main is, for a conversation kept strictly on a provider's fallback,
 	// the provider's own key or account that is ready again: it would have
 	// gone back to it ("main") but for Stays: Strict, which the Routing
@@ -903,7 +908,7 @@ func affine(scope, mode string, rotate, spread, inOrder, hoursOver bool, in http
 			// conversation under its agent id)
 			cs, pl = withLead(key, cs, pl)
 		case spread:
-			cs, pl = leastHeld(scope, key, cs, pl, true)
+			cs, pl, a.Spread = leastHeldAt(scope, key, cs, pl, true)
 		}
 	}
 	if !rotate {
@@ -1010,8 +1015,16 @@ const heldFor = 30 * time.Minute
 // lowShare, which Smart puts behind for new conversations — and routing's
 // order is otherwise as it was, its turn marks too.
 func leastHeld(scope, key string, cs []candidate, pl planned, ready bool) ([]candidate, planned) {
+	cs, pl, _ = leastHeldAt(scope, key, cs, pl, ready)
+	return cs, pl
+}
+
+// leastHeldAt is leastHeld, which also says how many were ahead of the
+// one it put first (0 when it moved none): order[1:n+1] after it, the
+// ones a new conversation passed over for the others they are on.
+func leastHeldAt(scope, key string, cs []candidate, pl planned, ready bool) ([]candidate, planned, int) {
 	if len(cs) < 2 || len(pl.order) < len(cs) {
-		return cs, pl
+		return cs, pl, 0
 	}
 	if strings.HasPrefix(scope, provider.GroupPrefix) {
 		if g, ms, ok := provider.FindGroup(scope); ok {
@@ -1022,19 +1035,38 @@ func leastHeld(scope, key string, cs []candidate, pl planned, ready bool) ([]can
 				// a group in the group, or a provider routed its own way:
 				// its own routing orders its models or keys (#576)
 				if len(m.Path) > 1 || ownRouting(m.Provider, g) {
-					return cs, pl
+					return cs, pl, 0
 				}
 			}
 		}
 	}
 	now := time.Now()
+	// in turn spreads over the members, each model its own (#946); a
+	// session kept whole spreads over what is spent: members on one key
+	// or account, drawing on one allowance, are one, and a new
+	// conversation stays on the first of them (Dazzle_sys on X: GPT-6.2
+	// Sol and GPT-6 Luna on one Codex account, a second session went to
+	// Luna)
+	member := func(who, model, effort string) string { return who + "/" + provider.WithMemberEffort(model, effort) }
+	spent := map[string]string{}
+	if ready {
+		for _, c := range cs {
+			spent[c.who()+"/"+c.model] = c.who() + "/" + spendsOn(c)
+		}
+	}
+	seatOf := func(who, model, effort string) string {
+		if s, ok := spent[who+"/"+model]; ok {
+			return s
+		}
+		return member(who, model, effort)
+	}
 	held := map[string]int{}
 	sticks.Lock()
 	defer sticks.Unlock()
 	for _, m := range []map[string]stick{sticks.m, sticks.opening} {
 		for k, st := range m {
 			if strings.HasPrefix(k, scope+"|") && now.Sub(st.at) <= heldFor && !(ready && strings.Contains(k, "|agent:")) {
-				held[st.who+"/"+provider.WithMemberEffort(st.model, st.effort)]++
+				held[seatOf(st.who, st.model, st.effort)]++
 			}
 		}
 	}
@@ -1043,9 +1075,9 @@ func leastHeld(scope, key string, cs []candidate, pl planned, ready bool) ([]can
 		sticks.opening[key] = stick{rest: cs[0].rest, who: cs[0].who(), model: cs[0].model, effort: cs[0].effort, at: now}
 	}()
 	if len(held) == 0 {
-		return cs, pl
+		return cs, pl, 0
 	}
-	seat := func(c candidate) string { return c.who() + "/" + provider.WithMemberEffort(c.model, c.effort) }
+	seat := func(c candidate) string { return seatOf(c.who(), c.model, c.effort) }
 	best := -1
 	for i, c := range cs {
 		if pl.order[i].Rest != nil || pl.order[i].Aside || standsIn(pl.order, i) || lastBehind(pl.order, i) || busyBehind(pl.order, i) || ready && i > 0 && !readyForNew(pl.order, i) {
@@ -1056,7 +1088,7 @@ func leastHeld(scope, key string, cs []candidate, pl planned, ready bool) ([]can
 		}
 	}
 	if best <= 0 {
-		return cs, pl
+		return cs, pl, 0
 	}
 	cs = append(append([]candidate{cs[best]}, cs[:best]...), cs[best+1:]...)
 	pl.order = append(append([]Weighed{pl.order[best]}, pl.order[:best]...), pl.order[best+1:]...)
@@ -1065,7 +1097,22 @@ func leastHeld(scope, key string, cs []candidate, pl planned, ready bool) ([]can
 			pl.order[j].Turn = j == 0
 		}
 	}
-	return cs, pl
+	return cs, pl, best
+}
+
+// spendsOn names the part of its key's or account's allowance a
+// candidate's model draws on: "" for the whole of it, the model's own
+// windows when the account counts the model apart (Opus's own week,
+// Antigravity's per-model quota), and the model itself for a free
+// OpenRouter model, rate limited on its own.
+func spendsOn(c candidate) string {
+	if c.isOpenRouterFree() {
+		return c.model
+	}
+	if c.p.Account == nil {
+		return ""
+	}
+	return allowances(c.p.Account.UsageAgent())[c.p.Account.User].PoolOf(c.model)
 }
 
 // readyForNew says whether order[i], behind order[0], is one routing would
@@ -1227,7 +1274,7 @@ func withSession(scope, key string, named bool, a *Affinity, own stick, had bool
 	if a.Kept && i == 0 || !a.Kept && i == 0 && pl.order[0].Rest != nil {
 		return cs, pl // where it is already
 	}
-	a.Kept, a.Why, a.LeadModel = false, "lead", lead.model
+	a.Kept, a.Why, a.LeadModel, a.Spread = false, "lead", lead.model, 0
 	return cs, pl
 }
 

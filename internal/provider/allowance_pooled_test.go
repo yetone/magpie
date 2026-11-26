@@ -125,3 +125,35 @@ func TestAllowancePooledModelNoWindowCounts(t *testing.T) {
 		t.Error("with a window of the whole account, a model no window counts is refused alone")
 	}
 }
+
+// PoolOf: models drawing on the whole account alone are one pool; one with
+// a window of its own (Opus's week, Cursor's Other Models) is apart, and
+// two in the same such window are one again.
+func TestAllowancePoolOf(t *testing.T) {
+	now := time.Now()
+	week := now.Add(3 * 24 * time.Hour)
+	claude := Allowance{
+		{Used: 40, Resets: week, Span: 7 * 24 * time.Hour, Model: "opus"},
+		{Used: 20, Resets: week, Span: 7 * 24 * time.Hour},
+	}
+	if a, b := claude.PoolOf("claude-sonnet-4-6"), claude.PoolOf("claude-haiku-4-5"); a != "" || b != "" {
+		t.Errorf("Sonnet %q and Haiku %q draw on the whole account only", a, b)
+	}
+	if p := claude.PoolOf("claude-opus-4-7"); p == "" || p == claude.PoolOf("claude-sonnet-4-6") {
+		t.Errorf("Opus %q is in Sonnet's pool", p)
+	}
+	cursor := allowanceOf(quotaOfPlugin(SubscriptionQuota{}, plugin.Usage{Windows: []plugin.UsageWindow{
+		{Name: "Cursor Models", Used: fptr(12), Models: []string{"auto", "composer-2"}},
+		{Name: "Other Models", Used: fptr(30), NotModels: []string{"auto", "composer-2"}},
+	}}).Windows, now)
+	if a, b := cursor.PoolOf("auto"), cursor.PoolOf("composer-2"); a == "" || a != b {
+		t.Errorf("Auto %q and Composer %q are in Cursor Models both", a, b)
+	}
+	if a, b := cursor.PoolOf("auto"), cursor.PoolOf("gpt-5.5"); a == b {
+		t.Errorf("Auto and GPT-5.5 both in %q", a)
+	}
+	codex := Allowance{{Used: 45, Span: 5 * time.Hour}, {Used: 86, Span: 7 * 24 * time.Hour}}
+	if a, b := codex.PoolOf("gpt-6.2-sol"), codex.PoolOf("gpt-6-luna"); a != b {
+		t.Errorf("one Codex account: Sol %q, Luna %q", a, b)
+	}
+}

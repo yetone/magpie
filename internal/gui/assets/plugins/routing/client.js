@@ -780,6 +780,29 @@ function routingPage(part) {
   // a try that answered: one whose reply broke off after it began (its 200
   // sent, then the vendor's error, #733) didn't, and has a fail
   const tryOk = (tr) => tr.status < 400 && !tr.fail;
+  // what the vendor said, word for word, without the hint magpie put after
+  // it (HINTS): the steps' "It said", and the row of a try gone on from
+  const saidOf = (tr) => {
+    const e = typeof tr.error === "string" ? tr.error : "", hint = e && HINTS.find((h) => e.endsWith(" — " + h));
+    return { said: hint ? e.slice(0, -(hint.length + 3)) : e, hint };
+  };
+  // a row the request went on from: its status, magpie's reading of the
+  // failure when it has a kind (a proxy down, a rate limit) and the vendor's
+  // own words (Dazzle_sys on X), cut short on the row and read whole over it
+  const wentSay = (tr) => {
+    const { said } = saidOf(tr), status = tr.status, fail = failWord(tr.fail, tr.rest);
+    if (!said) return t("{status} · {fail} · went on to the next", { status, fail });
+    const error = said.length > 600 ? said.slice(0, 600) + "…" : said;
+    return FAIL[tr.fail] && tr.fail !== "other" ? t("{status} · {fail} · went on to the next · {error}", { status, fail, error })
+      : t("{status} · went on to the next · {error}", { status, error });
+  };
+  // a row a new conversation passed over: a session kept whole went to the
+  // one fewer sessions are on (Affinity.Spread), and this one, ahead of it,
+  // holds more
+  const spreadPast = (r, w) => {
+    const a = r.affinity, i = a?.why === "first" && a.spread > 0 ? r.order.findIndex((y) => seat(y) === seat(w)) : -1;
+    return i >= 1 && i <= a.spread;
+  };
   const API = { anthropic: "Anthropic", chat: "OpenAI", responses: "OpenAI Responses", gemini: "Gemini" };
   const MODES = {
     "": ["Quota first", "Quota first: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours, and one whose month its weeks can no longer use up before it renews by its week. One at 90% or more waits until the others can't answer; one resting after a failure goes last."],
@@ -1186,7 +1209,9 @@ function routingPage(part) {
   // read as every conversation stuck to one account (YsiCing on X: three
   // Codex accounts, two at 0% "conversation kept on another").
   function behindWhy(r, w) {
-    const f = r.order[0], x = r.order.find((y) => y.id === w.id);
+    // the row's own seat: two members on one account (a model each) are
+    // two rows of one id
+    const f = r.order[0], x = r.order.find((y) => seat(y) === seat(w)) || r.order.find((y) => y.id === w.id);
     if (!f || !x || x === f || f.rest || f.fallback || x.fallback || x.routing || !x.known || group(x) !== "fine") return null;
     if (!weighedWith(r, x).includes(f) || memberSplit(r, f, x)) return null;
     const kept = ["session", "turn", "cache"].includes(r.affinity?.why) ? "kept" : null;
@@ -3300,8 +3325,12 @@ function routingPage(part) {
         // done, not one the gateway went on from (#2281)
         else if (tr.done && !tr.rest && !tr.again && !tr.earlier && r.done && tr === r.tries[r.tries.length - 1]) gave.set(tryseat(r, tr), tr);
         // one the gateway went on from says what it answered, and that the
-        // request went on, not that the agent got it
-        else if (tr.done && !tr.rest && !tr.again && !tr.credits && tr !== r.tries[r.tries.length - 1]) went.set(tryseat(r, tr), tr);
+        // request went on, not that the agent got it: one that rested too,
+        // whose rest the next on its account lifted by answering (Dazzle_sys
+        // on X: GPT-6.2 Sol failed, GPT-6 Luna on the same Codex account
+        // answered, and Sol's row said nothing of why); while it still
+        // rests, the row says so instead
+        else if (tr.done && !tr.again && !tr.credits && tr !== r.tries[r.tries.length - 1]) went.set(tryseat(r, tr), tr);
         if (tr.rest) restAt(tr.id, modelOf(tr), tr.rest, at(tr.start) + (tr.ms || 0));
       }
       // it answered: whatever rest it began in is over
@@ -3339,7 +3368,8 @@ function routingPage(part) {
       }
       else if (answered.has(id)) { s = (agents.size > 1 ? t("answered {agent}", { agent: agentName(r.agent) }) : t("answered this request")) + (said && " · " + said); named = titleOf(r); }
       else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail, gave.get(id).rest), agent: agentName(r.agent) });
-      else if (went.has(id)) s = t("{status} · {fail} · went on to the next", { status: went.get(id).status, fail: failWord(went.get(id).fail, went.get(id).rest) });
+      else if (went.has(id)) s = wentSay(went.get(id));
+      else if (spreadPast(r, w)) s = w.known ? quota(w, "{n} used · other sessions on it · a new one went to one with fewer", "{n} left · other sessions on it · a new one went to one with fewer") : t("other sessions on it · a new one went to one with fewer");
       else if (w.noURL) s = noURLWord(w);
       else if (w.reserve) s = t("in reserve · {n} at once", { n: w.reserve });
       else if (w.sunk && !lifted(sunkKey(w), at(w.sunk))) s = t("rate limited at {time} · at the back", { time: clock(w.sunk) });
@@ -3900,8 +3930,7 @@ function routingPage(part) {
       }
       // what the vendor said, word for word: the why above is magpie's reading of it
       if (tr.done && !tryOk(tr) && tr.error) {
-        const hint = HINTS.find((h) => tr.error.endsWith(" — " + h));
-        const said = hint ? tr.error.slice(0, -(hint.length + 3)) : tr.error;
+        const { said, hint } = saidOf(tr);
         items.push([t("It said: {error}", { error: said.length > 600 ? said.slice(0, 600) + "…" : said }), "aside said"]);
         if (hint) items.push([t(hint), "aside"]);
       }

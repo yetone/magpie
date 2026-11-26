@@ -7,6 +7,7 @@ package provider
 // gone stale — or when an account says it has run out.
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -778,6 +779,22 @@ func (a Allowance) Full(model string, share float64, now time.Time) time.Time {
 func (a Allowance) Scoped(model string) bool {
 	model = strings.ToLower(model)
 	return slices.ContainsFunc(a, func(l Limit) bool { return (l.Model != "" || l.matches != nil) && l.applies(model) })
+}
+
+// PoolOf names the windows of the allowance that count some models only
+// and count model ("" when only the whole account's do): two models of one
+// account with the same PoolOf draw on one allowance, so a conversation
+// moved from one to the other spends what it would have spent anyway.
+func (a Allowance) PoolOf(model string) string {
+	model = strings.ToLower(model)
+	var ps []string
+	for i, l := range a {
+		if (l.Model != "" || l.matches != nil) && l.applies(model) {
+			ps = append(ps, cmp.Or(l.Name, l.Model, fmt.Sprint("#", i)))
+		}
+	}
+	slices.Sort(ps)
+	return strings.Join(slices.Compact(ps), "+")
 }
 
 // Pooled says whether a refusal of model for its allowance leaves the
