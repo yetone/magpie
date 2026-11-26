@@ -64,7 +64,7 @@ code, pre, kbd, .mono { font-family: ui-monospace, "SF Mono", "JetBrains Mono", 
 nav { position: sticky; top: 0; z-index: 10; backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--line); }
 nav .wrap { display: flex; align-items: center; gap: 14px; height: 60px; }
 .brand { flex: none; white-space: nowrap; display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 17px; letter-spacing: -.01em; text-decoration: none; }
-.brand img { width: 24px; height: 24px; }
+.brand img, .brand .mb { width: 24px; height: 24px; }
 .brand small { font-weight: 500; color: var(--ink3); font-size: 15px; padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--line); }
 /* one line only: a link that doesn't fit wraps onto a second line the bar clips, never into a column of characters */
 nav .links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 40px 24px; min-width: 0; height: 22px; line-height: 22px; overflow: hidden; margin-left: auto; margin-right: 10px; font-size: 14px; color: var(--ink2); }

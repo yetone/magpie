@@ -154,3 +154,6 @@
   addEventListener("resize", spy);
   spy();
 })();
+
+// The nav's magpie wags on hover, as on the home page (bird.js).
+document.head.append(Object.assign(document.createElement("script"), { src: "/bird.js", defer: true }));
