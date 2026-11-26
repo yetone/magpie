@@ -195,6 +195,9 @@ body.linux.panel { --panel-tint: var(--bg); }
 }
 :root[data-theme="light"] body.panel { --bg: #f2f2f5; --card: #ffffff; --card-2: #f8f8fa; --line: rgba(0, 0, 0, .07); --line-2: rgba(0, 0, 0, .06); --pill: #ffffff; --pill-hover: #f4f4f7; --skel: #eeeef2; --skel-hi: #e2e2e8; --pill-line: rgba(0, 0, 0, .12); --pill-shadow: 0 1px 1px rgba(0, 0, 0, .06); --faint: #9a9aa3; --card-edge: 0 0 0 1px rgba(0, 0, 0, .05), 0 1px 2px rgba(0, 0, 0, .04); }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: default; appearance: none; -webkit-appearance: none; text-align: center; }
+/* the text button's base, before any rule naming one: a later .text won over
+   .led-spd-check's 0 padding, and 检查… sat low in its 20px */
+.text { font-size: 12px; color: var(--ctl-fg); padding: 3px 7px; border-radius: 6px; transition: background .12s, color .12s; white-space: nowrap; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 input { font: inherit; color: var(--fg); }
 /* a text field no rule names still looks like the app's own (input.words),
@@ -2480,7 +2483,6 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 .subscription-card .quota-sum + .quota-more { margin-left: 4px; }
 .subscription-card .quota-keys-more { display: block; margin: 8px 0 -4px -7px; max-width: calc(100% + 7px); overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--muted); }
 .subscription-card .quota-keys-more:hover { color: var(--fg); }
-.text { font-size: 12px; color: var(--ctl-fg); padding: 3px 7px; border-radius: 6px; transition: background .12s, color .12s; white-space: nowrap; }
 .text:hover { color: var(--fg); background: var(--pill); }
 .text.action { height: 27px; padding: 0 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg-2); box-shadow: 0 1px 1px rgba(0, 0, 0, .04); display: inline-flex; align-items: center; justify-content: center; }
 .text.action:hover { border-color: var(--muted); background: var(--card-2); color: var(--fg); }
