@@ -96,6 +96,15 @@ async function open(t, engine, opts) {
   const browser = await launch(engine);
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: opts.viewport || { width: 1200, height: 800 }, acceptDownloads: true });
+  // a shell slow to answer the page's hello, as on a busy computer
+  if (opts.slowShell) await page.addInitScript((ms) => {
+    if (window.top !== window) return;
+    const on = window.addEventListener;
+    window.addEventListener = function (type, fn, o) {
+      if (type !== "message") return on.call(this, type, fn, o);
+      return on.call(this, type, function (e) { if (e.data && e.data.type === "hello") setTimeout(() => fn.call(this, e), ms); else fn.call(this, e); }, o);
+    };
+  }, opts.slowShell);
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(site.base + "/a/x/");
@@ -186,6 +195,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await ask(page).waitFor();
     const b = await ask(page).boundingBox();
     assert.ok(b.x >= 0 && b.x + b.width <= 320 && b.y >= 0 && b.y + b.height <= 568, `inside the window: ${JSON.stringify(b)}`);
+  });
+
+  test(`a shell slow to answer still asks the viewer (${engine})`, async (t) => {
+    const { page, frame } = await open(t, engine, { slowShell: 4000 });
+    await start(frame, { filename: "late.csv", data: "a,b" });
+    await ask(page).waitFor({ timeout: 15000 });
+    await ask(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.equal((await frame.evaluate(() => window.res)).code, "declined");
   });
 
   const WORDS = { zh: ["保存“a.md”？", "保存", "取消"], "zh-TW": ["儲存「a.md」？", "儲存", "取消"], ja: ["「a.md」を保存しますか？", "保存", "キャンセル"], de: ["„a.md“ sichern?", "Sichern", "Abbrechen"] };

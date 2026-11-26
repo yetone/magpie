@@ -1021,9 +1021,11 @@
   function whenShell() {
     if (shellUp) return Promise.resolve(true);
     if (!framed) return Promise.resolve(false);
+    // as long as claude.use waits for a viewer: a busy computer's shell
+    // answers late, and a page that stopped waiting would be refused
     return new Promise(function (res) {
       shellWait.push(res);
-      setTimeout(function () { res(shellUp); }, 3000);
+      setTimeout(function () { res(shellUp); }, 10000);
     });
   }
   // an element's anchor path: from the nearest id, else from body, by
