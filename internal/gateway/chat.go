@@ -144,14 +144,31 @@ func readChat(body []byte, facts bool) (*Request, error) {
 		decodeJSON(c.Stop, &r.Stop)
 	}
 	var sys []string
+	replied := false
 	for _, m := range c.Messages {
 		switch m.Role {
 		case "system", "developer":
-			sys = append(sys, stringOrText(m.Content))
+			// a rule's system condition reads every one (systemTexts)
 			r.systemRaw = append(r.systemRaw, m.Content)
+			if replied {
+				// One after a reply or a tool's result (ZCode's reminder
+				// on each turn and tool round) stays where it came, for
+				// the builders to say in that turn (responseInstructions),
+				// as a Responses (#502) or Anthropic client's is. Joined
+				// into the system prompt, each rewrote the top-level
+				// system a Messages upstream caches before the
+				// conversation, and every turn was a full cache write
+				// with no read (#7204).
+				if t := stringOrText(m.Content); t != "" {
+					r.Messages = append(r.Messages, Message{Role: m.Role, Parts: []Part{{Kind: Text, Text: t}}})
+				}
+				continue
+			}
+			sys = append(sys, stringOrText(m.Content))
 		case "user":
 			r.Messages = append(r.Messages, Message{Role: "user", Parts: chatParts(m.Content)})
 		case "assistant":
+			replied = true
 			if facts {
 				r.Messages = append(r.Messages, Message{Role: "assistant"})
 				continue
@@ -174,6 +191,7 @@ func readChat(body []byte, facts bool) (*Request, error) {
 			}
 			r.Messages = append(r.Messages, msg)
 		case "tool":
+			replied = true
 			if facts {
 				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: m.ToolCallID}}})
 				continue

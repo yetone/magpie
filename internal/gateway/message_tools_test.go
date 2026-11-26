@@ -55,7 +55,9 @@ func namesAt(body, path string) []string {
 }
 
 // noEmptySystem fails when a system text magpie sent upstream is empty, or
-// when the two system texts were joined around an empty one.
+// when it is not Pi's leading system message alone: the update Pi sends
+// after a reply stays in its turn (#7204), so the system a Messages
+// upstream caches ahead of the conversation is the same on every turn.
 func noEmptySystem(t *testing.T, texts []string) {
 	t.Helper()
 	all := strings.Join(texts, "\n")
@@ -64,8 +66,40 @@ func noEmptySystem(t *testing.T, texts []string) {
 			t.Errorf("an empty system text was sent: %q", texts)
 		}
 	}
-	if !strings.Contains(all, "</cwd>\n\nUpdated system prompt section") {
-		t.Errorf("system texts not joined as two: %q", all)
+	if !strings.HasSuffix(strings.TrimSpace(all), "</cwd>") {
+		t.Errorf("system texts are not Pi's leading system message alone: %q", all)
+	}
+}
+
+// updateInTurn fails unless Pi's system prompt update reaches the
+// conversation as a reminder ahead of the user's last words.
+func updateInTurn(t *testing.T, body string) {
+	t.Helper()
+	var texts []string
+	var walk func(gjson.Result)
+	walk = func(v gjson.Result) {
+		switch {
+		case v.IsArray(), v.IsObject():
+			v.ForEach(func(_, e gjson.Result) bool { walk(e); return true })
+		case v.Type == gjson.String:
+			texts = append(texts, v.String())
+		}
+	}
+	walk(gjson.Parse(body))
+	update, ask := -1, -1
+	for i, s := range texts {
+		if update < 0 && strings.Contains(s, "Updated system prompt section") {
+			update = i
+			if !strings.Contains(s, "<system-reminder>\nUpdated system prompt section") {
+				t.Errorf("the update isn't told as a reminder: %q", s)
+			}
+		}
+		if strings.Contains(s, "Please call lookup_recipe") {
+			ask = i
+		}
+	}
+	if update < 0 || ask < update {
+		t.Errorf("the update is not in the conversation ahead of the last turn (at %d, the ask at %d): %s", update, ask, body)
 	}
 }
 
@@ -113,12 +147,14 @@ func TestPiAddedToolReachesEveryRoute(t *testing.T) {
 				texts = []string{sys.String()}
 			}
 			noEmptySystem(t, texts)
+			updateInTurn(t, gjson.Get(body, "messages").Raw)
 		}},
 		{"responses", "wire-model", "/v1/responses", provider.Provider{Responses: srv.URL + "/v1"}, func(t *testing.T, body string) {
 			if got := namesAt(body, "tools.#.name"); !slices.Equal(got, piTools) {
 				t.Errorf("tools %v, want %v: %s", got, piTools, body)
 			}
 			noEmptySystem(t, []string{gjson.Get(body, "instructions").String()})
+			updateInTurn(t, gjson.Get(body, "input").Raw)
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -159,6 +195,7 @@ func TestPiAddedToolReachesEveryRoute(t *testing.T) {
 			t.Errorf("tools %v, want %v: %s", names, piTools, body)
 		}
 		noEmptySystem(t, namesAt(body, "systemInstruction.parts.#.text"))
+		updateInTurn(t, gjson.Get(body, "contents").Raw)
 	})
 
 	t.Run("codex", func(t *testing.T) {
@@ -171,8 +208,13 @@ func TestPiAddedToolReachesEveryRoute(t *testing.T) {
 		if got := namesAt(body, "tools.#.name"); !slices.Equal(got, piTools) {
 			t.Errorf("tools %v, want %v: %s", got, piTools, body)
 		}
-		// the client's system is the developer message ahead of its turns
-		noEmptySystem(t, namesAt(body, `input.#(role=="developer")#.content.#.text|@flatten`))
+		// the client's system is the developer message ahead of its turns,
+		// and its update a developer message where Pi put it (#502, #7204)
+		dev := namesAt(body, `input.#(role=="developer")#.content.#.text|@flatten`)
+		if len(dev) != 2 || !strings.HasPrefix(dev[1], "Updated system prompt section") {
+			t.Fatalf("developer texts %q, want the system then the update", dev)
+		}
+		noEmptySystem(t, dev[:1])
 	})
 }
 
