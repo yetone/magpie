@@ -114,7 +114,8 @@ type Project struct {
 // the repository's root, Gemini CLI, OpenCode, Pi, Cursor, Copilot, Antigravity,
 // Kimi Code, Goose and Grok Build, Droid — docs.factory.com/cli/configuration/
 // skills — and Cline's CLI, which reads .clinerules, .cline and .agents
-// skills folders in the workspace, @cline/shared 3.0.70) that one, so that
+// skills folders in the workspace, @cline/shared 3.0.70, and Dim, which
+// reads <cwd>/.agents/skills, arcships/dim's skills catalog) that one, so that
 // one folder serves them all. Qoder (and Qoder CN) read .qoder/skills
 // (getProjectSkillsDir, @qoder-ai/qodercli 1.1.69, whose .agents/skills
 // a setting can turn off), CodeBuddy Code .codebuddy/skills
@@ -148,6 +149,7 @@ var projectSkillsDirs = map[string]string{
 	"cline":       ".agents/skills",
 	"dsh":         ".agents/skills",
 	"ds-bot":      ".agents/skills",
+	"dim":         ".agents/skills",
 	"qoder":       ".qoder/skills",
 	"qoder-cn":    ".qoder/skills",
 	"codebuddy":   ".codebuddy/skills",
