@@ -141,7 +141,12 @@ func TestSocketTurnTellsWhereItsTimeWent(t *testing.T) {
 			t.Fatalf("%s: no timing", what)
 		}
 		t.Logf("%s: %+v", what, *n)
-		if n.Wait < holdMs-1 || n.Wait > holdMs+5000 || n.Head < n.Wait {
+		// the hold starts once the backend has read the message, which can
+		// be before the write is seen done here (the trace's WroteRequest
+		// runs after Write returns, and on a kept socket after its probe),
+		// so some of it may be counted in Send, as on HTTP (408a9d8ba,
+		// #7917): the two together hold it, and the wait is most of it
+		if n.Send+n.Wait < holdMs-1 || n.Wait < holdMs/2 || n.Wait > holdMs+5000 || n.Head < n.Wait {
 			t.Fatalf("%s: timing %+v for a %v hold", what, *n, hold)
 		}
 		if sum := n.Own + n.Before + n.Pool + n.DNS + n.Connect + n.TLS + n.Send + n.Wait; sum > n.Head+1 {
