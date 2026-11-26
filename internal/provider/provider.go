@@ -660,6 +660,11 @@ type Provider struct {
 	// BalanceURL (see TakesBalanceToken). It is asked with nothing else but
 	// the provider's headers, when the endpoint is one named.
 	BalanceToken string `json:"balanceToken,omitempty"`
+	// KeyBalanceAuth is, by KeyID, the access token and user id of the
+	// account a key belongs to, where it isn't BalanceToken's (keys of two
+	// accounts at one relay): that key's balance is asked with them (see
+	// key_balance_auth.go). A key not in it is asked as the provider says.
+	KeyBalanceAuth map[string]KeyBalanceAuth `json:"keyBalanceAuth,omitempty"`
 	// ZhipuTeam, for a Zhipu or Z.ai key on a team's GLM Coding Plan, is
 	// the team's organization and project, from the BigModel console: the
 	// team's windows are told to the key only with them (see
@@ -1055,6 +1060,7 @@ func (p Provider) clone() Provider {
 	p.KeyOwnBalances = maps.Clone(p.KeyOwnBalances)
 	p.KeyPriceRates = maps.Clone(p.KeyPriceRates)
 	p.KeyRateFactors = maps.Clone(p.KeyRateFactors)
+	p.KeyBalanceAuth = maps.Clone(p.KeyBalanceAuth)
 	if p.AccountWindowCaps != nil {
 		m := make(map[string]map[string]int, len(p.AccountWindowCaps))
 		for k, v := range p.AccountWindowCaps {
@@ -1672,6 +1678,10 @@ func AddCopy(p Provider, from string) (string, error) {
 		if p.BalanceToken == "" {
 			p.BalanceToken = src.BalanceToken
 		}
+		// each key's own, likewise
+		if p.KeyBalanceAuth == nil {
+			p.KeyBalanceAuth = maps.Clone(src.KeyBalanceAuth)
+		}
 	}
 	// the access key as the copy's editor showed it: the form sends its ID
 	// but never the saved Secret, which went missing from the copy (#1821)
@@ -1983,6 +1993,7 @@ func normalize(p Provider) Provider {
 	p.KeyOwnBalances = normalKeyOwnBalances(p.KeyOwnBalances)
 	p.KeyPriceRates = normalKeyPriceRates(p.KeyPriceRates)
 	p.KeyRateFactors = normalKeyRateFactors(p.KeyRateFactors)
+	p.KeyBalanceAuth = normalKeyBalanceAuth(p.KeyBalanceAuth, p)
 	if TopUpRateOK(p.TopUpRate) != "" {
 		p.TopUpRate = 0
 	}

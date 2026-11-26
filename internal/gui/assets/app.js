@@ -15283,25 +15283,8 @@ function renderKeyAccounts(p) {
     edit.title = t("Paste a new value for this key; its name, place and settings stay");
     edit.setAttribute("aria-label", t("Change key"));
     edit.append(svg(PENCIL, 12, 1.4));
-    edit.onclick = (e) => {
-      e.stopPropagation();
-      if (row.querySelector(".key-value-in")) return;
-      const i = input("", t("Paste the key's new value"), "password");
-      i.className = "rename-in key-value-in";
-      let over = false;
-      const done = (save) => {
-        if (over) return;
-        over = true;
-        if (save && i.value.trim()) accountAction("keys/replace", { id: p.id, ref: k.id, key: i.value }, t("{key} now uses its new value", { key: k.name || k.masked }));
-        else renderProviders();
-      };
-      i.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === "Enter") done(true); else if (ev.key === "Escape") done(false); };
-      i.onblur = () => done(!!i.value.trim());
-      const shown = row.querySelector(".plan.mono");
-      if (shown) shown.replaceWith(i);
-      else name.after(i);
-      i.focus(NO_SCROLL);
-    };
+    // its new value, and its own balance query, in keyedit.js
+    edit.onclick = (e) => { e.stopPropagation(); import("./keyedit.js").then(() => keyEdit(row, p, k, name), statusErr); };
     // a double-click on the row is the shortcut, away from its controls
     row.ondblclick = (e) => { if (!e.target.closest("button, input, textarea, .acct-models")) edit.onclick(e); };
     // each key copies its own (#1480)

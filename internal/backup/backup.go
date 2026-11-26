@@ -370,7 +370,7 @@ func Secret(name string) bool { return provider.SecretHeader(name) }
 
 func withoutKeys(p provider.Provider) provider.Provider {
 	p.Key, p.KeyName, p.Keys, p.KeyProtocol, p.KeyWeight, p.KeyPlan = "", "", nil, "", 0, ""
-	p.BalanceToken = ""
+	p.BalanceToken, p.KeyBalanceAuth = "", nil
 	p.AccessKeyID, p.SecretAccessKey, p.SessionToken = "", "", ""
 	if len(p.Headers) > 0 {
 		h := map[string]string{}

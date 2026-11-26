@@ -3288,6 +3288,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .acct-models .acm-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .acc .acct-models .hint { font-size: 11px; color: var(--muted); line-height: 1.4; flex: 1 1 220px; }
 .acc .acct-models .acm-foot .grow { flex: 0 0 0; }
+/* a key's own balance query, folded under its Change key box (keyedit.js) */
+.acc .key-bal-auth { flex-basis: 100%; padding: 2px 0 2px 25px; }
+.editor .acc .key-bal-auth summary { margin-left: 0; }
+.editor .acc .key-bal-auth .inner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 6px; }
+.editor .acc .key-bal-auth input { height: 24px; padding: 0 7px; font-size: 12.5px; width: 150px; min-width: 0; flex: 0 1 150px; }
+.editor .acc .key-bal-auth input[type="password"] { flex-basis: 220px; width: 220px; }
 .acc .n, .acc .rename { flex: 0 1 auto; }
 /* an account's name of the user's own, the account beside it (#1515) */
 .acc .acct-who { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }

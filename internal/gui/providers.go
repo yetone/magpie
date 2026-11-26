@@ -328,6 +328,9 @@ type providerJSON struct {
 		Takes bool `json:"takes"`
 		Set   bool `json:"set"`
 	} `json:"balanceToken"`
+	// a key can carry its own account's balance query, where the
+	// provider's token is another account's (provider.KeyBalanceAuth)
+	KeyBalanceAuth bool `json:"keyBalanceAuth,omitempty"`
 	// a StepFun provider's Step Plan windows, told only to a platform
 	// sign-in: which site's, and whether one is kept
 	StepPlan *stepPlanJSON `json:"stepPlan,omitempty"`
@@ -1087,6 +1090,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		out.Key.Optional = pr.NoKey
 	}
 	out.BalanceToken.Takes, out.BalanceToken.Set = provider.TakesBalanceToken(p), p.BalanceToken != ""
+	out.KeyBalanceAuth = provider.TakesKeyBalanceAuth(p)
 	if provider.TakesZhipuTeam(p) {
 		out.ZhipuTeam = &provider.ZhipuTeam{}
 		if p.ZhipuTeam != nil {
@@ -2786,6 +2790,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.AccountNames = old.AccountNames     // with accountname
 					in.KeySpendCaps = old.KeySpendCaps     // with keyspendcap
 					in.KeyOwnBalances = old.KeyOwnBalances // with keyownbalance
+					in.KeyBalanceAuth = old.KeyBalanceAuth // with keys/balance
 				}
 				// the image models unticked in its editor likewise: []
 				// shows them all (321sssrt on X)
@@ -3680,6 +3685,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			Protocol           provider.Protocol
 			Weight             int
 			Plan               string
+			// a key's own account's balance query (action balance):
+			// a blank token keeps the saved one, Clear drops both
+			Token, User string
+			Clear       bool
 		}
 		var added, had, removed int
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -3720,6 +3729,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			err = provider.RenameKey(in.ID, in.Ref, in.Name)
 		case "replace":
 			err = replaceKey(in.ID, in.Ref, in.Key)
+		case "balance":
+			// the access token and user id of the account the key is
+			// of, where it isn't the provider's (key_balance_auth.go)
+			err = provider.SetKeyBalanceAuth(in.ID, in.Ref, in.Token, in.User, in.Clear)
 		case "on", "off":
 			moved, err = agent.Reseat(func() error { return provider.SetKeyOn(in.ID, in.Ref, r.PathValue("action") == "on") })
 		default:

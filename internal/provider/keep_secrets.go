@@ -53,6 +53,10 @@ func KeepSecrets(in, here Provider, keyless bool) Provider {
 	if in.BalanceToken == "" {
 		in.BalanceToken = here.BalanceToken
 	}
+	if in.KeyBalanceAuth == nil {
+		// by KeyID: only the keys in has kept them (normalKeyBalanceAuth)
+		in.KeyBalanceAuth = maps.Clone(here.KeyBalanceAuth)
+	}
 	if in.AccessKeyID == "" && in.SecretAccessKey == "" {
 		in.AccessKeyID, in.SecretAccessKey, in.SessionToken = here.AccessKeyID, here.SecretAccessKey, here.SessionToken
 	}

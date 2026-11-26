@@ -71,6 +71,9 @@ type KeyInfo struct {
 	// Balance is the balance the user typed for it and what is left of
 	// it by magpie's count (key_balance_own.go); nil with none.
 	Balance *BalanceEstimate `json:"balance,omitempty"`
+	// BalanceAuth is the balance query of its own account, where it isn't
+	// the provider's (key_balance_auth.go); nil with none.
+	BalanceAuth *KeyBalanceAuthInfo `json:"balanceAuth,omitempty"`
 }
 
 // KeySpend is a key's spend cap as its row tells it: the cap, what magpie
@@ -167,10 +170,10 @@ func KeyID(key string) string { return keyID(key) }
 func (p Provider) KeyList() []KeyInfo {
 	var out []KeyInfo
 	if p.Key != "" {
-		out = append(out, KeyInfo{ID: keyID(p.Key), Name: p.KeyName, Masked: Mask(p.Key), Active: true, On: true, Protocol: p.KeyProtocol, Weight: p.KeyWeight, Plan: p.KeyPlan})
+		out = append(out, KeyInfo{ID: keyID(p.Key), Name: p.KeyName, Masked: Mask(p.Key), Active: true, On: true, Protocol: p.KeyProtocol, Weight: p.KeyWeight, Plan: p.KeyPlan, BalanceAuth: p.keyBalanceAuthInfo(p.Key)})
 	}
 	for _, k := range p.Keys {
-		out = append(out, KeyInfo{ID: keyID(k.Key), Name: k.Name, Masked: Mask(k.Key), On: !k.Off, Protocol: k.Protocol, Weight: k.Weight, Plan: k.Plan})
+		out = append(out, KeyInfo{ID: keyID(k.Key), Name: k.Name, Masked: Mask(k.Key), On: !k.Off, Protocol: k.Protocol, Weight: k.Weight, Plan: k.Plan, BalanceAuth: p.keyBalanceAuthInfo(k.Key)})
 	}
 	return out
 }
@@ -733,6 +736,7 @@ func ReplaceKey(id, keyRef, key string) (was, now string, err error) {
 	moveKeyed(p.KeyOwnBalances, keyRef, now)
 	moveKeyed(p.KeyPriceRates, keyRef, now)
 	moveKeyed(p.KeyRateFactors, keyRef, now)
+	moveKeyed(p.KeyBalanceAuth, keyRef, now)
 	return keyRef, now, Save(*p)
 }
 

@@ -149,6 +149,41 @@ const (
 	sub2APIKeyUsage = "/v1/usage"
 )
 
+// newAPIUserQuotaPath is the account's quota in new-api's key query, told
+// to a key the relay lets ask it ("Allow querying user quota" on the key:
+// token.AllowUserQuotaQuery, data.user_quota in controller/token.go's
+// GetTokenUsage), in the same units.
+const newAPIUserQuotaPath = "$data.user_quota.total_available / 500000"
+
+// newAPIKeyField is the field of new-api's key query read for the reply
+// b, and whether it is the account's. A key with a quota of its own is
+// told what is left of it (data.total_available). An unlimited key has
+// none to tell: new-api keeps counting its remain_quota down past 0 and
+// never holds it there (model/token.go), so it was shown as a balance of
+// $0 or less. The account's is read in its place when the relay tells it
+// (data.user_quota), else the key is said to tell no balance.
+func newAPIKeyField(b []byte) (string, bool, error) {
+	var r struct {
+		Data struct {
+			Unlimited bool `json:"unlimited_quota"`
+			UserQuota *struct {
+				Available *float64 `json:"total_available"`
+			} `json:"user_quota"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(b, &r) != nil || !r.Data.Unlimited {
+		return newAPIKeyPath, false, nil
+	}
+	if r.Data.UserQuota != nil && r.Data.UserQuota.Available != nil {
+		return newAPIUserQuotaPath, true, nil
+	}
+	return "", false, errNewAPIUnlimitedKey
+}
+
+// errNewAPIUnlimitedKey is an unlimited new-api key whose relay keeps the
+// account's quota from it.
+var errNewAPIUnlimitedKey = errors.New("this key has no quota of its own (unlimited), so the relay tells it no balance: turn on \"Allow querying user quota\" for the key on the relay's site, or give the account's access token and user ID in the key's Advanced")
+
 // tokenQueries are the account queries that only a balance token can
 // ask, each with the same panel's query for a key and the field magpie
 // reads from the account's reply when none is given.
@@ -1483,8 +1518,16 @@ func balanceRead(ctx context.Context, p Provider) (amount string, parts, split [
 		if sub2APIKeyLimits(p) {
 			ws, _ = readSub2APIKeyLimits(b)
 		}
+		path, ownWide := balancePathOf(p), false
+		if strings.TrimSpace(p.BalancePath) == "" && balanceURLPath(p.BalanceURL) == newAPIKeyUsage {
+			// new-api's key query, as the key is: its own quota, or the
+			// account's where the key has none of its own
+			if path, ownWide, err = newAPIKeyField(b); err != nil {
+				return "", nil, nil, nil, false, true, err
+			}
+		}
 		// the field the user wrote: its amounts each apart, as well
-		if parts, err = readBalanceParts(b, balancePathOf(p)); err != nil {
+		if parts, err = readBalanceParts(b, path); err != nil {
 			if len(ws) > 0 && strings.TrimSpace(p.BalancePath) == "" {
 				// a key given limits and no quota of its own has no
 				// "remaining": its windows are what it has left
@@ -1492,7 +1535,7 @@ func balanceRead(ctx context.Context, p Provider) (amount string, parts, split [
 			}
 			return "", nil, nil, nil, false, true, err
 		}
-		return joinBalanceParts(parts), parts, nil, ws, balanceAccountWide(p, src, b), true, nil
+		return joinBalanceParts(parts), parts, nil, ws, ownWide || balanceAccountWide(p, src, b), true, nil
 	}
 	amount, err = src.read(b)
 	if err == nil && src.split != nil {
@@ -1654,6 +1697,9 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		user string
 		// own: the key's balance typed by hand, with nothing to ask
 		own bool
+		// account: asked with the key's own account token, at the
+		// panel's account query (keyAccountQuery)
+		account bool
 	}
 	var jobs []job
 	for _, p := range All() {
@@ -1666,15 +1712,23 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 			// a key with a balance the user typed: what is left of it
 			if p.TakesOwnBalance() {
 				for _, k := range ownBalanceKeys(p) {
-					jobs = append(jobs, job{k.p, k.user, true})
+					jobs = append(jobs, job{k.p, k.user, true, false})
 				}
+			}
+			continue
+		}
+		if !zen && hasKeyBalanceAuth(p) {
+			// keys of more than one account, each asked with its own
+			// account's token, or the provider's (key_balance_auth.go)
+			for _, k := range keyBalanceAuthJobs(p, ok) {
+				jobs = append(jobs, job{p: k.p, user: k.user, account: k.account})
 			}
 			continue
 		}
 		others := 0
 		if src.token != "" || zen {
 			// the account's balance is the same whichever key asks
-			jobs = append(jobs, job{p, "", false})
+			jobs = append(jobs, job{p, "", false, false})
 			continue
 		}
 		for _, k := range p.Keys {
@@ -1688,7 +1742,7 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		keyCard := func(q Provider) bool { return !ok || hasBalanceSource(q) }
 		if others == 0 {
 			if keyCard(p.atKeyPlan(p.KeyPlan)) {
-				jobs = append(jobs, job{p, "", false})
+				jobs = append(jobs, job{p, "", false, false})
 			}
 			continue
 		}
@@ -1699,7 +1753,7 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		// each key asked at its own plan's host (KeyAccount.Plan):
 		// SiliconFlow's China key and its international one
 		if q := p.atKeyPlan(p.KeyPlan); keyCard(q) {
-			jobs = append(jobs, job{q, first, false})
+			jobs = append(jobs, job{q, first, false, false})
 		}
 		for _, k := range p.Keys {
 			if k.Off || k.Key == "" || k.Key == p.Key {
@@ -1714,7 +1768,7 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 			if name == "" {
 				name = Mask(k.Key)
 			}
-			jobs = append(jobs, job{q, name, false})
+			jobs = append(jobs, job{q, name, false, false})
 		}
 	}
 	jobs = slices.DeleteFunc(jobs, func(j job) bool {
@@ -1746,6 +1800,9 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 				}
 				out[i] = keepReading(ctx, q, keyTag("balance", j.p.Key))
 				return
+			}
+			if j.account {
+				j.p = keyAccountQuery(ctx, j.p)
 			}
 			amount, parts, split, ws, wide, _, err := balanceRead(ctx, j.p)
 			if errors.Is(err, errNoBalance) {

@@ -134,6 +134,10 @@ const providerUsage = `usage:
                                           key's calls at since; with --refill it is whole again each month or week;
                                           --expiring adds credit that counts through a day and is spent first
                                           (each one a grant, the soonest spent first; off takes every one off)
+  magpie provider key-balance-token <id> <key> <token|-> [user-id] | <id> <key> off
+                                          the access token (and new-api user ID) of the account an API key is of,
+                                          where the provider's balance token is another account's: that key's balance
+                                          is asked with them. - keeps the saved token; off asks it as the provider says
   magpie provider account-weight <id> [account [n|default]]
                                           a subscription account's share of the requests with routing=weight:
                                           one weighing 3 takes three for each one weighing 1 takes (default 1)
@@ -709,6 +713,8 @@ func providerCmd(args []string) error {
 		return accountConcurrencyCmd(rest)
 	case "key-balance", "key-balances":
 		return keyBalanceCmd(rest)
+	case "key-balance-token":
+		return keyBalanceTokenCmd(rest)
 	case "spend-cap", "spend-caps":
 		return spendCapCmd(rest)
 	case "key-rate", "key-rates":

@@ -36,6 +36,7 @@ var settingFields = []string{
 	// prices and balances
 	"PriceRate", "CountFree", "Billing", "RateWindows", "KeyOwnBalances", "KeyPriceRates", "TopUpRate",
 	"RateReadHours", "KeyRateFactors", "BalanceURL", "BalancePath", "BalanceMethod", "NoBalanceProbe", "BalanceToken",
+	"KeyBalanceAuth",
 	// requests
 	"Headers", "ExtraBody", "ReplyHeaders", "PassHeaders", "Searches", "CodexAsSent", "ImageFilesOff",
 	"UpstreamProviders", "PromptAsWritten", "AdditionalTools", "AdditionalToolsOff", "PassErrors", "Patience",
