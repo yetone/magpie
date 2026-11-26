@@ -62,7 +62,16 @@ func TestQoderCallsThroughMagpieCountOnce(t *testing.T) {
 			}
 			dir := filepath.Join(sessions.QoderDir(agent), "projects", "-Users-me-proj")
 			os.MkdirAll(dir, 0700)
-			if err := os.WriteFile(filepath.Join(dir, sid+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0600); err != nil {
+			file := filepath.Join(dir, sid+".jsonl")
+			if err := os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			// Qoder last wrote the file with its last line, on the held day:
+			// a file not written since the period began is never read, and
+			// the machine's own clock may be on another day (red on a Mac in
+			// PST, where it was still 11-25).
+			last := now.Add(time.Duration(len(calls)-11) * time.Minute)
+			if err := os.Chtimes(file, last, last); err != nil {
 				t.Fatal(err)
 			}
 			os.MkdirAll(filepath.Dir(Path()), 0700)
