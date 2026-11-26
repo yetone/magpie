@@ -65,6 +65,10 @@ type Fake struct {
 	// registration response lets it: the token endpoint takes it as
 	// registered
 	Assign string
+	// HoldGet, when set, is a server whose GET event stream sends its
+	// headers and then nothing until HoldGet closes, as one with no
+	// notification to send yet does (#7744)
+	HoldGet chan struct{}
 
 	refuse  bool // RefuseTokens
 	codes   map[string]codeGrant
@@ -269,6 +273,7 @@ func (f *Fake) mcp(w http.ResponseWriter, r *http.Request) {
 	f.Calls = append(f.Calls, r.Method+" "+msg.Method+" "+r.Header.Get("Mcp-Session-Id"))
 	f.Seen = r.Header.Clone()
 	f.SeenQuery = r.URL.RawQuery
+	hold := f.HoldGet
 	f.mu.Unlock()
 	switch r.Method {
 	case http.MethodDelete:
@@ -276,6 +281,15 @@ func (f *Fake) mcp(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		w.Header().Set("Content-Type", "text/event-stream")
 		fl := w.(http.Flusher)
+		if hold != nil {
+			w.WriteHeader(http.StatusOK)
+			fl.Flush()
+			select {
+			case <-hold:
+			case <-r.Context().Done():
+				return
+			}
+		}
 		for i := 1; i <= 2; i++ {
 			fmt.Fprintf(w, "id: %d\nevent: message\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/ping\",\"params\":{\"n\":%d}}\n\n", i, i)
 			fl.Flush()

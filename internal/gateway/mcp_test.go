@@ -2,11 +2,14 @@ package gateway
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/mcpauth"
@@ -280,5 +283,55 @@ func TestMCPProxyRefusedAfterRenewalRunsOut(t *testing.T) {
 	}
 	if st := mcpauth.StatusOf("neon", f.URL); !st.SignedIn || !st.Dead {
 		t.Fatalf("the sign-in after a renewed token was refused: %+v", st)
+	}
+}
+
+// A server's GET event stream that sends nothing yet (it has no
+// notification for the client) reaches the agent with its headers at once,
+// as agy's MCP client waits on them before it finishes connecting; its
+// events then come as they are sent. The same through a key held to some
+// of the server's tools, whose answers go through mcpToolsFilter
+// (wjhwjhn, #7744).
+func TestMCPProxyFlushesSilentGETStreamHeaders(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  func(t *testing.T) string
+	}{
+		{"no key", func(*testing.T) string { return Token }},
+		{"key held to a tool", func(t *testing.T) string { return keyHeldToMCP(t, "Some", "neon/run_sql") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh(t)
+			f := mcpauthtest.New(t)
+			hold := make(chan struct{})
+			var once sync.Once
+			release := func() { once.Do(func() { close(hold) }) }
+			f.HoldGet = hold
+			f.SignIn(t, "neon")
+			gw := httptest.NewServer(lanGuard(New().Handler()))
+			defer gw.Close()
+			// before gw.Close, which waits for the held stream's handler
+			defer release()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, gw.URL+"/mcp/neon", nil)
+			req.Header.Set("Accept", "text/event-stream")
+			req.Header.Set("Mcp-Session-Id", "sess-1")
+			req.Header.Set("Authorization", "Bearer "+tc.key(t))
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("the stream's headers never came while the server sent nothing: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+				t.Fatalf("GET: %d %v", resp.StatusCode, resp.Header)
+			}
+			release()
+			rd := bufio.NewReader(resp.Body)
+			if first, err := rd.ReadString('\n'); err != nil || first != "id: 1\n" {
+				t.Fatalf("the stream after its headers: %q %v", first, err)
+			}
+		})
 	}
 }
