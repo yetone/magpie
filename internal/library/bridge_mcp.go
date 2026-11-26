@@ -317,3 +317,40 @@ func keptBridge(old *Server, s *Server) {
 		s.Bridge = old.Bridge
 	}
 }
+
+// A Remote magpie's router lists each of its servers' tools as
+// <server>__<tool> (gateway.HubToolName), and a hub's servers synced into
+// this Library are here under the same names: an agent given both had
+// every tool twice, anysearch__search and magpie-44__anysearch__search
+// (starballl on X). The Library's own server is the one that stays; the
+// remote's copy of its tools is left out wherever the same agent has it,
+// and is given only while the Library's own fails to list (a command this
+// computer can't run): the remote's is the same server, run on the hub.
+
+// ownPrefixes are the beginnings of a Remote magpie's tool names that the
+// servers given beside it stand for: each of hub that isn't another
+// magpie's router and listed its tools (listed[i], or every one with
+// listed nil), and each given directly.
+func ownPrefixes(hub []*Server, listed []bool, direct []*Server) []string {
+	var out []string
+	add := func(s *Server) {
+		if s.Bridge == "" {
+			out = append(out, gateway.HubToolName(s.Name, ""))
+		}
+	}
+	for i, s := range hub {
+		if listed == nil || listed[i] {
+			add(s)
+		}
+	}
+	for _, s := range direct {
+		add(s)
+	}
+	return out
+}
+
+// twinTool is whether name, a Remote magpie's router's tool, is a tool of
+// one of the servers own stands for (ownPrefixes).
+func twinTool(name string, own []string) bool {
+	return slices.ContainsFunc(own, func(p string) bool { return strings.HasPrefix(name, p) })
+}

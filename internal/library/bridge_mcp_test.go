@@ -338,3 +338,110 @@ func TestCarriedServerIsNoBridge(t *testing.T) {
 		t.Fatalf("carried in as a Remote magpie's: %+v", l.MCP[0])
 	}
 }
+
+// remoteHub is a Remote magpie's router that lists tools, each named as
+// its router names them (<server>__<tool>), and says which it ran.
+func remoteHub(tools ...string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(204)
+			return
+		}
+		var m struct {
+			ID     *int   `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				Name string `json:"name"`
+			} `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&m)
+		var reply any
+		switch m.Method {
+		case "initialize":
+			w.Header().Set("Mcp-Session-Id", "s-1")
+			reply = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}}
+		case "tools/list":
+			var ts []map[string]string
+			for _, n := range tools {
+				ts = append(ts, map[string]string{"name": n, "description": "The hub's " + n})
+			}
+			reply = map[string]any{"tools": ts}
+		case "tools/call":
+			reply = map[string]any{"content": []map[string]string{{"type": "text", "text": "remote " + m.Params.Name}}}
+		default:
+			w.WriteHeader(202)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *m.ID, "result": reply})
+	}
+}
+
+// A hub's servers synced into this Library and the hub's own router added
+// for its Remote magpie gave an agent every hub tool twice (starballl on
+// X: anysearch's tools as anysearch__search and as
+// magpie-44__anysearch__search). The Library's own server stays; the
+// router's copy of its tools is left out for every agent given both, and
+// comes back only while the Library's own can't list its tools.
+func TestRemoteMagpieRouterLeavesOutTheLibrarysOwn(t *testing.T) {
+	hubSandbox(t)
+	srv := httptest.NewServer(remoteHub("anysearch__a", "anysearch__b", "web-search__find", "exa__a"))
+	t.Cleanup(srv.Close)
+	fakeRemoteHubs(t, provider.RemoteHub{ID: "m44", Name: "magpie-44", Root: srv.URL + "/", Key: "k"})
+	as := fakeStdio(t, "ok", nil)
+	as.Name, as.Agents = "anysearch", []string{"claude"}
+	ok(t)(SaveServer("", *as))
+	web := fakeStdio(t, "ok", nil)
+	web.Name, web.Agents = "web-search", []string{"claude"}
+	ok(t)(SaveServer("", *web))
+	ok(t)(SetMCPHub(true))
+	ok(t)(SetRemoteMCP("m44", true))
+	provider.RemoteHubFound("m44")
+	if s := loaded(t).server("magpie-44"); s == nil || s.Bridge != "m44" {
+		t.Fatalf("no server for the Remote magpie: %+v", loaded(t).MCP)
+	}
+	ctx := context.Background()
+	hub := theHub{}
+	want := []string{"anysearch/a", "anysearch/b", "anysearch/c", "magpie-44/exa__a", "web-search/a", "web-search/b", "web-search/c"}
+	if got := hubNames(hub.Tools(ctx, "claude")); !slices.Equal(got, want) {
+		t.Fatalf("claude's tools %v, want %v", got, want)
+	}
+	// the agent is told of the router with what it adds alone
+	for _, s := range hub.Servers("claude") {
+		if s.Name != "magpie-44" {
+			continue
+		}
+		var names []string
+		for _, tl := range s.Tools {
+			names = append(names, tl.Name)
+		}
+		if !slices.Equal(names, []string{"exa__a"}) {
+			t.Errorf("magpie-44 is described with %v, want exa__a alone", names)
+		}
+	}
+	// other apps at the router's address are given every server: the same
+	if got := hubNames(hub.Tools(ctx, "")); !slices.Equal(got, want) {
+		t.Fatalf("other apps' tools %v, want %v", got, want)
+	}
+	// an agent given the router alone has every tool through it
+	ok(t)(ServerAgents("magpie-44", []string{"claude", "codex"}))
+	if got := hubNames(hub.Tools(ctx, "codex")); !slices.Equal(got, []string{"magpie-44/anysearch__a", "magpie-44/anysearch__b", "magpie-44/exa__a", "magpie-44/web-search__find"}) {
+		t.Fatalf("codex's tools %v, want the router's all", got)
+	}
+	// given directly, anysearch is still the agent's own
+	ok(t)(ServerHub("anysearch", true))
+	if got := hubNames(hub.Tools(ctx, "claude")); !slices.Equal(got, []string{"magpie-44/exa__a", "web-search/a", "web-search/b", "web-search/c"}) {
+		t.Fatalf("anysearch direct, claude's tools %v", got)
+	}
+	ok(t)(ServerHub("anysearch", false))
+	// the Library's own can't start here: the hub's runs it
+	bad := *loaded(t).server("anysearch")
+	bad.Env = map[string]string{fakeMode: "exit"}
+	ok(t)(SaveServer("anysearch", bad))
+	if got := hubNames(hub.Tools(ctx, "claude")); !slices.Equal(got, []string{"magpie-44/anysearch__a", "magpie-44/anysearch__b", "magpie-44/exa__a", "web-search/a", "web-search/b", "web-search/c"}) {
+		t.Fatalf("anysearch failing, claude's tools %v", got)
+	}
+	if res, err := hub.Call(ctx, "claude", "magpie-44", "anysearch__a", json.RawMessage(`{}`)); err != nil || hubText(t, res) != "remote anysearch__a" {
+		t.Fatalf("magpie-44's anysearch__a: %s %v", res, err)
+	}
+}

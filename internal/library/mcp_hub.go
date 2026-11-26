@@ -231,6 +231,14 @@ func hubServers(agentID string) []*Server {
 // is the agent in that project: the global set with the project's own
 // servers added and those it turns off left out.
 func (l *Library) hubServers(agentID string) []*Server {
+	out, _ := l.givenTo(agentID)
+	return out
+}
+
+// givenTo are the servers agentID is given from l: through the hub
+// (hubServers), and each one's own entry while the hub is on (direct,
+// none for the hub's own address, which no agent is).
+func (l *Library) givenTo(agentID string) (hub, direct []*Server) {
 	id, key, scoped := strings.Cut(agentID, gateway.HubProjectSep)
 	var p *Project
 	var given map[string][]string // the project's servers, its plugins' too
@@ -241,7 +249,6 @@ func (l *Library) hubServers(agentID string) []*Server {
 		_, given, _ = l.withPlugins(p)
 	}
 	natives := l.claudeHubNatives(id, p)
-	var out []*Server
 	for _, s := range l.MCP {
 		on := id == "" && !s.Hidden || slices.Contains(s.Agents, id)
 		if p != nil {
@@ -255,14 +262,41 @@ func (l *Library) hubServers(agentID string) []*Server {
 			on = false // Claude Code runs the plugin's own
 		}
 		if on && inHub(s, id) {
-			out = append(out, s)
+			hub = append(hub, s)
+		} else if on && id != "" && !s.Hidden {
+			direct = append(direct, s)
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	sort.SliceStable(hub, func(i, j int) bool { return hub[i].Name < hub[j].Name })
+	return hub, direct
 }
 
-func (theHub) Servers(agentID string) []gateway.HubServer { return hubAbouts(hubServers(agentID)) }
+// hubGiven are the servers the hub gives agentID (hubServers) and those
+// the agent is given directly beside it (givenTo).
+func hubGiven(agentID string) (hub, direct []*Server) {
+	mu.Lock()
+	l, err := load()
+	mu.Unlock()
+	if err != nil || !l.MCPHub {
+		return nil, nil
+	}
+	return l.givenTo(agentID)
+}
+
+func (theHub) Servers(agentID string) []gateway.HubServer {
+	ss, direct := hubGiven(agentID)
+	out := hubAbouts(ss)
+	// a Remote magpie's router is told of without the tools the agent has
+	// from this Library's own servers (twinTools): its instructions name
+	// only what it adds
+	own := ownPrefixes(ss, nil, direct)
+	for i := range out {
+		if out[i].Bridge && len(own) > 0 {
+			out[i].Tools = slices.DeleteFunc(out[i].Tools, func(t gateway.HubToolNote) bool { return twinTool(t.Name, own) })
+		}
+	}
+	return out
+}
 
 // hubAbouts are ss as an agent is told of them.
 func hubAbouts(ss []*Server) []gateway.HubServer {
@@ -304,12 +338,14 @@ func visitorServers(ctx context.Context, ss []*Server) []*Server {
 }
 
 func (theHub) Tools(ctx context.Context, agentID string) []gateway.HubTool {
-	ss := visitorServers(ctx, hubServers(agentID))
+	ss, direct := hubGiven(agentID)
+	ss = visitorServers(ctx, ss)
 	if gateway.FromRouter(ctx) {
 		// another magpie's router: not given a Remote magpie's back
 		ss = slices.DeleteFunc(ss, func(s *Server) bool { return s.Bridge != "" })
 	}
 	lists := make([][]gateway.HubTool, len(ss))
+	listed := make([]bool, len(ss))
 	var wg sync.WaitGroup
 	for i, s := range ss {
 		wg.Add(1)
@@ -328,6 +364,7 @@ func (theHub) Tools(ctx context.Context, agentID string) []gateway.HubTool {
 			if err != nil {
 				return
 			}
+			listed[i] = true
 			noteCard(s, says, ts)
 			for _, t := range ts {
 				var name string
@@ -339,8 +376,12 @@ func (theHub) Tools(ctx context.Context, agentID string) []gateway.HubTool {
 		}()
 	}
 	wg.Wait()
+	own := ownPrefixes(ss, listed, direct)
 	var out []gateway.HubTool
-	for _, l := range lists {
+	for i, l := range lists {
+		if ss[i].Bridge != "" && len(own) > 0 {
+			l = slices.DeleteFunc(l, func(t gateway.HubTool) bool { return twinTool(t.Tool, own) })
+		}
 		out = append(out, l...)
 	}
 	return out

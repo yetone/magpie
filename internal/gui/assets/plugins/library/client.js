@@ -3698,7 +3698,7 @@ magpie.plugin("library", (ctx) => {
     who.append(nm, healthEl(s.name));
     const sub = el("div", "sub mono", serverLine(s));
     sub.title = serverLine(s);
-    who.append(noteSub(s.note, sub, serverLine(s)), toolsEl(s.name));
+    who.append(noteSub(s.note, sub, serverLine(s)), ...(s.bridge ? [twinsEl(s.name)] : []), toolsEl(s.name));
     row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who, ...removeAct(() => confirmRemoveServer(s)),
       // no agent to give it to: other apps reach it through the router
       ...(agentless() && !all.length ? [] : [agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true })]),
@@ -3709,6 +3709,31 @@ magpie.plugin("library", (ctx) => {
     row.onclick = () => editServer(s);
     row.title = t("Edit {name}", { name: s.name });
     return row;
+  }
+
+  // A Remote magpie's router lists its servers' tools as <server>__<tool>,
+  // and the hub's servers synced here keep their names: the router gives
+  // an agent the Library's own and leaves the remote's copy out (twinTool
+  // in bridge_mcp.go; starballl on X: every hub tool twice). The router's
+  // row names those it leaves out, once its tools are known.
+  const routerPrefix = (n) => n.replace(/[^A-Za-z0-9_-]+/g, "-") + "__";
+  function twinsOf(name) {
+    const s = lib.servers.find((x) => x.name === name), tools = toolList(name);
+    if (!s?.bridge || !lib.mcpHub || s.hub === "direct" || s.hidden || !tools.length) return [];
+    return lib.servers.filter((o) => !o.bridge && !o.hidden && (o.agents || []).some((a) => (s.agents || []).includes(a)) &&
+      tools.some((tl) => tl.name.startsWith(routerPrefix(o.name)))).map((o) => o.name);
+  }
+  function twinsEl(name) {
+    const box = el("div", "sub lib-twins");
+    box.dataset.server = name;
+    paintTwins(box);
+    return box;
+  }
+  function paintTwins(box) {
+    const name = box.dataset.server, twins = twinsOf(name);
+    box.hidden = !twins.length;
+    box.textContent = twins.length ? t("Agents get {servers} from this Library, not again through {name}", { servers: twins.join(", "), name }) : "";
+    box.title = twins.length ? t("{name} lists the same servers, run on the other magpie. Its copies are left out, and given only while this Library's own can't list its tools", { name }) : "";
   }
 
   // Whether a server goes through the MCP router, on its row: a click
@@ -4098,6 +4123,7 @@ magpie.plugin("library", (ctx) => {
     // the hub's count of tools follows each check
     const stats = page.querySelector(".lib-hubstats");
     if (stats) stats.textContent = stats.title = hubStats();
+    page.querySelectorAll(".lib-twins").forEach(paintTwins);
     const boxes = typeof x === "string" ? page.querySelectorAll(`.lib-health[data-server="${CSS.escape(x)}"]`) : [x];
     for (const b of boxes) {
       const e = health.get(b.dataset.server);

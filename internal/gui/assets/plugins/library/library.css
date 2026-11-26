@@ -954,6 +954,8 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-serverhead .note + .lib-viewpick { margin-left: 0; }
 /* a row's note, the user's own words, over the muted line it stands for */
 .lib-row .sub.lib-subnote { color: var(--fg-2); }
+.lib-row .sub.lib-twins { white-space: normal; overflow-wrap: anywhere; color: var(--muted); }
+.lib-row .sub.lib-twins[hidden] { display: none; }
 /* a skill's note, over its SKILL.md */
 .lib-skillnote { display: flex; flex-direction: column; gap: 4px; }
 .lib-reader .lib-skillnote label { text-align: left; padding-top: 0; }
