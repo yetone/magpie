@@ -520,7 +520,7 @@ func backendOf(s *Server) *backend {
 	}
 	if b == nil {
 		c := *s
-		b = &backend{s: &c, key: key}
+		b = &backend{s: &c, key: key, router: isRouter(&c)}
 		hubPool.m[s.Name] = b
 	}
 	return b
@@ -561,10 +561,14 @@ type backend struct {
 	err     error         // why the last connection failed
 	list    []map[string]json.RawMessage
 	listed  bool
+	at      time.Time  // when list was listed
 	says    serverSays // what the server said of itself when it was connected to
 	busy    int
 	idle    *time.Timer
 	stopped bool
+	// router: the server is another magpie's router, whose event stream
+	// says when its tools change (watch); watching, it is open now
+	router, watching bool
 }
 
 var errHubStopped = errors.New("magpie stopped it")
@@ -616,7 +620,7 @@ func (b *backend) start(ready chan struct{}) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), each)
 	defer cancel()
-	c, err := dialHub(ctx, b.s, b.relist)
+	c, err := dialHub(ctx, b.s, b.changed)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.stopped && c != nil {
@@ -626,6 +630,9 @@ func (b *backend) start(ready chan struct{}) {
 	b.conn, b.err, b.ready = c, err, nil
 	if c != nil {
 		b.says = c.said()
+	}
+	if h, ok := c.(*httpConn); ok && b.router {
+		go b.watch(h)
 	}
 	close(ready)
 }
@@ -665,6 +672,11 @@ func (b *backend) done() {
 		return
 	}
 	d := b.s.idleFor(hubIdle)
+	if b.watching && b.s.IdleTimeout == 0 {
+		// another magpie's router, held to hear of its tools changing
+		// (watch): a session and a quiet stream are no load to keep
+		d = 0
+	}
 	if d <= 0 {
 		return
 	}
@@ -705,12 +717,35 @@ func (b *backend) tools(ctx context.Context) ([]map[string]json.RawMessage, erro
 	b.use()
 	defer b.done()
 	b.mu.Lock()
-	if b.listed {
+	if b.listed && !b.unwatched() {
 		ts := b.list
 		b.mu.Unlock()
 		return ts, nil
 	}
 	b.mu.Unlock()
+	all, err := b.listAll(ctx)
+	if err != nil {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		if b.router && b.list != nil {
+			// another magpie's router not answering now: its tools as
+			// last listed, for this list, and asked again next time
+			return b.list, nil
+		}
+		return nil, err
+	}
+	b.mu.Lock()
+	was, had := b.list, b.at
+	b.list, b.listed, b.at = all, true, time.Now()
+	b.mu.Unlock()
+	if had.IsZero() || !sameTools(was, all) {
+		hubListsChanged()
+	}
+	return all, nil
+}
+
+// listAll asks the server for its tools, every page of them.
+func (b *backend) listAll(ctx context.Context) ([]map[string]json.RawMessage, error) {
 	c, err := b.connect(ctx)
 	if err != nil {
 		return nil, err
@@ -745,9 +780,6 @@ func (b *backend) tools(ctx context.Context) ([]map[string]json.RawMessage, erro
 		}
 		cursor = r.NextCursor
 	}
-	b.mu.Lock()
-	b.list, b.listed = all, true
-	b.mu.Unlock()
 	return all, nil
 }
 
@@ -1135,6 +1167,9 @@ type httpConn struct {
 	ids atomic.Int64
 	// reopen is held while a session the server forgot is opened again
 	reopen sync.Mutex
+	// ended ends with the connection: its event stream with it (watch)
+	ended context.Context
+	end   context.CancelFunc
 }
 
 func dialHTTP(ctx context.Context, s *Server) (*httpConn, error) {
@@ -1146,6 +1181,7 @@ func dialHTTP(ctx context.Context, s *Server) (*httpConn, error) {
 		return nil, healthErr(*h)
 	}
 	hc := &httpConn{c: c}
+	hc.ended, hc.end = context.WithCancel(context.Background())
 	hc.ids.Store(1)
 	return hc, nil
 }
@@ -1197,7 +1233,7 @@ func (h *httpConn) ask(ctx context.Context, method string, params any) (*rpcMsg,
 
 func (h *httpConn) alive() bool { return true }
 
-func (h *httpConn) close() { h.c.end() }
+func (h *httpConn) close() { h.end(); h.c.end() }
 
 var (
 	_ hubConn = (*streamConn)(nil)

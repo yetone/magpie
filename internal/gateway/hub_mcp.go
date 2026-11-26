@@ -131,6 +131,11 @@ type Hub interface {
 	// computer is recorded, and given the servers on the first time
 	// (library/remote_agents.go)
 	Met(agent string)
+	// Version changes whenever a list the hub gives may have: a server
+	// added, edited, removed or ticked, the switch, a server's tools
+	// listed other than before. The hub's event stream (hubEvents) tells
+	// its clients their tools changed when it does.
+	Version() string
 }
 
 // HubServer is a server behind the hub as an agent is told of it: About
@@ -468,6 +473,12 @@ const errHubOff = "magpie's MCP hub is off, so it runs no server's tools: turn i
 
 func (s *Server) hubMCP(w http.ResponseWriter, r *http.Request) {
 	agent := r.PathValue("agent")
+	if r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+		if mcpServes(w, r, "magpie's MCP hub", hubServerName) {
+			s.hubEvents(w, r)
+		}
+		return
+	}
 	if r.Header.Get(RouterHeader) != "" {
 		r = r.WithContext(WithRouter(r.Context()))
 	}
@@ -828,7 +839,7 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		}
 		return map[string]any{
 			"protocolVersion": mcpVersion(m),
-			"capabilities":    map[string]any{"tools": map[string]any{}},
+			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 			"serverInfo":      map[string]any{"name": "magpie", "title": title, "version": Version},
 			"instructions":    say,
 		}, nil

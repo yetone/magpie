@@ -27,9 +27,12 @@ type fakeHub struct {
 	calls   []string
 	call    func(ctx context.Context, server, tool string) (json.RawMessage, error)
 	met     []string // the agents Met was told of
+	version string   // what Version says
 }
 
 func (f *fakeHub) On() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.on }
+
+func (f *fakeHub) Version() string { f.mu.Lock(); defer f.mu.Unlock(); return f.version }
 
 func (f *fakeHub) Tools(_ context.Context, agent string) []HubTool {
 	f.mu.Lock()

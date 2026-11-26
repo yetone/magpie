@@ -101,25 +101,32 @@ func (s *Server) searchMCP(w http.ResponseWriter, r *http.Request) {
 	serveMCP(w, r, "magpie's web search", "magpie-web-search", 1<<20, s.searchMCPCall)
 }
 
-// serveMCP answers the JSON-RPC messages POSTed to one of magpie's own MCP
-// servers (what names it in a refusal, server in the request log) with
-// call, a body up to limit bytes long: guarded as a gateway route, and a
-// web page turned away. Each tools/call is a row of the request log
-// (callMCPTool).
-func serveMCP(w http.ResponseWriter, r *http.Request, what, server string, limit int64, call func(*http.Request, mcpMessage) (any, map[string]any)) {
+// mcpServes is whether one of magpie's own MCP servers may answer r at
+// all, and r is refused when not: another machine's request without a
+// gateway key, a web page's, a key held to other MCP servers.
+func mcpServes(w http.ResponseWriter, r *http.Request, what, server string) bool {
 	if !local(r) && !sharedWith(r) {
 		http.Error(w, what+" is served to another machine only when magpie is shared on the local network and the request carries a gateway key (Authorization: Bearer <key>)", http.StatusForbidden)
-		return
+		return false
 	}
 	// a page on this computer (localhost) gets past corsGuard; only one the
 	// user listed in Settings, which corsGuard held to a gateway key, may
 	// call this
 	if o := r.Header.Get("Origin"); o != "" && !corsAllowed(o) {
 		http.Error(w, what+" MCP server answers agents, not web pages", http.StatusForbidden)
-		return
+		return false
 	}
 	// a gateway key held to some MCP servers (access.Key.MCP)
-	if !mcpKeyServe(w, r, server) {
+	return mcpKeyServe(w, r, server)
+}
+
+// serveMCP answers the JSON-RPC messages POSTed to one of magpie's own MCP
+// servers (what names it in a refusal, server in the request log) with
+// call, a body up to limit bytes long: guarded as a gateway route, and a
+// web page turned away. Each tools/call is a row of the request log
+// (callMCPTool).
+func serveMCP(w http.ResponseWriter, r *http.Request, what, server string, limit int64, call func(*http.Request, mcpMessage) (any, map[string]any)) {
+	if !mcpServes(w, r, what, server) {
 		return
 	}
 	if r.Method != http.MethodPost {
