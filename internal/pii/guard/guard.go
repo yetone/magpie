@@ -1,7 +1,8 @@
 // Package guard runs AstrLink Guard (QuantumNous/astrlink-guard,
 // Apache-2.0), a token classifier for secrets and personal data in Chinese
 // and English text: its int8 ONNX model (37 MB) read by onnx.go and run
-// by bert.go on the CPU in Go, or on a Mac by CoreML (coreml.go),
+// by bert.go on the CPU in Go, on a Mac by CoreML (coreml.go), or on
+// Windows with an Intel NPU by Level Zero (npu.go),
 // its tokenizer by tokenizer.go. Nothing is started.
 package guard
 
@@ -15,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/yetone/magpie/internal/pii/guard/coreml"
+	"github.com/yetone/magpie/internal/pii/guard/levelzero"
 )
 
 // labels are the model's BIO tags, by output index (its labels.json).
@@ -38,25 +40,43 @@ type Model struct {
 	// mlFail is why CoreML's last read failed and bert.go read the window
 	// instead; nil once one doesn't.
 	mlFail atomic.Pointer[string]
+	npu    *levelzero.Model // nil where no Intel NPU is, or it couldn't be opened
+	hasNPU bool
+	// NPUErr is why the Intel NPU isn't used, where one is present.
+	NPUErr  error
+	npuFail atomic.Pointer[string]
 }
+
+// HasNPU reports whether this computer has an Intel NPU the model tried to use.
+func (m *Model) HasNPU() bool { return m.hasNPU }
 
 // Backend is what reads the model now, as Settings › Privacy names it:
 // via "CoreML" on the device its compute plan puts most of the program
 // on ("Neural Engine", "GPU" or "CPU"; "" where the plan can't be read),
-// or bert.go on the CPU (via ""), and then on a Mac why not CoreML: it
+// via "Level Zero" on an Intel NPU, or bert.go on the CPU (via ""), and
+// then why not CoreML or the NPU where one is present: it
 // couldn't be made, or its last read failed. Settings said "on the CPU"
 // while CoreML read every window (yyhhyyyyyy on Discord, 10-27).
 func (m *Model) Backend() (via, device string, err error) {
-	if m.ml == nil {
-		if !coreml.Available {
-			return "", "CPU", nil
+	if m.ml != nil {
+		if e := m.mlFail.Load(); e != nil {
+			return "", "CPU", errors.New(*e)
 		}
+		return "CoreML", m.ml.Device, nil
+	}
+	if m.npu != nil {
+		if e := m.npuFail.Load(); e != nil {
+			return "", "CPU", errors.New(*e)
+		}
+		return "Level Zero", m.npu.Device, nil
+	}
+	if coreml.Available {
 		return "", "CPU", m.MLErr
 	}
-	if e := m.mlFail.Load(); e != nil {
-		return "", "CPU", errors.New(*e)
+	if m.hasNPU {
+		return "", "CPU", m.NPUErr
 	}
-	return "CoreML", m.ml.Device, nil
+	return "", "CPU", nil
 }
 
 // Span is what the model found: text[Start:End], a Label of its (email,
@@ -100,6 +120,14 @@ func Load(dir string) (*Model, error) {
 	}
 	m := &Model{tok: tok, net: nt}
 	m.ml, m.MLErr = openCoreML(dir, nt)
+	if m.ml == nil {
+		m.npu, m.hasNPU, m.NPUErr = openNPU(dir, nt)
+		if m.npu != nil {
+			if err := m.npuAgrees(); err != nil {
+				m.npu, m.NPUErr = nil, err
+			}
+		}
+	}
 	return m, nil
 }
 
@@ -115,6 +143,15 @@ func (m *Model) logits(ids []int, procs int) []float32 {
 		}
 		e := err.Error()
 		m.mlFail.Store(&e)
+	}
+	if m.npu != nil && len(ids) >= npuMin {
+		lg, err := npuRead(m.npu, m.net, ids)
+		if err == nil {
+			m.npuFail.Store(nil)
+			return lg
+		}
+		e := err.Error()
+		m.npuFail.Store(&e)
 	}
 	if procs == 0 { // CoreML's reader: a core of cores, and all that are free
 		procs = take(Cores())
@@ -190,7 +227,7 @@ func (m *Model) Find(text string) []Span {
 		}
 		return append(ids, 2)
 	}
-	if m.ml != nil {
+	if m.ml != nil || m.npu != nil {
 		for w := range starts {
 			lgs[w] = m.logits(ids(w), 0)
 		}

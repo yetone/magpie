@@ -18,7 +18,7 @@ func TestModelSameWithoutAVX2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.ml = nil
+	m.ml, m.npu = nil, nil
 	var b strings.Builder
 	for i := 0; b.Len() < 6<<10; i++ {
 		fmt.Fprintf(&b, "/home/mrwl/projects/api/store_%d.go:%d: db.QueryRow(\"SELECT email FROM users WHERE id = $1\")\n", i, 40+i)

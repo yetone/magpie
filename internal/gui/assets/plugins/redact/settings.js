@@ -437,7 +437,7 @@ featWho.redact = (line, f) => {
   if (prefs) say(); else loadSettings().then(say, () => {});
 };
 
-// pmModelOption is a local model in app.js's pmPick menu: a built-in one
+// pmModelOption is a local model in privacymodel.js's pmPick menu: a built-in one
 // with what it is, its size and whether it is downloaded; a plugin's
 // (pii/external.go) by the name its options give, its files the user's.
 function pmModelOption(x) {

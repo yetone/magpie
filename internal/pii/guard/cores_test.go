@@ -60,7 +60,7 @@ func TestFindsAtOnceReadAsOneAtATime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.ml = nil
+	m.ml, m.npu = nil, nil
 	texts := make([]string, 8)
 	for i := range texts {
 		var b strings.Builder
@@ -120,7 +120,7 @@ func TestFindCarriesAWindowsPanic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.ml = nil
+	m.ml, m.npu = nil, nil
 	m.net.word = m.net.word[:hidden:hidden]
 	got := func() (r any) {
 		defer func() { r = recover() }()

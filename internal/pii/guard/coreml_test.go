@@ -127,16 +127,6 @@ func TestCoreMLFailureFallsBack(t *testing.T) {
 	}
 }
 
-func argmax(r []float32) int {
-	best := 0
-	for i, v := range r {
-		if v > r[best] {
-			best = i
-		}
-	}
-	return best
-}
-
 // Backend names what reads the model: CoreML on the device its plan puts
 // most of the program on while CoreML reads, and the CPU with why once
 // CoreML's last read failed or it couldn't be made (Settings said "on

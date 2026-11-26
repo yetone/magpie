@@ -190,23 +190,35 @@ type backendFinder struct {
 	fakeFinder
 	via, device string
 	err         error
+	npu         bool
 }
 
 func (f backendFinder) Backend() (string, string, error) { return f.via, f.device, f.err }
+func (f backendFinder) HasNPU() bool                     { return f.npu }
 
 // Now names what reads AstrLink Guard: CoreML and the device its plan
-// picked while CoreML reads, the CPU with CoreML's error when that failed,
-// and the CPU where there is no CoreML (yyhhyyyyyy on Discord: Settings
-// said "on the CPU" while CoreML ran it).
+// picked while CoreML reads, Level Zero on an Intel NPU, the CPU with
+// CoreML's or the NPU's error when that failed, and the CPU where neither
+// is present (yyhhyyyyyy on Discord: Settings said "on the CPU" while
+// CoreML ran it).
 func TestGuardNowNamesItsBackend(t *testing.T) {
 	for _, c := range []struct {
 		via, device, err string
-	}{{"CoreML", "Neural Engine", ""}, {"CoreML", "GPU", ""}, {"CoreML", "", ""}, {"", "CPU", "prediction failed"}, {"", "CPU", ""}} {
+		npu              bool
+	}{
+		{"CoreML", "Neural Engine", "", false},
+		{"CoreML", "GPU", "", false},
+		{"CoreML", "", "", false},
+		{"Level Zero", "Intel(R) AI Boost", "", true},
+		{"", "CPU", "device lost", true},
+		{"", "CPU", "prediction failed", false},
+		{"", "CPU", "", false},
+	} {
 		t.Run(c.via+c.device+c.err, func(t *testing.T) {
 			guardSandbox(t)
 			fakeGuardFiles(t)
 			var reads atomic.Int32
-			f := backendFinder{fakeFinder: fakeFinder{map[string]string{}, &reads}, via: c.via, device: c.device}
+			f := backendFinder{fakeFinder: fakeFinder{map[string]string{}, &reads}, via: c.via, device: c.device, npu: c.npu}
 			if c.err != "" {
 				f.err = errors.New(c.err)
 			}
@@ -215,7 +227,7 @@ func TestGuardNowNamesItsBackend(t *testing.T) {
 				t.Fatal(err)
 			}
 			st := Of(AstrLinkGuard).Now()
-			if !st.Running || st.Via != c.via || st.Device != c.device || st.GPUError != c.err || st.GPU {
+			if !st.Running || st.Via != c.via || st.Device != c.device || st.GPUError != c.err || st.NPU != c.npu || st.GPU {
 				t.Errorf("Now = %+v", st)
 			}
 		})

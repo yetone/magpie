@@ -97,7 +97,7 @@ func TestModelFinds(t *testing.T) {
 	}
 	// bert.go's own; TestCoreMLMatchesGo holds CoreML to it. CoreML gives
 	// the module path .81, the publisher's fp32 model .785.
-	m.ml = nil
+	m.ml, m.npu = nil, nil
 	text := "联系人：张三，电话 13800138000，邮箱 zhangsan@example.com。\n" +
 		"go 1.26\nrequire github.com/clipperhouse/uax29/v2 v2.2.0\n"
 	// what masking keeps at the publisher's threshold: Find gives down
@@ -123,7 +123,7 @@ func TestModelFindsAroundMalformedBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.ml = nil
+	m.ml, m.npu = nil, nil
 	for _, text := range []string{
 		"hello \xff", "\xff", "\xc3", "\xed\xa0\x80", "\xf0\x9f",
 		"联系人：张三\xff，电话 13800138000\xc3。",
@@ -154,7 +154,7 @@ func TestWindowsAtOnceReadAsOneByOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.ml = nil
+	m.ml, m.npu = nil, nil
 	var b strings.Builder
 	for i := range 200 {
 		fmt.Fprintf(&b, "第%d位联系人：张三，电话 138%08d，邮箱 user%d@example.com，住在北京市海淀区中关村大街%d号。\n", i, i*7919, i, i)

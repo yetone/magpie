@@ -157,11 +157,12 @@ type Status struct {
 	// to start
 	Running bool   `json:"running,omitempty"`
 	Device  string `json:"device,omitempty"`
-	// Via is the runtime AstrLink Guard runs on, "CoreML" on a Mac where
-	// it does (Device then the one its plan puts most of the model on, or
-	// ""); "" for magpie's own Go code on the CPU
+	// Via is the runtime AstrLink Guard runs on: "CoreML" on a Mac (Device
+	// then the one its plan puts most of the model on, or "") or "Level Zero"
+	// on an Intel NPU; "" for magpie's own Go code on the CPU
 	Via      string `json:"via,omitempty"`
 	GPU      bool   `json:"gpu,omitempty"`
+	NPU      bool   `json:"npu,omitempty"`
 	LoadMS   int    `json:"loadMs,omitempty"`
 	GPUError string `json:"gpuError,omitempty"`
 	// GPUReset says the GPU was lost to its driver resetting it
