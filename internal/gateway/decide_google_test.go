@@ -139,3 +139,33 @@ func TestGoogleDecisionsTakesImages(t *testing.T) {
 		t.Fatalf("input %s\nwant %s", in, want)
 	}
 }
+
+// bunnybit0121 on X (#7788): a Google key's provider with two keys, each
+// given its own list of models (picked from the chat models, which never
+// name gemini-decision-1), answered google/gemini-decision-1 with a 403
+// telling the user to add it to a key's models, which no editor can. The
+// decision model is in no list a key can have, so no list bars it.
+func TestGoogleDecisionKeyLists(t *testing.T) {
+	fresh(t)
+	up := &googleDecisionsUp{reply: googleChoiceReply}
+	s := googleKey(t, up)
+	p, err := provider.Find("google")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Keys = []provider.KeyAccount{{Key: "AIza-other"}}
+	p.AccountModels = map[string][]string{
+		provider.KeyID("AIza-test"):  {"gemini-3-flash"},
+		provider.KeyID("AIza-other"): {"gemini-3-flash", "gemini-3-pro"},
+	}
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	code, out := sendTo(s, "/v1/systemone", `{"model":"google/`+provider.GoogleDecision+`","state":{"message":"hi"},"questions":{"ticket_route":{"type":"choice","instructions":"Pick one","criteria":{"billing":"b","technical_support":"t"}}}}`)
+	if code != 200 || !strings.Contains(out, `"choice":"technical_support"`) {
+		t.Fatalf("System One with each key's own list: %d %s", code, out)
+	}
+	if asked, _ := up.got(); !slices.Equal(asked, []string{"/v1beta/decisions key=AIza-test auth="}) {
+		t.Fatalf("Google asked: %q", asked)
+	}
+}

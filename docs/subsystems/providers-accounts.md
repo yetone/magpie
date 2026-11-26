@@ -231,12 +231,16 @@ Google's Decisions API (`POST /v1beta/decisions`, `ViaGoogle`) serves
 questions as they are, with a choice's undescribed option as `""`; the
 state goes as `input`, a string as it is and an object as its JSON text
 (an object would be read as a content block), and the images as image
-blocks after it (`googleAsk`). The answer's usage
+blocks after it (`googleAsk`). Google's decision model is in no key's own
+list of models (they are picked from the chat models), so such a list
+never bars it (`decisionUnlisted` in `AccountServes`, Bailian's and Ark's
+alike; #7788). The answer's usage
 (`total_input_tokens`/`total_output_tokens`) comes back as System One's,
 and a `prompt_feedback.block_reason` with no answers is a 400 saying why
 (`DecideResult`). Before, `google/gemini-decision-1` fell to OpenRouter's
 decision list. `TestGoogleDecideWire`, `TestGoogleKeyDecides`,
-`TestGoogleSystemOne`, `TestGoogleDecisionsTakesImages`.
+`TestGoogleSystemOne`, `TestGoogleDecisionsTakesImages`,
+`TestGoogleDecisionKeyLists`.
 A routing rule's classifier set to an OpenAI API key's `gpt-6-luna`
 (`api.openai.com`; not Azure, a relay listing the id, a ChatGPT sign-in, a
 plugin, another magpie or a provider with a decision API of its own) is

@@ -244,3 +244,47 @@ func TestGoogleKeyDecides(t *testing.T) {
 		t.Fatalf("vertex: %q", d)
 	}
 }
+
+// bunnybit0121 on X (#7788): a key's own list of models is picked from
+// the provider's chat models, which never name the vendor's own decision
+// model beside them (Google's, Bailian's), so a list barred it on every
+// key. Such a model is served whatever a key's list says; every other
+// model, a decision model the list can hold (OpenRouter's Jev) among
+// them, stays as the list says.
+func TestGoogleDecisionKeyLists(t *testing.T) {
+	arkHome(t)
+	g, err := FromPreset("google")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Key, g.Keys, g.Decide = "AIza-a", []KeyAccount{{Key: "AIza-b"}}, AIStudioGemini
+	g.AccountModels = map[string][]string{keyID("AIza-a"): {"gemini-3-flash"}, keyID("AIza-b"): {"gemini-3-pro"}}
+	bl := Provider{ID: "bl", Chat: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+		Decide: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", Key: "sk-sp-1",
+		AccountModels: map[string][]string{keyID("sk-sp-1"): {"qwen3-max"}}}
+	or := Provider{ID: "openrouter", Chat: "https://openrouter.ai/api/v1", Decide: "https://openrouter.ai/api/v1", Key: "sk-or",
+		AccountModels: map[string][]string{keyID("sk-or"): {"openai/gpt-5"}}}
+	for _, c := range []struct {
+		p     Provider
+		ref   string
+		model string
+		want  bool
+	}{
+		{g, keyID("AIza-a"), GoogleDecision, true},
+		{g, keyID("AIza-b"), GoogleDecision, true},
+		{g, keyID("AIza-a"), "gemini-3-flash", true},
+		{g, keyID("AIza-a"), "gemini-3-pro", false},
+		{bl, keyID("sk-sp-1"), BailianDecision, true},
+		{bl, keyID("sk-sp-1"), "qwen3-coder-plus", false},
+		{or, keyID("sk-or"), OpenRouterJev, false},
+	} {
+		if got := c.p.AccountServes(c.ref, c.model); got != c.want {
+			t.Errorf("%s key %s serves %s: %v, want %v", c.p.ID, c.ref, c.model, got, c.want)
+		}
+	}
+	// and the gateway's key routing asks both of Google's keys for it
+	out, _, barred, _ := g.KeysFor(GoogleDecision, nil)
+	if len(out) != 2 || len(barred) != 0 {
+		t.Fatalf("keys for %s: %d asked, %d barred", GoogleDecision, len(out), len(barred))
+	}
+}
