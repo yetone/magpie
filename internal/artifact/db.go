@@ -244,6 +244,17 @@ func closeDB(id string) {
 	}
 }
 
+// CloseDBs lets go of every open data.db. Windows can't remove a folder
+// while a file in it is open, so a test's folder needs this first.
+func CloseDBs() {
+	handlesMu.Lock()
+	defer handlesMu.Unlock()
+	for id, h := range handles {
+		h.Close()
+		delete(handles, id)
+	}
+}
+
 func unavailable(err error) error {
 	return &DBError{Code: "unavailable", Message: err.Error()}
 }

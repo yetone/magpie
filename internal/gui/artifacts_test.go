@@ -18,7 +18,7 @@ func TestArtifactsAPI(t *testing.T) {
 	dir := t.TempDir()
 	was := artifact.Dir
 	artifact.Dir = func() string { return dir }
-	t.Cleanup(func() { artifact.Dir = was })
+	t.Cleanup(func() { artifact.CloseDBs(); artifact.Dir = was })
 	a, err := artifact.PublishPage(artifact.Publish{Page: []byte("<title>Report</title>one"), Agent: "codex"})
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestArtifactsShareAPI(t *testing.T) {
 	dir := t.TempDir()
 	was := artifact.Dir
 	artifact.Dir = func() string { return dir }
-	t.Cleanup(func() { artifact.Dir = was })
+	t.Cleanup(func() { artifact.CloseDBs(); artifact.Dir = was })
 	var mu sync.Mutex
 	live := false
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

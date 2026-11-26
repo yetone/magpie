@@ -17,7 +17,7 @@ func artifactsSandbox(t *testing.T) {
 	dir := t.TempDir()
 	old := artifact.Dir
 	artifact.Dir = func() string { return dir }
-	t.Cleanup(func() { artifact.Dir = old })
+	t.Cleanup(func() { artifact.CloseDBs(); artifact.Dir = old })
 }
 
 // `magpie artifacts` does what Work › Artifacts does: lists them newest

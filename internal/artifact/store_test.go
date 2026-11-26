@@ -21,12 +21,7 @@ func sandbox(t *testing.T) string {
 	// before the folder goes: Windows won't remove a data.db still open
 	t.Cleanup(func() {
 		Dir = old
-		handlesMu.Lock()
-		defer handlesMu.Unlock()
-		for id, h := range handles {
-			h.Close()
-			delete(handles, id)
-		}
+		CloseDBs()
 	})
 	return dir
 }

@@ -21,7 +21,7 @@ func artifacts(t *testing.T) http.Handler {
 	dir := t.TempDir()
 	was := artifact.Dir
 	artifact.Dir = func() string { return dir }
-	t.Cleanup(func() { artifact.Dir = was })
+	t.Cleanup(func() { artifact.CloseDBs(); artifact.Dir = was })
 	return lanGuard(New().Handler())
 }
 
