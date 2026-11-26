@@ -54,6 +54,13 @@ import (
 // magpie writes both files, so an older ZCode sees its models too. A model
 // the user set by hand in ZCode (a manual rule) keeps what they set.
 //
+// A running ZCode needs no restart for magpie's changes: from 3.14 to 4.0.0
+// it reads provider_config.json again every second (its
+// NodePersonalProviderConfigRepository polls it, pollingIntervalMs 1000)
+// and its picker follows (ProviderConfigService's "personal:poll-changed"),
+// and config.json is only imported from when provider_config.json isn't
+// there yet. So ZCode has no notice and no Restart (bitssly on X).
+//
 // magpie's gateway answers all three of ZCode's API formats at the same
 // address (/v1/messages, /chat/completions, /responses), so the format the
 // user picked in ZCode's provider settings is theirs: a sync keeps it in both
@@ -81,12 +88,6 @@ func zcode(home string) *Agent {
 		Dir: dir, Path: path,
 		// its picker lists the models picked for it, in both files (#1508)
 		ListsModels: true,
-		Notice: func() string {
-			if Running(`ZCode\.app/`, `(^|/)ZCode( |$)`) {
-				return noticeZcode.String()
-			}
-			return ""
-		},
 		Sync: func() error {
 			if !wired() {
 				return nil
@@ -502,74 +503,6 @@ func zcodeDefaultLevel(levels []string) string {
 	return on[len(on)/2]
 }
 
-// zcodePart is what ZCode reads of magpie's provider when it starts: the
-// provider in config.json and magpie's rules in provider_config.json, not
-// the key (AppBehind).
-func zcodePart(path, rules string) string {
-	var b strings.Builder
-	if raw, ok := edit.GetJSONRaw(path, "provider."+magpieID); ok {
-		var prov map[string]any
-		if json.Unmarshal([]byte(raw), &prov) == nil {
-			if opts, _ := prov["options"].(map[string]any); opts != nil {
-				delete(opts, "apiKey")
-			}
-			if v, err := json.Marshal(prov); err == nil {
-				b.Write(v)
-			}
-		}
-	}
-	b.WriteByte('\n')
-	b.WriteString(zcodeRulesPart(rules))
-	return b.String()
-}
-
-// zcodeRulesPart is magpie's provider rule and model rules in
-// provider_config.json at path, as ZCode reads them at start. A rule of
-// another provider is left out, so ZCode's own writes to one are no change
-// of magpie's.
-func zcodeRulesPart(path string) string {
-	var c struct {
-		Config struct {
-			ProviderConfigRules struct {
-				ProviderRules []json.RawMessage `json:"providerRules"`
-			} `json:"providerConfigRules"`
-			ModelConfigRules struct {
-				ProviderModelRules       []json.RawMessage `json:"providerModelRules"`
-				ManualProviderModelRules []json.RawMessage `json:"manualProviderModelRules"`
-			} `json:"modelConfigRules"`
-		} `json:"config"`
-	}
-	b, _ := os.ReadFile(path)
-	if json.Unmarshal(b, &c) != nil {
-		return ""
-	}
-	var out strings.Builder
-	for _, rs := range [][]json.RawMessage{
-		c.Config.ProviderConfigRules.ProviderRules,
-		c.Config.ModelConfigRules.ProviderModelRules,
-		c.Config.ModelConfigRules.ManualProviderModelRules,
-	} {
-		for _, r := range rs {
-			var m map[string]any
-			if json.Unmarshal(r, &m) != nil || m["providerId"] != magpieID {
-				continue
-			}
-			// the key is not what ZCode's picker reads, and a rotation of
-			// it is no change of the list
-			if cfg, _ := m["config"].(map[string]any); cfg != nil {
-				if access, _ := cfg["access"].(map[string]any); access != nil {
-					delete(access, "apiKey")
-				}
-			}
-			if v, err := json.Marshal(m); err == nil {
-				out.Write(v)
-				out.WriteByte('\n')
-			}
-		}
-	}
-	return out.String()
-}
-
 // zcodeRuled reports whether provider_config.json has magpie's provider.
 func zcodeRuled(path string) bool {
 	var c struct {
@@ -870,8 +803,3 @@ func zcodeNonNil(l []any) []any {
 	}
 	return l
 }
-
-// what zcode says after a change (notice.go)
-var (
-	noticeZcode = newNotice("ZCode reads its providers at start-up — restart ZCode to see magpie's models in its picker.")
-)

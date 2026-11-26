@@ -48,21 +48,18 @@ type restartable struct {
 // com.anthropic.claudefordesktop, executable Claude).
 var claudeDesktopApp = desktopApp{id: "com.anthropic.claudefordesktop", names: []string{"Claude.app"}}
 
-// zcodeApp is ZCode's desktop bundle (dev.zcode.app; 3.17.2's ZCode.exe on
-// Windows).
-var zcodeApp = desktopApp{id: "dev.zcode.app", names: []string{"ZCode.app"}}
-
 // restartApps are the agents whose desktop app the Agents row restarts.
 // macOS: Claude.app, WorkBuddy.app and WorkBuddy AI.app (both run an
-// executable named Electron), OpenMausBot.app and ZCode.app. Windows:
+// executable named Electron) and OpenMausBot.app. Windows:
 // Claude Desktop is claude.exe, from Squirrel's %LOCALAPPDATA%\AnthropicClaude
 // (a claude.exe stub beside app-<version>\claude.exe) or its MSIX
 // (desktopdir's Claude_… and AnthropicPBC.Claude_…), never Claude
 // Code's claude.exe elsewhere;
 // WorkBuddy is C:\Program Files\WorkBuddy\WorkBuddy.exe (5.6.2, seen on
-// the Windows box), and ZCode is ZCode.exe. WorkBuddy AI's Windows build
+// the Windows box). WorkBuddy AI's Windows build
 // wasn't to hand, so it has no Restart there. Only OpenMausBot ships a
-// Linux app; magpie doesn't restart it there.
+// Linux app; magpie doesn't restart it there. ZCode isn't here: it reads
+// magpie's provider again while it runs (zcode.go).
 var restartApps = map[string]restartable{
 	"claude-desktop": {mac: claudeDesktopApp, macCmd: desktopInstance, winExe: "claude.exe", win: func(image string) bool {
 		return winBase(image, "claude.exe") && (winHas(image, `\AnthropicClaude\`) || winHas(image, `\WindowsApps\Claude_`) || winHas(image, `\WindowsApps\AnthropicPBC.Claude_`))
@@ -76,12 +73,6 @@ var restartApps = map[string]restartable{
 	// per-user NSIS, OpenMausBot.exe under Programs\openmausbot
 	"openmausbot": {mac: ombApp, winExe: "OpenMausBot.exe", win: func(image string) bool {
 		return winBase(image, "OpenMausBot.exe")
-	}},
-	// ZCode reads its providers at start (noticeZcode): its picker lists
-	// magpie's models from config.json and provider_config.json as they
-	// were then
-	"zcode": {mac: zcodeApp, winExe: "ZCode.exe", win: func(image string) bool {
-		return winBase(image, "ZCode.exe")
 	}},
 }
 
@@ -337,8 +328,8 @@ func (a *Agent) AppBehind() *AppRun {
 // applied and magpie's profile (or the user's for magpie's gateway), with the models the gateway lists it.
 // WorkBuddy: magpie's models in its models.json (workbuddyPart).
 // OpenMausBot: magpie's engine in its config.json (ombPart).
-// ZCode: magpie's provider in config.json and its rules in
-// provider_config.json (zcodePart).
+// ZCode has none: it reads provider_config.json again while it runs
+// (zcode.go).
 func (a *Agent) appReads() (files []string, reads func() string) {
 	switch a.ID {
 	case "claude-desktop":
@@ -385,9 +376,6 @@ func (a *Agent) appReads() (files []string, reads func() string) {
 		return []string{a.Path}, func() string { return workbuddyPart(a.Path) }
 	case "openmausbot":
 		return []string{a.Path}, func() string { return ombPart(a.Path) }
-	case "zcode":
-		rules := filepath.Join(filepath.Dir(a.Path), "provider_config.json")
-		return []string{a.Path, rules}, func() string { return zcodePart(a.Path, rules) }
 	}
 	return nil, nil
 }
