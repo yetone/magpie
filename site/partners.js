@@ -158,6 +158,6 @@ export const PARTNERS = [
       "zh-TW": "低至 0.6 折，Claude/GPT/DeepSeek 全有",
     },
     from: "2026-10-26T00:00:00+08:00",
-    until: "2026-11-26T00:00:00+08:00",
+    until: "2026-12-26T00:00:00+08:00",
   },
 ];

@@ -9,7 +9,8 @@
 //   readme where the READMEs' logo sends it (README.md, README.zh-CN.md)
 //
 // A link stays here after its seat ends: a copy of the README or the page
-// may still point at it.
+// may still point at it. A home seat that ended says so with homeEnded, so
+// the page need not show it.
 export const SPONSORS = [
   { id: "yylx", home: "https://app.yylx.io/register?aff=YETONE" },
   { id: "apinebula", home: "https://apinebula.ai/ref/Gs54HwyB", readme: "https://apinebula.ai/ref/qmXqFGpr" },
@@ -18,7 +19,7 @@ export const SPONSORS = [
   { id: "kimi-cn", readme: "https://www.kimi.com/code?aff=magpie" },
   { id: "apikeyfan", readme: "https://apikey.fan/?aff=mg_readme" },
   { id: "wandapi", readme: "https://wandapi.ai/r/magpierepo" },
-  { id: "fastai", home: "https://www.fastaitoken.com/register?aff=MAGPIE&utm=official" },
+  { id: "fastai", home: "https://www.fastaitoken.com/register?aff=MAGPIE&utm=official", homeEnded: "2026-11-26" },
   { id: "soleapi", home: "https://soleapi.com/r/magpie" },
   { id: "aigocode", home: "https://www.aigocode.net/invite/MAGPIE?utm_source=magpie&utm_medium=home", readme: "https://www.aigocode.net/invite/MAGPIE?utm_source=magpie&utm_medium=readme" },
   { id: "modelgo", readme: "https://modelgo.ai/?utm_source=magpie&utm_medium=sponsorship&utm_content=readme&campaign_id=magpie&ad_group_id=readme" },

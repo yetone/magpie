@@ -639,7 +639,7 @@ test("sponsors: the home page and the READMEs link every sponsor through /go", a
       }
     }
   const home = readFileSync(pages.home[0], "utf8");
-  for (const s of SPONSORS.filter((s) => s.home)) assert.ok(home.includes(`href="/go/${s.id}/home"`), s.id);
+  for (const s of SPONSORS.filter((s) => s.home)) assert.equal(home.includes(`href="/go/${s.id}/home"`), !s.homeEnded, s.id);
 });
 
 // HTMLRewriter is Cloudflare's; this stands in for the two uses here: a
