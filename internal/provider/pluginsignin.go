@@ -236,6 +236,9 @@ func (s *signInFlow) pluginDone(saved plugin.Saved, err error) {
 		s.finish(SignInState{State: "failed", Error: err.Error()})
 	default:
 		clearPluginLapse(saved)
+		// a plugin whose sign-in also searches is magpie's web search when
+		// none was ever set up (#7632)
+		adoptSearchLogged()
 		user := pluginUser(saved)
 		s.finish(SignInState{State: "done", User: user, Using: pluginUsing(saved, user)})
 	}

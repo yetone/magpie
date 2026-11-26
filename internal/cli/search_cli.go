@@ -37,7 +37,8 @@ const searchUsage = `usage:
 
   apis: tavily, brave, exa, firecrawl, you, deepseek, volcengine, wsa, tinyfish, searxng
         and the ones a plugin gives (its search hook), as <plugin>:<id> in magpie's Settings
-        › Models › Web search; a plugin that is off gives none
+        › Models › Web search; a plugin that is off gives none. The plugin's name or the
+        id alone will do when it names one of them (magpie search add agy-cli)
 
   url= is the API's base URL, for an endpoint of your own that answers as that API
   does (e.g. url=https://search.example.com/tavily). Without it the vendor's own is
@@ -75,6 +76,10 @@ func searchCmd(args []string) error {
 		as := provider.StoredSearchAPIs()
 		if len(as) == 0 {
 			fmt.Println(muted.Render("  no search API · magpie search add <tavily|brave|exa|firecrawl|you|deepseek|volcengine|wsa|tinyfish|searxng> <key>"))
+			// the plugins' too, which no list of magpie's own names (#7632)
+			if ids := pluginSearchIDs(); len(ids) > 0 {
+				fmt.Println(muted.Render("  from a plugin · magpie search add <" + strings.Join(ids, "|") + ">"))
+			}
 			return nil
 		}
 		for i, a := range as {
@@ -121,7 +126,11 @@ func searchCmd(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("magpie search add <api> <key> [url=<address>]")
 		}
-		a := provider.SearchAPI{Vendor: strings.ToLower(args[1])}
+		v, err := searchVendorArg(args[1])
+		if err != nil {
+			return err
+		}
+		a := provider.SearchAPI{Vendor: v}
 		// a new key alone keeps the address set before (#1580); url= with
 		// nothing after it puts the vendor's own back
 		urlGiven := false
@@ -152,10 +161,14 @@ func searchCmd(args []string) error {
 		if len(args) != 2 {
 			return fmt.Errorf("magpie search %s <api>", args[0])
 		}
-		if err := provider.SwitchSearchAPI(strings.ToLower(args[1]), args[0] == "on"); err != nil {
+		v, err := searchVendorArg(args[1])
+		if err != nil {
 			return err
 		}
-		fmt.Println(green.Render("✓"), strings.ToLower(args[1]), args[0])
+		if err := provider.SwitchSearchAPI(v, args[0] == "on"); err != nil {
+			return err
+		}
+		fmt.Println(green.Render("✓"), v, args[0])
 		return nil
 	case "move", "mv":
 		n := 0
@@ -163,18 +176,21 @@ func searchCmd(args []string) error {
 			fmt.Sscan(args[2], &n)
 		}
 		as := provider.StoredSearchAPIs()
-		i := slices.IndexFunc(as, func(x provider.SearchAPI) bool { return len(args) > 1 && x.Vendor == strings.ToLower(args[1]) })
 		if len(args) != 3 || n < 1 || n > len(as) {
 			return fmt.Errorf("magpie search move <api> <n>, n from 1 to %d", len(as))
 		}
+		v, err := searchVendorArg(args[1])
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(as, func(x provider.SearchAPI) bool { return x.Vendor == v })
 		if i < 0 {
-			return fmt.Errorf("no %s search API is set up", strings.ToLower(args[1]))
+			return fmt.Errorf("no %s search API is set up", v)
 		}
 		order := []string{}
 		for _, a := range as {
 			order = append(order, a.Vendor)
 		}
-		v := order[i]
 		order = slices.Insert(slices.Delete(order, i, i+1), n-1, v)
 		if err := provider.ArrangeSearchAPIs(order); err != nil {
 			return err
@@ -189,8 +205,12 @@ func searchCmd(args []string) error {
 		}
 		var vendors []string
 		if strings.ToLower(args[1]) != "off" {
-			for _, v := range strings.Split(args[1], ",") {
-				if v = strings.ToLower(strings.TrimSpace(v)); v != "" {
+			for _, w := range strings.Split(args[1], ",") {
+				if w = strings.TrimSpace(w); w != "" {
+					v, err := searchVendorArg(w)
+					if err != nil {
+						return err
+					}
 					vendors = append(vendors, v)
 				}
 			}
@@ -211,13 +231,59 @@ func searchCmd(args []string) error {
 		if len(args) != 2 {
 			return fmt.Errorf("magpie search rm <api>")
 		}
-		if err := provider.RemoveSearchAPI(strings.ToLower(args[1])); err != nil {
+		v, err := searchVendorArg(args[1])
+		if err != nil {
+			return err
+		}
+		if err := provider.RemoveSearchAPI(v); err != nil {
 			return err
 		}
 		fmt.Println(green.Render("✓"), "removed")
 		return nil
 	}
 	return fmt.Errorf("magpie search [add|on|off|move|mix|rm|count] (magpie search help)")
+}
+
+// searchVendorArg is the search API a word names in magpie search: one of
+// magpie's own, or a plugin's <plugin>:<id>, as it is; else a plugin's API
+// named by its plugin's short name or its own id alone (magpie search add
+// agy-cli for agy-cli:agy), when that is one API of the plugins that are
+// on or of those set up (Kayphoon, #7632). A word that names none is
+// left as it is, for the error that lists them all.
+func searchVendorArg(word string) (string, error) {
+	w := strings.ToLower(strings.TrimSpace(word))
+	if _, ok := provider.SearchVendorOf(w); ok || strings.Contains(w, ":") {
+		return w, nil
+	}
+	ids := pluginSearchIDs()
+	for _, a := range provider.StoredSearchAPIs() {
+		if strings.Contains(a.Vendor, ":") && !slices.Contains(ids, a.Vendor) {
+			ids = append(ids, a.Vendor)
+		}
+	}
+	var hits []string
+	for _, id := range ids {
+		if plug, own, _ := strings.Cut(id, ":"); w == plug || w == own {
+			hits = append(hits, id)
+		}
+	}
+	switch len(hits) {
+	case 0:
+		return w, nil
+	case 1:
+		return hits[0], nil
+	}
+	return "", fmt.Errorf("%s names more than one search API: %s; give one of them", w, strings.Join(hits, ", "))
+}
+
+// pluginSearchIDs are the search APIs the plugins that are on give, as
+// magpie search names them (<plugin>:<id>).
+func pluginSearchIDs() []string {
+	var ids []string
+	for _, v := range provider.AllSearchVendors()[len(provider.SearchVendors):] {
+		ids = append(ids, v.ID)
+	}
+	return ids
 }
 
 // searchCountCmd is magpie search count (#5545, mdwsk88): with no word it

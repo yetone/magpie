@@ -2,8 +2,10 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -222,5 +224,74 @@ func TestSearchCLIMix(t *testing.T) {
 	}
 	if got := mixed(); len(got) != 0 {
 		t.Fatalf("after mix off %v", got)
+	}
+}
+
+// A plugin's search API is named by its plugin's short name or its own id
+// alone when that names one API (Kayphoon, #7632): magpie search add
+// agy-cli adds agy-cli:agy, and on, off, move, mix and rm take the same
+// word. A word two plugins' APIs share names neither, and says which; the
+// empty list names the plugins' APIs beside magpie's own.
+func TestSearchCLIPluginShortName(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(settings.Dir(), name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const agy, mo, mo2 = "@magpie-community/opencode-agy-cli-auth@0.1.136", "@acme/opencode-mojeek-search@1.0.0", "@other/opencode-mojeek@1.0.0"
+	write("plugins.json", `{"plugins":[{"spec":"`+agy+`"},{"spec":"`+mo+`"},{"spec":"`+mo2+`"}]}`)
+	write("plugin-searches.json", `{"`+agy+`":[{"id":"agy","name":"Antigravity (agy)","auth":"agy-cli"}],`+
+		`"`+mo+`":[{"id":"mojeek","name":"Mojeek","keyOptional":true}],"`+mo2+`":[{"id":"mojeek","name":"Mojeek","keyOptional":true}]}`)
+
+	out, err := stdoutOf(t, func() error { return searchCmd(nil) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "magpie search add <agy-cli:agy|mojeek-search:mojeek|mojeek:mojeek>") {
+		t.Fatalf("the empty list names no plugin's API:\n%s", out)
+	}
+	for _, w := range []string{"agy-cli", "AGY"} {
+		if err := searchCmd([]string{"add", w}); err != nil {
+			t.Fatalf("add %s: %v", w, err)
+		}
+	}
+	if err := searchCmd([]string{"add", "mojeek-search"}); err != nil {
+		t.Fatal(err)
+	}
+	if as := provider.StoredSearchAPIs(); len(as) != 2 || as[0].Vendor != "agy-cli:agy" || as[1].Vendor != "mojeek-search:mojeek" {
+		t.Fatalf("%+v", as)
+	}
+	err = searchCmd([]string{"add", "mojeek"})
+	if err == nil || !strings.Contains(err.Error(), "mojeek-search:mojeek, mojeek:mojeek") {
+		t.Fatalf("a word two APIs share: %v", err)
+	}
+	if err := searchCmd([]string{"off", "agy"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := searchCmd([]string{"move", "agy-cli", "2"}); err != nil {
+		t.Fatal(err)
+	}
+	if as := provider.StoredSearchAPIs(); as[1].Vendor != "agy-cli:agy" || !as[1].Off {
+		t.Fatalf("off and move: %+v", as)
+	}
+	if err := searchCmd([]string{"mix", "agy,mojeek-search"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := searchCmd([]string{"rm", "agy"}); err != nil {
+		t.Fatal(err)
+	}
+	if as := provider.StoredSearchAPIs(); len(as) != 1 || as[0].Vendor != "mojeek-search:mojeek" {
+		t.Fatalf("after rm: %+v", as)
+	}
+	// an unknown word is still refused with every API named
+	if err := searchCmd([]string{"add", "google", "k"}); err == nil || !strings.Contains(err.Error(), "agy-cli:agy") {
+		t.Fatalf("unknown: %v", err)
 	}
 }

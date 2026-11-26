@@ -810,6 +810,10 @@ type file struct {
 	// Searches are the web search APIs a model's search goes to when no
 	// provider can search (see search_api.go).
 	Searches []SearchAPI `json:"searches,omitempty"`
+	// SearchesSet: Searches has held a search API, so an empty one is the
+	// user's (they removed the last); magpie adds none of its own then
+	// (AdoptSignedInSearch). Kept from the read on, whatever is stored.
+	SearchesSet bool `json:"searchesSet,omitempty"`
 	// NoAutoGroups: the user turned off the groups magpie finds on its
 	// own (SetAutoGroups); the groups they made or changed stay.
 	NoAutoGroups bool `json:"noAutoGroups,omitempty"`
@@ -921,6 +925,7 @@ func read() (file, error) {
 			return file{}, &unreadableError{Path(), err}
 		}
 	}
+	f.SearchesSet = f.SearchesSet || len(f.Searches) > 0
 	return f, nil
 }
 
@@ -980,6 +985,7 @@ func store(f file) error {
 	for i := range f.Groups {
 		f.Groups[i] = f.Groups[i].stored()
 	}
+	f.SearchesSet = f.SearchesSet || len(f.Searches) > 0
 	b, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err

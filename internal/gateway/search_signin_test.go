@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -147,4 +149,93 @@ func TestPluginSearchSignsIn(t *testing.T) {
 	if _, hits, err := s.apiSearch(ctx, "go"); err != nil || len(hits) != 1 || hits[0].Title != "k9 undefined" {
 		t.Fatalf("a alone, rate limited: %+v %v", hits, err)
 	}
+}
+
+// A plugin's search API that signs in is magpie's web search once its
+// provider is signed in and the search list never held one (Kayphoon,
+// #7632): not before the sign-in, not a second time, and never after the
+// user removed the last API they had, a list from before the marker
+// included (a removal leaves the list empty, which is theirs).
+func TestSignedInSearchAdopted(t *testing.T) {
+	bun := testenv.Bun(t)
+	fresh(t)
+	t.Setenv("MAGPIE_BUN", bun)
+	t.Cleanup(plugin.Settle)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	abs, _ := filepath.Abs("../plugin/testdata/searchauth")
+	if _, err := plugin.Add(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugin.Providers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var seek provider.SearchVendor
+	for _, v := range provider.AllSearchVendors() {
+		if v.Plugin == abs && v.PluginID == "seek" {
+			seek = v
+		}
+	}
+	adopt := func(want string) {
+		t.Helper()
+		id, err := provider.AdoptSignedInSearch()
+		if err != nil || id != want {
+			t.Fatalf("adopted %q %v, want %q", id, err, want)
+		}
+	}
+	vendors := func() (out []string) {
+		for _, a := range provider.StoredSearchAPIs() {
+			out = append(out, a.Vendor)
+		}
+		return out
+	}
+
+	adopt("") // not signed in
+	later := time.Now().Add(time.Hour).UnixMilli()
+	if _, err := plugin.Import(ctx, "seekco", map[string]any{"type": "oauth", "access": "acc-a", "refresh": "r-a", "expires": later, "accountId": "a@seek"}); err != nil {
+		t.Fatal(err)
+	}
+	adopt(seek.ID) // the keyed entry, which has no sign-in, is not
+	if got := vendors(); len(got) != 1 || got[0] != seek.ID {
+		t.Fatalf("search list %v", got)
+	}
+	if as := provider.SearchAPIs(); len(as) != 1 || as[0].Vendor != seek.ID {
+		t.Fatalf("asked %+v", as)
+	}
+	adopt("") // on the list already
+	if err := provider.RemoveSearchAPI(seek.ID); err != nil {
+		t.Fatal(err)
+	}
+	adopt("") // removed by the user: the empty list is theirs
+	if got := vendors(); len(got) != 0 {
+		t.Fatalf("search list after removing it %v", got)
+	}
+
+	// a list written before the marker, its last API then removed
+	b, err := os.ReadFile(provider.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	delete(m, "searchesSet")
+	m["searches"] = []map[string]any{{"vendor": "searxng", "url": "https://searx.example", "pick": ""}}
+	b, _ = json.Marshal(m)
+	if err := os.WriteFile(provider.Path(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.RemoveSearchAPI("searxng"); err != nil {
+		t.Fatal(err)
+	}
+	adopt("")
+
+	// one never set up at all is added
+	delete(m, "searches")
+	b, _ = json.Marshal(m)
+	if err := os.WriteFile(provider.Path(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	adopt(seek.ID)
 }

@@ -1014,6 +1014,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		bg.Go("usage.KeepOutsideCallsRead", func() { usage.KeepOutsideCallsRead(ctx) })
 		// and moves the built-in subscriptions being retired onto their plugins
 		bg.Go("provider.KeepRetiringMoved", func() { provider.KeepRetiringMoved(ctx) })
+		// and makes a signed-in plugin's search API the web search's while
+		// none was ever set up (#7632)
+		bg.Go("provider.KeepSearchAdopted", func() { provider.KeepSearchAdopted(ctx) })
 		// and looks up which region the Claude accounts' way out to the
 		// internet is in, through each of their proxies (internal/egress)
 		bg.Go("egress.Keep", func() { egress.Keep(ctx, provider.ClaudeProxies) })

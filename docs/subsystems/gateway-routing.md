@@ -2443,11 +2443,24 @@ Covered by `TestSearchAPIAtItsOwnBaseURL`, `TestSearchKeyStaysAtItsBaseURL`,
 
 A plugin's `search` hook adds search APIs under the id `<plugin>:<id>`
 (`provider.AllSearchVendors`; [plugin-tools](plugin-tools.md#search-apis-from-a-plugin)).
+`magpie search` also takes the plugin's short name or the id alone when that
+names one API of the plugins that are on or of those set up
+(`searchVendorArg`, #7632), and its empty list names the plugins' APIs.
 `askSearchAPI` hands one to `askPluginSearch`, so the keys, their rest after a
 401/402/403/429 (`SearchRefused`), the listed order, the switch, the masked
 query and the request-log row are the built-ins' own, and the plugin is
 asked only while it is on. A plugin API has no `Base` of its own: its URL
 field shows only when the plugin declares `url: true`, and then is required.
+
+A plugin API that signs in (`auth`) is put on the list by magpie
+(`provider.AdoptSignedInSearch`, #7632) once its provider is signed in, when the
+list has never held an API: at the end of the plugin's sign-in
+(`pluginDone`), and 30s after start then hourly (`KeepSearchAdopted`) for one
+signed in before the plugin gave the API. `providers.json`'s `searchesSet`
+records that the list held one, set on every read and store where it does,
+so a list the user emptied stays empty. Search APIs are asked only after
+the providers (or first, when the user put them first), so the API added
+adds a way to search and takes none away.
 Its pages are cleaned like a built-in's (`searchPlain`, `clipText`, six at
 most). It is asked with the time left of a quarter of the search's limit, and
 `plugin.RunSearch` returns when that is out, though the plugin's own fetch may
