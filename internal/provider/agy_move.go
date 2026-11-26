@@ -24,8 +24,13 @@ import (
 const (
 	agyCLIID      = "agy-cli"
 	agyCLIPackage = "@magpie-community/opencode-agy-cli-auth"
-	// 0.1.143: a Claude Code model switch, which rewrites the system
-	// prompt's model line, keeps the agy session instead of replaying the
+	// 0.1.145: a Claude Code conversation keeps its agy session when a
+	// Bash cd moves its working folder or ToolSearch loads a tool mid-turn,
+	// instead of replaying it into a new one (_paper_hands on X), and
+	// AGY_BRIDGE_STRICT_REPLAY refuses a replay that would leave history
+	// out (NullBurn, plugins#1495); 0.1.143: a Claude Code model switch,
+	// which rewrites the system prompt's model line, keeps the agy session
+	// instead of replaying the
 	// conversation into a new one (chet030714 on X); 0.1.142: a tool loop
 	// cut by a plugin host restart resumes its agy session with only the
 	// step's results (chet030714, xuanbo1889245 on X);
@@ -39,7 +44,7 @@ const (
 	// of its own, and a request of one never goes on in another's agy, so
 	// one account's 429 no longer rests the other (Archivemylife on X);
 	// 0.1.68: auth.import takes the old plugin's sign-ins
-	agyCLIMin = "0.1.143"
+	agyCLIMin = "0.1.145"
 )
 
 // agyMoving are the Antigravity accounts agy-cli doesn't have yet, as the
