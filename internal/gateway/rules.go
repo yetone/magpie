@@ -82,12 +82,26 @@ type RuleHit struct {
 	// doesn't keep the conversation there (affine's "hours"): it goes
 	// where the group routes it, as a new conversation would
 	Ended int `json:"ended,omitempty"`
+	// Stay: the rule the turn's own intent matched, and the member it
+	// names, which the conversation didn't move to (keepsMember): the
+	// vendor's cache of it on Use was warm and that member is no step up
+	// from Use, so the turn stays where a turn before's rule sent it
+	// rather than send the whole conversation to the other uncached
+	Stay *RuleStay `json:"stay,omitempty"`
 	// UseEffort: the reasoning the rule asks the member it names for
 	// (provider.Rule.UseEffort, #2633), in place of the agent's
 	UseEffort string `json:"useEffort,omitempty"`
 	// members are the models of the member the rule names, as the group
 	// whose rule it is has them (ruleOver): who UseEffort is for
 	members []provider.Member
+}
+
+// RuleStay is the rule a turn's intent matched that the conversation
+// stayed off for its cache (RuleHit.Stay).
+type RuleStay struct {
+	N      int    `json:"n"`      // the rule, from 1
+	Use    string `json:"use"`    // the member it names
+	Tokens int    `json:"tokens"` // how long the conversation cached where it stays is
 }
 
 // Classified is what the classifier was asked as a turn began, and said.
@@ -151,6 +165,12 @@ type turnRule struct {
 	input int // the tokens the vendor counted the conversation's last request as
 	// intent is what the classifier said the turn's first message is
 	intent string
+	// ruleIntent is the intent the turn's rule matched by, where the turn
+	// kept an earlier turn's rule for the cache (keepsMember); "" is intent
+	ruleIntent string
+	// by is the model that answered the conversation last, whose vendor
+	// holds its cache (ruleAnswered)
+	by     answeredBy
 	effort string // the reasoning it picked for the turn
 	wanted string // what it would have picked, kept from (RuleHit.Wanted)
 	// answered is when the vendor last answered the conversation: its
@@ -326,7 +346,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 		}
 		if grown, ok := outgrown(g, ctx, hit, q); ok {
 			hit = grown
-			turnRules.m[key] = turnRule{turn: turn, use: hit.Use, n: hit.N, at: now, input: tr.input, intent: q.Intent, effort: tr.effort, wanted: tr.wanted, answered: tr.answered, size: size, hour: tr.hour}
+			turnRules.m[key] = turnRule{turn: turn, use: hit.Use, n: hit.N, at: now, input: tr.input, intent: q.Intent, by: tr.by, effort: tr.effort, wanted: tr.wanted, answered: tr.answered, size: size, hour: tr.hour, cold: tr.cold}
 			return hit
 		}
 		if had {
@@ -425,6 +445,15 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 	if i := provider.MatchRule(g.Rules, q); i >= 0 {
 		hit.N, hit.Use, hit.More, hit.When = i+1, g.Rules[i].Use, g.Rules[i].More, g.Rules[i].Conditions()
 	}
+	ruleIntent := ""
+	if had && keepsMember(g, ms, tr, q, hit, now, size) {
+		// the classifier's answer alone would move a conversation whose
+		// cache is warm where it is, to a member no step up: it stays
+		hit.Stay = &RuleStay{N: hit.N, Use: hit.Use, Tokens: max(tr.input, tr.size)}
+		r := g.Rules[tr.n-1]
+		hit.N, hit.Use, hit.More, hit.When = tr.n, r.Use, r.More, r.Conditions()
+		ruleIntent = cmp.Or(tr.ruleIntent, tr.intent)
+	}
 	if had && hit.Use == "" && tr.use != "" && tr.n >= 1 && tr.n <= len(g.Rules) {
 		if r := g.Rules[tr.n-1]; r.Use == tr.use && r.Time != nil && !r.Time.Holds(now) {
 			hit.Ended = tr.n
@@ -432,11 +461,12 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 	}
 	turnRules.Lock()
 	defer turnRules.Unlock()
-	input, answered, hour := tr.input, tr.answered, tr.hour
+	input, answered, hour, cold, by := tr.input, tr.answered, tr.hour, tr.cold, tr.by
 	if cur, ok := turnRules.m[key]; ok {
-		input, answered, hour = cur.input, cur.answered, cur.hour // answered while the classifier was asked
+		// answered while the classifier was asked
+		input, answered, hour, cold, by = cur.input, cur.answered, cur.hour, cur.cold, cur.by
 	}
-	turnRules.m[key] = turnRule{turn: turn, use: hit.Use, n: hit.N, at: now, input: input, intent: q.Intent, effort: hit.Pick, wanted: hit.Wanted, answered: answered, size: size, hour: hour}
+	turnRules.m[key] = turnRule{turn: turn, use: hit.Use, n: hit.N, at: now, input: input, intent: q.Intent, ruleIntent: ruleIntent, by: by, effort: hit.Pick, wanted: hit.Wanted, answered: answered, size: size, hour: hour, cold: cold}
 	if len(turnRules.m) > 4096 {
 		for k, tr := range turnRules.m {
 			if now.Sub(tr.at) > stickKeep {
@@ -511,9 +541,21 @@ func alsoIDs(m provider.Member) []string {
 	return out
 }
 
+// answeredBy is the model a conversation was last answered by: a
+// candidate's model, effort, levels and what rests of it (ofMember).
+type answeredBy struct {
+	model, effort, rest string
+	levels              []string
+}
+
+// of reports whether the answer came from m.
+func (a answeredBy) of(m provider.Member) bool {
+	return a.model != "" && ofMember(candidate{model: a.model, effort: a.effort, levels: a.levels, rest: a.rest}, m)
+}
+
 // ruleAnswered keeps what the vendor counted a conversation's request as,
-// for its next turn's rules to go by.
-func ruleAnswered(key string, u Usage, cold time.Duration) {
+// and who answered it (c), for its next turn's rules to go by.
+func ruleAnswered(key string, u Usage, cold time.Duration, c candidate) {
 	n := u.Input + u.CacheRead + u.CacheWrite
 	if n <= 0 {
 		return
@@ -523,8 +565,74 @@ func ruleAnswered(key string, u Usage, cold time.Duration) {
 	if tr, ok := turnRules.m[key]; ok {
 		now := ruleClock()
 		tr.input, tr.answered, tr.hour, tr.cold = n, now, tr.hour.after(u, now), cold
+		tr.by = answeredBy{model: c.model, effort: c.effort, rest: c.rest, levels: c.levels}
 		turnRules.m[key] = tr
 	}
+}
+
+// cacheWarm is whether the vendor that answered a conversation last still
+// has it cached as a new turn of it begins, tokens long: answered (or
+// asked) within cacheCold, or tr.cold where the vendor keeps it longer,
+// or within the hour it said it keeps it for (tr.hour, #2302); and not
+// compacted since, which leaves it under half as long as its last request.
+func cacheWarm(tr turnRule, tokens int, now time.Time) bool {
+	last := tr.at
+	if tr.answered.After(last) {
+		last = tr.answered
+	}
+	cold := tr.cold
+	if cold <= 0 {
+		cold = cacheCold
+	}
+	if now.Sub(last) > cold && !tr.hour.warm(now) {
+		return false
+	}
+	return tr.size <= 0 || tokens >= tr.size/2
+}
+
+// keepsMember is whether a new turn of a conversation stays on the
+// member its turn before's rule sent it to, rather than the one the rule
+// its own intent matches names (hit). Like the reasoning (keepsEffort),
+// the model is what the vendor caches a conversation under: a turn that
+// moves to another reads the whole history uncached, and a long agent
+// conversation in a smart group moved between its two models each time
+// the classifier said "hard" or "easy" paid for all of it at most turns
+// (chet030714 on X). So while the cache is warm (cacheWarm), the vendor
+// counted it long enough to cache (cacheWorth) and it was that member
+// that answered, a turn the classifier alone takes to be easy, after a
+// hard one, stays (the smart template's intents, IntentHard and
+// IntentEasy): an easy turn is one the strong model does as well, and
+// what it saves on the cheap one is lost reading the history uncached.
+// A hard turn still moves up at once, and an easy one moves down once
+// the cache is lost anyway. Intents a user wrote name kinds of work, not
+// a ladder (coding, a question): each goes where its rule says, as
+// zyh6036 on X asked. Whatever else a rule goes by (images, tokens, the
+// hour, the agent) still moves it, and so does a member too small for the
+// conversation now. Stays "within a turn" or "never" is the user saying a
+// turn starts afresh: it moves then, as before.
+func keepsMember(g provider.Group, ms []provider.Member, tr turnRule, q provider.RuleRequest, hit *RuleHit, now time.Time, tokens int) bool {
+	if hit.Use == "" || tr.use == "" || hit.Use == tr.use || tr.n < 1 || tr.n > len(g.Rules) || g.Rules[tr.n-1].Use != tr.use {
+		return false
+	}
+	if g.Affinity == provider.AffinityTurn || g.Affinity == provider.AffinityOff {
+		return false
+	}
+	if tr.input < cacheWorth || !cacheWarm(tr, tokens, now) {
+		return false
+	}
+	held := membersNamed(tr.use, ms)
+	if !slices.ContainsFunc(held, tr.by.of) {
+		return false // it was answered elsewhere: no cache of it there to keep
+	}
+	// the classifier's answer alone moves it: as the turn before's rule
+	// was matched, it still is
+	was := q
+	was.Intent = cmp.Or(tr.ruleIntent, tr.intent)
+	if was.Intent != provider.IntentHard || q.Intent != provider.IntentEasy || provider.MatchRule(g.Rules, was) != tr.n-1 {
+		return false // not down the smart template's ladder
+	}
+	c := memberContexts(ms)[tr.use]
+	return c <= 0 || c >= q.Tokens
 }
 
 // keepsEffort is whether a new turn of a conversation keeps the reasoning
@@ -548,21 +656,7 @@ func keepsEffort(tr turnRule, pick string, tokens int, now time.Time) bool {
 	if slices.Index(effortRank, pick) > slices.Index(effortRank, tr.effort) {
 		return false // up: the turn wants more than the conversation had
 	}
-	last := tr.at
-	if tr.answered.After(last) {
-		last = tr.answered
-	}
-	cold := tr.cold
-	if cold <= 0 {
-		cold = cacheCold
-	}
-	if now.Sub(last) > cold && !tr.hour.warm(now) {
-		return false
-	}
-	if tr.size > 0 && tokens < tr.size/2 {
-		return false
-	}
-	return true
+	return cacheWarm(tr, tokens, now)
 }
 
 // nestedRules looks at the rules of each group in the group that the one

@@ -1314,6 +1314,9 @@ function routingPage(part) {
     const lw = r.order.find((x) => x.id === a.last), last = lw ? who(lw) : a.last;
     const routing = r.group ? r.group.routing : r.order[0]?.routing;
     const ago = known0(a.at) ? dur(at(r.time) - at(a.at)) : "";
+    // kept where its cache is, though the turn's rule names another
+    // model: the rule's story tells both (ruleWhy)
+    if (r.rule?.stay && (a.why === "session" || a.why === "cache")) return null;
     switch (a.why) {
       case "session": return t("Kept on {who}: it answered this conversation before, and affinity keeps a session with one account.", { who: last });
       case "turn": return t("Kept on {who}: {agent} is handing back tool results within turn {n}, and moving now would lose what the vendor cached of it.", { who: last, agent: agentName(r.agent), n: a.turn });
@@ -1367,6 +1370,9 @@ function routingPage(part) {
       if (x.grown) return lead ? t("Within turn {turn} the conversation grew to about {tokens} tokens, more than the model it was on takes, so rule {n} ({when}) moves it to {use}.", { turn: x.turn, tokens: tokens(x.tokens), n: x.n, when, use: x.use }) : null;
       if (!lead) return null;
       if (x.instead) return t("Rule {n} matches, but {use} has no account or key that can take this request, so {instead}, which the rule names after it, goes first.", { n: x.n, use: first, instead: x.use }) + dir;
+      // the turn's own rule names a model no step up from the one the
+      // conversation's cache is warm on: it stays there
+      if (x.stay) return t("Turn {turn} matches rule {m}, which sends it to {other}, but the conversation is cached on {use} (about {tokens} tokens) and {other} is no step up from it, so it stays on {use} instead of reading it all again uncached.", { turn: x.turn, m: x.stay.n, other: useName(r, x.stay.use), use: x.use, tokens: tokens(x.stay.tokens) }) + dir;
       if (x.more?.length) return t("Turn {turn} begins and rule {n} matches — {when} — so {use} goes first, then {more}, which the rule names after it; the later rules' and the group's others stay behind them.", { turn: x.turn, n: x.n, when, use: x.use, more: x.more.map((id) => useName(r, id)).join(", ") }) + dir;
       if (x.then?.length) return t("Turn {turn} begins and rule {n} matches — {when} — so {use} goes first; if it fails, {then}, which the rules after it that match too name, then the group's others.", { turn: x.turn, n: x.n, when, use: x.use, then: x.then.map((id) => useName(r, id)).join(", ") }) + dir;
       return t("Turn {turn} begins and rule {n} matches — {when} — so {use} goes first; the group's others stay behind it if it fails.", { turn: x.turn, n: x.n, when, use: x.use }) + dir;
@@ -1425,6 +1431,7 @@ function routingPage(part) {
       else if (x.use && x.instead && x.unready) out.push(t("In {group}, rule {n} matches, but {use} has no account or key that can take this request, so a later matching rule puts {instead} first.", { group: g, n: x.n, use: x.use, instead: x.instead }));
       else if (x.use && x.unready) out.push(t("In {group}, rule {n} matches, but {use} has no account or key that can take this request, so {group}'s order stands.", { group: g, n: x.n, use: x.use }));
       else if (x.use && x.held) out.push(t("In {group}, rule {n} ({when}) sent turn {turn} to {use} as it began; the turn stays with whoever took it then.", { group: g, n: x.n, when, turn: x.turn, use: x.instead || x.use }));
+      else if (x.use && x.stay) out.push(t("In {group}, turn {turn} matches rule {m}, which sends it to {other}, but the conversation is cached on {use} and {other} is no step up from it, so it stays on {use}.", { group: g, turn: x.turn, m: x.stay.n, other: x.stay.use, use: x.use }));
       else if (x.use) out.push(t("In {group}, rule {n} matches — {when} — so {use} goes first there.", { group: g, n: x.n, when, use: x.use }));
       else if (!x.waits) out.push(t("In {group}, no rule matches.", { group: g }));
     }
