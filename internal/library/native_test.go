@@ -3,6 +3,7 @@ package library
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -369,7 +370,7 @@ func TestNativeCodexPluginPerProject(t *testing.T) {
 	write(t, filepath.Join(own, "commondir"), "../..\n")
 	write(t, filepath.Join(wt, ".codex", "config.toml"), on)
 	conf := filepath.Join(home, ".codex", "config.toml")
-	write(t, conf, read(t, conf)+"\n[projects.\""+app+"\"]\ntrust_level = \"trusted\"\n\n[projects.\""+lab+"\"]\ntrust_level = \"untrusted\"\n")
+	write(t, conf, read(t, conf)+"\n[projects."+strconv.Quote(app)+"]\ntrust_level = \"trusted\"\n\n[projects."+strconv.Quote(lab)+"]\ntrust_level = \"untrusted\"\n")
 	for _, d := range []string{web, lab, quiet, wt} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
@@ -406,5 +407,59 @@ func TestNativeCodexPluginPerProject(t *testing.T) {
 	// the other plugins no project names stay as they were
 	if a := nativeOf(t, ReadNative(), "codex", "codex-app-tools"); len(a.InProjects) != 0 {
 		t.Errorf("codex-app-tools: %+v", a.InProjects)
+	}
+
+	// Codex on Windows writes and looks up a project's key in lower case
+	// (c:\users\…), and takes a key that differs in ASCII case only;
+	// elsewhere a key is matched as written (#7786)
+	base, _, _ := strings.Cut(read(t, conf), "\n[projects.")
+	write(t, conf, base+"\n[projects."+strconv.Quote(strings.ToUpper(app[:1])+strings.ToLower(app[1:]))+"]\ntrust_level = \"trusted\"\n")
+	for _, fold := range []bool{true, false} {
+		was := codexFoldsKeys
+		codexFoldsKeys = fold
+		in := got[web]
+		for _, i := range nativeOf(t, ReadNative(), "codex", "chrome").InProjects {
+			if i.Dir == web {
+				in = i
+			}
+		}
+		codexFoldsKeys = was
+		if in.Trusted != fold || !is(in.Effective, fold) {
+			t.Errorf("a key in other case, folded %v: %+v", fold, in)
+		}
+	}
+}
+
+// Codex's lookup on Windows (project_trust_for_lookup_key): the key in
+// lower case first, else the least key that differs in ASCII case only;
+// a key differing beyond ASCII case is another folder.
+func TestCodexTrustFoldsASCIICase(t *testing.T) {
+	type lvl = struct {
+		TrustLevel string `toml:"trust_level"`
+	}
+	was := codexFoldsKeys
+	t.Cleanup(func() { codexFoldsKeys = was })
+	trust := map[string]lvl{`C:\Work\App`: {"untrusted"}, `C:\WORK\APP`: {"trusted"}, `c:\work\Ä`: {"trusted"}, `c:\work\none`: {}}
+	codexFoldsKeys = true
+	for key, want := range map[string]string{
+		`c:\work\app`:  "trusted", // C:\WORK\APP < C:\Work\App
+		`C:\work\APP`:  "trusted",
+		`c:\work\ä`:    "",
+		`C:\Work\None`: "",
+	} {
+		if got := codexTrust(trust, key); got != want {
+			t.Errorf("folded %q: %q, want %q", key, got, want)
+		}
+	}
+	trust[`c:\work\app`] = lvl{"untrusted"}
+	if got := codexTrust(trust, `C:\Work\APP`); got != "untrusted" {
+		t.Errorf("the lower-case key goes first: %q", got)
+	}
+	codexFoldsKeys = false
+	if got := codexTrust(trust, `c:\work\APP`); got != "" {
+		t.Errorf("unfolded: %q", got)
+	}
+	if got := codexTrust(trust, `C:\Work\App`); got != "untrusted" {
+		t.Errorf("unfolded, as written: %q", got)
 	}
 }

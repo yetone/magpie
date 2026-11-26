@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -246,8 +247,8 @@ func codexProjects(trust map[string]struct {
 	look:
 		for _, k := range keys {
 			for _, kk := range pathSpellings(k) {
-				if t, ok := trust[kk]; ok && t.TrustLevel != "" {
-					pr.trusted = t.TrustLevel == "trusted"
+				if lvl := codexTrust(trust, kk); lvl != "" {
+					pr.trusted = lvl == "trusted"
 					break look
 				}
 			}
@@ -255,6 +256,46 @@ func codexProjects(trust map[string]struct {
 		out = append(out, pr)
 	}
 	return out
+}
+
+// codexFoldsKeys is whether Codex folds the case of a project's key: on
+// Windows only (cfg!(windows) in the config loader).
+var codexFoldsKeys = runtime.GOOS == "windows"
+
+// codexTrust is the trust_level the user config gives the folder key, as
+// Codex looks it up (codex-rs config loader 0.172,
+// project_trust_for_lookup_key): the key itself; on Windows, where Codex
+// lower-cases the key it looks up and writes (c:\users\…), the key
+// in lower case (ASCII), else the least of those that differ from it in
+// ASCII case only (#7786). "" when none does.
+func codexTrust(trust map[string]struct {
+	TrustLevel string `toml:"trust_level"`
+}, key string) string {
+	if !codexFoldsKeys {
+		return trust[key].TrustLevel
+	}
+	key = asciiLower(key)
+	if t := trust[key].TrustLevel; t != "" {
+		return t
+	}
+	best, lvl := "", ""
+	for k, t := range trust {
+		if t.TrustLevel != "" && asciiLower(k) == key && (lvl == "" || k < best) {
+			best, lvl = k, t.TrustLevel
+		}
+	}
+	return lvl
+}
+
+// asciiLower is s with A to Z in lower case, as Rust's to_ascii_lowercase.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if 'A' <= c && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
 }
 
 // pathSpellings are dir as written and with its links read (/var and
