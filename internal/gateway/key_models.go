@@ -804,8 +804,12 @@ func keyAccountsError(who access.Identity, model string) string {
 // key set for it is off, resting with no other to take its place, or
 // doesn't serve the model.
 func agentAccountsError(who access.Identity, model string) string {
-	return fmt.Sprintf("%s is set to use %s alone, and none of the accounts or keys behind %s is one of them. Change it in the provider's settings in magpie (Advanced, Accounts by agent), or use a model it serves.",
-		usage.AgentName(who.Agent), keyAccountNames(who), model)
+	set := usage.AgentName(who.Agent) + " is"
+	if who.Agent == OwnAgent {
+		set = "magpie's own requests are"
+	}
+	return fmt.Sprintf("%s set to use %s alone, and none of the accounts or keys behind %s is one of them. Change it in the provider's settings in magpie (Advanced, Accounts by agent), or use a model it serves.",
+		set, keyAccountNames(who), model)
 }
 
 // groupsHeldError is what a request is told when every account or key

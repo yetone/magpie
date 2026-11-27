@@ -279,3 +279,45 @@ func TestGLMCodingPlanSearchesForItsModels(t *testing.T) {
 		t.Fatalf("err %v, MCP %q", err, g.mcp)
 	}
 }
+
+// Magpie's own requests set to one of a GLM Coding Plan's keys search
+// with that key alone: set to one the search server refuses, the search
+// fails rather than going on the plan's other key; set to one that is
+// off, it can't serve, saying the setting is why.
+func TestGLMSearchOnMagpiesKey(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	setHome(t, t.TempDir())
+	g := newGLMSearchPlan(t)
+	glm := provider.Provider{ID: "glm", Name: "GLM Coding Plan", Preset: "zhipu", Key: "sk-glm",
+		Keys: []provider.KeyAccount{{Key: "sk-other"}, {Key: "sk-off", Off: true}},
+		Chat: g.URL + "/api/coding/paas/v4", Models: []string{"glm-4.6"}}
+	if err := provider.Save(glm); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := provider.Find("glm"); p != nil {
+		glm = *p
+	}
+	s := New()
+	if _, hits, err := s.glmSearch(context.Background(), glm, "latest go"); err != nil || len(hits) != 1 {
+		t.Fatalf("unset: %v %v", hits, err)
+	}
+	if err := provider.SetAgentAccount("glm", OwnAgent, provider.KeyID("sk-other")); err != nil {
+		t.Fatal(err)
+	}
+	if _, hits, err := s.glmSearch(context.Background(), glm, "latest go"); err == nil {
+		t.Fatalf("set to the refused key, searched with another: %v", hits)
+	}
+	if err := provider.SetAgentAccount("glm", OwnAgent, provider.KeyID("sk-glm")); err != nil {
+		t.Fatal(err)
+	}
+	if _, hits, err := s.glmSearch(context.Background(), glm, "latest go"); err != nil || len(hits) != 1 {
+		t.Fatalf("set to the plan's key: %v %v", hits, err)
+	}
+	if err := provider.SetAgentAccount("glm", OwnAgent, provider.KeyID("sk-off")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.glmSearch(context.Background(), glm, "latest go"); err == nil || !strings.Contains(err.Error(), "Accounts by agent") {
+		t.Fatalf("set to a key that's off: %v", err)
+	}
+}

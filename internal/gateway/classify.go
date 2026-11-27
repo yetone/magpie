@@ -617,8 +617,14 @@ func (s *Server) askWaited(ctx context.Context) classifier {
 	// the caller's accounts (a gateway key's, the group the request names)
 	// hold its classifier's calls too, as they hold magpie's other calls
 	// for it (accountHolds): only the accounts, not the key's models, as
-	// the classifier is the group's pick, not the caller's
+	// the classifier is the group's pick, not the caller's. They are
+	// magpie's own requests: with those set to some accounts (OwnAgent),
+	// those hold them in place of the agent's
 	caller := access.Caller(ctx)
+	own := provider.AgentAccounts(OwnAgent)
+	if len(own) > 0 {
+		caller = beforeAgent(ctx)
+	}
 	return func(held access.Identity, model string, intents []string, prev before, effort bool, text string) (verdict, error) {
 		mu.Lock()
 		now := time.Now()
@@ -631,7 +637,11 @@ func (s *Server) askWaited(ctx context.Context) classifier {
 			return verdict{}, waitSpent{fmt.Errorf("%s not asked: the request's classifier wait of %s was spent by the routing group above or a classifier before it", model, classifyTimeout())}
 		}
 		defer noteWait(ctx, "decision model")()
-		who := access.Identity{Accounts: caller.Accounts, Group: caller.Group}.HeldToGroup(held.Group, held.Accounts)
+		who := access.Identity{Accounts: caller.Accounts, Group: caller.Group}
+		if len(own) > 0 {
+			who = who.HeldToAgent(OwnAgent, own)
+		}
+		who = who.HeldToGroup(held.Group, held.Accounts)
 		if prev.Then <= 0 {
 			return s.askClassifierIn(left, who, model, intents, prev, effort, text)
 		}

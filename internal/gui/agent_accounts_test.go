@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -65,6 +66,14 @@ func TestAgentAccountRoute(t *testing.T) {
 	}
 	if got := provider.AgentAccounts("claude"); len(got) != 1 || got[0] != "relay/"+work {
 		t.Fatalf("after save: %v", got)
+	}
+	// magpie's own requests, as the editor sends them, are kept as the
+	// agent the gateway holds them as
+	if w := post("agentaccount", map[string]any{"id": "relay", "agent": "magpie", "account": work}); w.Code != 200 {
+		t.Fatalf("magpie's own: %d %s", w.Code, w.Body)
+	}
+	if got := provider.AgentAccounts(gateway.OwnAgent); len(got) != 1 || got[0] != "relay/"+work {
+		t.Fatalf("magpie's own: %v", got)
 	}
 	if w := post("agentaccount", map[string]any{"id": "relay", "agent": "claude", "account": ""}); w.Code != 200 {
 		t.Fatalf("let go: %d %s", w.Code, w.Body)

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -58,6 +59,13 @@ func (s *Server) glmSearch(ctx context.Context, p provider.Provider, query strin
 	keys := provider.ZhipuSearchKeys(p)
 	if len(keys) == 0 {
 		return "", nil, fmt.Errorf("%s: no GLM Coding Plan key to search with", p.Name)
+	}
+	// the key magpie's own requests are set to use, if any, alone
+	if ref := agentRef(OwnAgent, p.ID); ref != "" {
+		keys = slices.DeleteFunc(keys, func(k provider.Provider) bool { return !strings.EqualFold(k.AccountID(), ref) })
+		if len(keys) == 0 {
+			return "", nil, errOwnAccountOff(p)
+		}
 	}
 	var errs []error
 	for _, k := range keys {

@@ -832,10 +832,43 @@ every caller does.
   The choices are written on Save, before the provider's own save,
   through `POST /api/provider/agentaccount` (`provider.SetAgentAccount`).
 
+- Magpie's own requests are one more agent, `OwnAgent` ("magpie"; nb5p
+  on Discord: Claude Code and Codex each on a relay key, memory tidying on
+  a third). The editor's Add agent offers it first as "Magpie's own
+  requests". It holds by the same rule, strict, with the same 403
+  ("magpie's own requests are set to use …"):
+  - Memory reading and tidying conversations (`memdistill.Agent`'s token,
+    through the Handler): `holdAgent` maps it to `OwnAgent` in
+    `agentHeld`. A request counted as "magpie" (another magpie's own,
+    `usage.AgentOf`) is held by its own name already.
+  - The asks magpie makes in process while serving an agent's request,
+    which reach `serve` past the chain and run in the agent's context:
+    web search by a model (`SearchAgent`), image descriptions
+    (`VisionAgent`) and a routing group's classifier through chat
+    (`RouterAgent`). `serve` starts with `ownHeld`: with `OwnAgent` set,
+    the identity is the request's before its agent's hold (kept by
+    `agentHeld` under `beforeAgentKey`, so a gateway key's accounts and
+    limits still hold), held to `OwnAgent`'s accounts in place of the
+    agent's. Unset, they go as before, on the agent's.
+  - Classifiers asked at their own API (System One, Decisions, a decision
+    group) take `askWaited`'s identity, built the same way.
+  - A plan's own search service is asked with the key itself:
+    `ownAccountOn` picks the one `OwnAgent` is set to (Kimi Code's,
+    ChatGPT's, WorkBuddy's search; `glmSearch` keeps only that GLM key),
+    and while it is off the searcher can't serve (`errOwnAccountOff`), so
+    the next one searches.
+  - Not held as magpie's own: the advisor (the agent named its model, and
+    it is asked as the agent), Codex's own titles, summaries and
+    compaction, an image an agent's tool draws, a Settings check (it
+    checks the route an agent's call takes), and a page's or a tool's own
+    agent (artifacts, billion-context).
+
 `TestAgentAccountsHoldEachAgentToItsKey`,
 `TestAgentAccountsRestingKeyFallsBack`, `TestAgentAccountsWithAGatewayKey`,
-`TestHeldToAgent`, `TestSetAgentAccount`, `TestAgentAccountRoute`,
-`agent-accounts.test.cjs`.
+`TestOwnRequestsHeldToMagpiesKey`, `TestOwnRequestsRestingKeyFallsBack`,
+`TestOwnAccountOnPicksMagpiesKey`, `TestGLMSearchOnMagpiesKey`,
+`TestHeldToAgent`,
+`TestSetAgentAccount`, `TestAgentAccountRoute`, `agent-accounts.test.cjs`.
 
 ## A route group bound to chosen gateway keys
 

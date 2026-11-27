@@ -5,8 +5,10 @@
 // accounts has Accounts by agent: a line for each agent set to one, with
 // its account's button, and Add agent. Picking an agent opens its account
 // menu; All accounts lets it go. The choices wait for Save and go out
-// before the provider's own save; an editor left alone sends none. A
-// provider of one key has no such row. In every language, wide and
+// before the provider's own save; an editor left alone sends none.
+// Magpie's own requests (memory, search, routing's classifier) are one
+// to add, first in the menu, sent as the agent "magpie". A provider of
+// one key has no such row. In every language, wide and
 // narrow, in Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -67,7 +69,7 @@ function serve(lang, posts) {
   };
 }
 
-const STRINGS = ["Accounts by agent", "Add agent", "All accounts", "Which account this agent uses", "Which agent", "Search keys", "Save"];
+const STRINGS = ["Accounts by agent", "Add agent", "Magpie's own requests", "All accounts", "Which account this agent uses", "Which agent", "Search keys", "Save"];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
@@ -141,7 +143,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await item(page, "Personal").click();
         const codex = box(page).locator('.agent-acct[data-agent="codex"]');
         assert.equal(await codex.locator("button").textContent(), "Personal");
-        assert.equal(await box(page).locator(".agent-acct-add").count(), 0, "every agent is set");
+        // every agent is set: magpie's own requests are left to add
+        await press(page, box(page).locator(".agent-acct-add"));
+        await menu(page).waitFor();
+        assert.deepEqual(await menu(page).locator(".pm-name").allTextContents(), [await tr("Magpie's own requests")]);
+        await page.keyboard.press("Escape");
+        await menu(page).waitFor({ state: "detached" });
         // Claude Code let go: All accounts
         await press(page, claude.locator("button"));
         await menu(page).waitFor();
@@ -158,6 +165,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           { id: "relay", agent: "codex", account: "k-b" },
         ]);
         assert(posts.findIndex((p) => p.action === "save") > posts.findLastIndex((p) => p.action === "agentaccount"), "the choices go out before the provider's save");
+        assert.deepEqual(errors, []);
+      });
+
+      test(`${engine} ${lang} ${width}px: magpie's own requests are set to a key of their own`, async (t) => {
+        const { page, errors, posts, tr } = await open(t, "Relay", "own");
+        await box(page).waitFor();
+        const own = await tr("Magpie's own requests");
+        if (lang !== "en") assert.notEqual(own, "Magpie's own requests", `said in ${lang}`);
+        await press(page, box(page).locator(".agent-acct-add"));
+        await menu(page).waitFor();
+        assert.deepEqual(await menu(page).locator(".pm-name").allTextContents(), [own, "Codex"], "magpie's own first, then the agents not set");
+        await inView(menu(page), "the agent menu");
+        await item(page, own).click();
+        await page.waitForFunction((h) => document.querySelector(".proto-menu .pm-head")?.textContent === h, await tr("Which account this agent uses"));
+        await item(page, "Personal").click();
+        const line = box(page).locator('.agent-acct[data-agent="magpie"]');
+        assert.equal(await line.locator(".who").textContent(), own);
+        assert.equal(await line.locator("button").textContent(), "Personal");
+        await inView(line.locator("button"), "magpie's own requests' account");
+        const who = await line.locator(".who").evaluate((e) => ({ l: e.getBoundingClientRect().left, r: e.getBoundingClientRect().right, b: e.parentElement.querySelector("button").getBoundingClientRect().left }));
+        assert(who.l >= 0 && who.r <= who.b + 0.5, `the name runs into its account: ${JSON.stringify(who)}`);
+        await save(page, tr);
+        await waitFor(page, () => posts.some((p) => p.action === "save"));
+        assert.deepEqual(posts.filter((p) => p.action === "agentaccount").map((p) => p.body), [{ id: "relay", agent: "magpie", account: "k-b" }]);
         assert.deepEqual(errors, []);
       });
 

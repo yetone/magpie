@@ -80,6 +80,15 @@ func ownSearcher(ctx context.Context) (provider.Provider, bool) {
 
 // ownSearch searches with the conversation's own provider (ownSearcher).
 func (s *Server) ownSearch(ctx context.Context, p provider.Provider, query string) (string, []Hit, error) {
+	if provider.KimiCodeSearch(p) != "" || wbSearches(p) {
+		// a plan's service, asked with the key itself: the one magpie's
+		// own requests are set to, if any (searchBy)
+		q, ok := ownAccountOn(p)
+		if !ok {
+			return "", nil, errOwnAccountOff(p)
+		}
+		p = q
+	}
 	if provider.KimiCodeSearch(p) != "" {
 		return s.askOwnSearch(ctx, p, provider.KimiCodeSearch(p), query, s.kimiSearch)
 	}
@@ -98,6 +107,16 @@ func (s *Server) ownSearch(ctx context.Context, p provider.Provider, query strin
 // service, a ChatGPT account named with codexSearchModel by the backend's
 // search, any other by its model.
 func (s *Server) searchBy(ctx context.Context, p provider.Provider, model, query, effort string) (string, []Hit, error) {
+	if provider.KimiCodeSearch(p) != "" || model == codexSearchModel && codexSearches(p) {
+		// the plan's service is asked with the key itself: the one
+		// magpie's own requests are set to, if any, and none other while
+		// it is off (ownAccountOn); a model's search is held in serve
+		q, ok := ownAccountOn(p)
+		if !ok {
+			return "", nil, errOwnAccountOff(p)
+		}
+		p = q
+	}
 	// a Kimi Code plan picked to search for another's model is its
 	// search service's ask, logged as one for its own model is
 	if provider.KimiCodeSearch(p) != "" {

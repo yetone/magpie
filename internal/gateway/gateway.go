@@ -2837,6 +2837,11 @@ func estimate(req *Request) int {
 // serve routes one parsed-enough request to its provider.
 func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Protocol, body []byte) {
 	start := time.Now()
+	// magpie's own ask made while serving an agent's request — a search,
+	// an image description, a classifier asked through chat — is held to
+	// the accounts magpie's own requests are set to, not the agent's
+	// (ownHeld)
+	r = ownHeld(r)
 	// a client's "off" is magpie's none, for every route and check below
 	// that reads the body's effort (plugins#334)
 	body = offAsNone(from, body)

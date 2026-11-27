@@ -1,8 +1,8 @@
 // The account or key each agent uses (nb5p on Discord: Claude Code on one
 // key of a relay, Codex on another, so the relay's dashboard shows each
 // one's use). The provider editor's Advanced lists the agents set to one,
-// each with its account, and adds one; an agent not listed uses every
-// account, as before. The choices are kept in the editor's draft and
+// each with its account, and adds one, magpie's own requests among them;
+// an agent not listed uses every account, as before. The choices are kept in the editor's draft and
 // written on Save (provider.SetAgentAccount through provider/agentaccount).
 // app.js imports this when the editor of a provider of two or more
 // accounts or keys draws (agentAccountsRow), so it weighs nothing on the
@@ -23,7 +23,10 @@
     // back as saved: nothing left to write, nothing to discard
     draft.agentAccounts = Object.keys(d).length ? { id: p.id, set: d } : undefined;
   };
-  const agentName = (id) => state?.agents?.find((a) => a.id === id)?.name || id;
+  // magpie's own requests (memory, search, image descriptions, routing's
+  // classifier) are held as an agent of their own (gateway.OwnAgent)
+  const own = "magpie";
+  const agentName = (id) => id === own ? t("Magpie's own requests") : state?.agents?.find((a) => a.id === id)?.name || id;
   const choiceName = (p, ref) => p.agentChoices?.find((c) => c.id.toLowerCase() === String(ref).toLowerCase())?.name || ref;
 
   window.agentAccountsField = function (p) {
@@ -55,7 +58,7 @@
         box.append(row);
         open = btn;
       }
-      const rest = (state?.agents || []).filter((a) => !pinned[a.id] && a.id !== opening);
+      const rest = [{ id: own, name: agentName(own) }, ...(state?.agents || []).filter((a) => a.id !== own)].filter((a) => !pinned[a.id] && a.id !== opening);
       if (rest.length) {
         const add = el("button", "text agent-acct-add", t("Add agent"));
         add.type = "button";
