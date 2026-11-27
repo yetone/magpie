@@ -2670,8 +2670,9 @@ serves Gemini CLI's sign-in to individual accounts, only to Gemini Code
 Assist Standard and Enterprise, which need a Google Cloud project named
 (`magpie accounts project gemini <email> <project-id>`, or
 `GOOGLE_CLOUD_PROJECT` in `~/.gemini/.env`). Google may suspend an
-Antigravity account it sees used outside Antigravity, so magpie asks before
-adding one; use an account you can afford to lose.
+Antigravity account it sees used from another agent, the built-in's and
+agy-cli's (Google's own agy) alike, so magpie asks before adding the first
+one; use an account you can afford to lose.
 
 Accounts signed in elsewhere can be imported from their files instead of
 signed in again: *Import accounts from a file…* under a subscription's

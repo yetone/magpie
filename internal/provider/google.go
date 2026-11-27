@@ -106,8 +106,10 @@ func googleAppOf(agent string) (googleApp, bool) {
 }
 
 // AntigravityRisk is what magpie says before an Antigravity account is
-// added.
-const AntigravityRisk = "Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose."
+// added, the built-in's or agy-cli's (WdBlink_ on X: an agy-cli account
+// was suspended after use from Claude Code). The window says it too
+// (AGY_RISK in app.js).
+const AntigravityRisk = "Google may suspend an Antigravity account it sees used from another agent. Use one you can afford to lose."
 
 // ClaudeRisk is what magpie says before a Claude account is added, as the
 // window does.

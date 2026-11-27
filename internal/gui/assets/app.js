@@ -12858,7 +12858,7 @@ function pluginMethod(sub, site) {
 // magpie, signs in and carries the requests.
 function pluginSubs() {
   return ((providers || panelAccts)?.plugins || []).map((x) => ({
-    agent: x.id, pid: x.pid, name: x.name, icon: x.icon, plugin: x, own: true, single: !!x.single, importable: x.importable,
+    agent: x.id, pid: x.pid, name: x.name, icon: x.icon, plugin: x, own: true, single: !!x.single, importable: x.importable, risk: x.id == "agy-cli",
     get plans() { return t("from the plugin {spec}", { spec: x.spec }); },
   }));
 }
@@ -12913,6 +12913,10 @@ const signingOpen = () => signing?.state === "waiting" || signing?.state === "in
 let justAdded = ""; // the account that just came in, to greet it
 const accountToolsOpen = new Set(); // rows whose ⋯ is open
 
+// AGY_RISK: said before a first Antigravity account is used, the built-in's
+// or agy-cli's (WdBlink_ on X: an agy-cli account was suspended after use
+// from Claude Code); the CLI says provider.AntigravityRisk
+const AGY_RISK = "Google may suspend an Antigravity account it sees used from another agent. Use one you can afford to lose.";
 // hasLogins: the subscription has an account signed in already
 const hasLogins = (agent) => providers?.providers?.some((p) => p.account?.agent === agent && p.account.logins?.length);
 
@@ -13404,7 +13408,7 @@ function renderSigning(sub) {
     box.append(el("span", "mark", "!"));
     tt.append(el("span", "n", t("{name} accounts can be suspended", { name: sub.name })));
     if (sub.hint) tt.append(el("span", "s", t(sub.hint)));
-    tt.append(el("span", "s", t(sub.riskNote || "Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose.")));
+    tt.append(el("span", "s", t(sub.riskNote || AGY_RISK)));
     box.append(tt);
     const go = el("button", "text primary", t("Sign in anyway"));
     const o = { user: signing.forUser, proxy: signing.picked };
@@ -14234,7 +14238,7 @@ function renderLoginImport(sub) {
       tt.append(ao);
     }
   }
-  if (sub.risk) tt.append(el("span", "s", t(sub.riskNote || "Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose.")));
+  if (sub.risk) tt.append(el("span", "s", t(sub.riskNote || AGY_RISK)));
   const area = el("textarea");
   area.rows = 3;
   area.spellcheck = false;

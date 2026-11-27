@@ -7,7 +7,10 @@
 // agyMoveLine: the withdrawn Antigravity plugin's accounts, which Antigravity
 // (local agy CLI) takes as they are (one Google sign-in for both), moved
 // with one click (@tongzhenbao on X). Not now hides it until the accounts
-// left to move change; an account agy refused is said by name.
+// left to move change; an account agy refused is said by name. Google can
+// suspend an agy-cli account too (WdBlink_ on X), so while it has no
+// account of its own the line says AGY_RISK, the sign-in's risk step, before
+// Move is clicked.
 let agySaid = null; // { busy } or { why }
 window.agyMoveLine = function () {
   const users = providers.agyMove || [];
@@ -38,7 +41,7 @@ window.agyMoveLine = function () {
     }
   };
   return depLine("agy-move", t("Antigravity's accounts can move to Antigravity (local agy CLI)"),
-    agySaid?.why || t("Google suspends accounts it sees used outside its own app. agy signs in with the same Google account, so {users} move as they are.", { users: named.length ? named.join(t(", ")) : t("{n} accounts", { n: users.length }) }), hide, go);
+    agySaid?.why || [t("{users} move as they are.", { users: named.length ? named.join(t(", ")) : t("{n} accounts", { n: users.length }) }), hasLogins("agy-cli") ? "" : t(AGY_RISK)].filter(Boolean).join(/^(zh|ja)/.test(locale) ? "" : " "), hide, go);
 };
 
 // withdrawnLine: a withdrawn plugin still on. Beside the plugin to use
@@ -51,7 +54,7 @@ window.withdrawnLine = function (w) {
   if (!w.beside) {
     const go = el("button", "text action", t("Use {name}", { name: w.instead }));
     go.onclick = () => openPlugins("agy");
-    return depLine("withdrawn", t("{name}'s plugin can get your account suspended", { name: w.name }), t("Google suspends accounts it sees used outside its own app. {name} runs your own agy instead.", { name: w.instead }), go);
+    return depLine("withdrawn", t("{name}'s plugin can get your account suspended", { name: w.name }), t("{name} runs your own agy, but Google may still suspend an account it sees used from another agent.", { name: w.instead }), go);
   }
   const go = el("button", "text action", t("Turn off {name}'s plugin", { name: w.name }));
   go.onclick = async () => {
@@ -66,5 +69,5 @@ window.withdrawnLine = function (w) {
     }
   };
   return depLine("withdrawn", t("{name}'s plugin is still on beside {instead}", { name: w.name, instead: w.instead }),
-    t("Google suspends accounts it sees used outside its own app. {instead} has your accounts now, so {name}'s plugin can be turned off.", { name: w.name, instead: w.instead }), go);
+    t("{instead} has your accounts now, so {name}'s plugin can be turned off.", { name: w.name, instead: w.instead }), go);
 };

@@ -75,7 +75,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const head = await tr(page, "{name}'s plugin can get your account suspended", { name: "Antigravity" });
         assert.equal((await line.locator(".dep-head").textContent()).trim(), head);
         if (lang !== "en") assert.notEqual(head, "Antigravity's plugin can get your account suspended", "translated");
-        assert.equal((await line.locator(".dep-why").textContent()).trim(), await tr(page, "Google suspends accounts it sees used outside its own app. {name} runs your own agy instead.", { name: "Antigravity (local agy CLI)" }));
+        assert.equal((await line.locator(".dep-why").textContent()).trim(), await tr(page, "{name} runs your own agy, but Google may still suspend an account it sees used from another agent.", { name: "Antigravity (local agy CLI)" }));
+        // agy-cli is not said to be out of Google's reach (WdBlink_ on X)
+        assert.match(await line.locator(".dep-why").textContent(), /Google/);
         assert(await fits(page), "fits");
         const go = line.locator("button.action");
         assert.equal((await go.textContent()).trim(), await tr(page, "Use {name}", { name: "Antigravity (local agy CLI)" }));
@@ -91,7 +93,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const beside = page.locator("#movable .withdrawn");
         await beside.waitFor();
         assert.equal((await beside.locator(".dep-head").textContent()).trim(), await tr(page, "{name}'s plugin is still on beside {instead}", { name: "Antigravity", instead: "Antigravity (local agy CLI)" }));
-        assert.equal((await beside.locator(".dep-why").textContent()).trim(), await tr(page, "Google suspends accounts it sees used outside its own app. {instead} has your accounts now, so {name}'s plugin can be turned off.", { name: "Antigravity", instead: "Antigravity (local agy CLI)" }));
+        assert.equal((await beside.locator(".dep-why").textContent()).trim(), await tr(page, "{instead} has your accounts now, so {name}'s plugin can be turned off.", { name: "Antigravity", instead: "Antigravity (local agy CLI)" }));
         if (lang !== "en") assert.notEqual(await tr(page, "Turn off {name}'s plugin", { name: "Antigravity" }), "Turn off Antigravity's plugin", "translated");
         assert(await fits(page), "fits beside");
         const off = beside.locator("button.action");

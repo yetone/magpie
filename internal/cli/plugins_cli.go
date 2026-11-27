@@ -136,6 +136,12 @@ func pluginCmd(args []string) error {
 		if len(rest) == 2 {
 			method = rest[1]
 		}
+		// agy-cli's risk, as `accounts add` says it (WdBlink_ on X)
+		if pp, err := pluginProvider(ctx, rest[0]); err == nil {
+			if err := askRisk(pp.ID); err != nil {
+				return err
+			}
+		}
 		return pluginLogin(ctx, rest[0], method)
 	case "logout", "signout":
 		if len(rest) != 1 {

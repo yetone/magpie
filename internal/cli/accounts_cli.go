@@ -459,18 +459,33 @@ func untilShort(d time.Duration) string {
 	return fmt.Sprintf("%dd%dh", int(d.Hours())/24, int(d.Hours())%24)
 }
 
+// signInRisks are what is said before a sign-in to a subscription whose
+// vendor may suspend an account used from another agent, as the window's
+// risk step says it.
+var signInRisks = map[string]string{"antigravity": provider.AntigravityRisk, "agy-cli": provider.AntigravityRisk,
+	"claude": provider.ClaudeRisk, "workbuddy": provider.WorkBuddyRisk, "workbuddy-ai": provider.WorkBuddyRisk}
+
+// askRisk says id's risk, if it has one, and asks before signing in.
+func askRisk(id string) error {
+	risk := signInRisks[id]
+	if risk == "" {
+		return nil
+	}
+	fmt.Println(bold.Render("!"), risk)
+	fmt.Print("Sign in anyway? [y/N] ")
+	var yes string
+	fmt.Scanln(&yes)
+	if !strings.EqualFold(strings.TrimSpace(yes), "y") && !strings.EqualFold(strings.TrimSpace(yes), "yes") {
+		return fmt.Errorf("sign-in canceled")
+	}
+	return nil
+}
+
 // addAccount signs in to one more subscription in the browser, the way the
 // window's "Add account" does.
 func addAccount(agentID string) error {
-	if risk := map[string]string{"antigravity": provider.AntigravityRisk, "claude": provider.ClaudeRisk,
-		"workbuddy": provider.WorkBuddyRisk, "workbuddy-ai": provider.WorkBuddyRisk}[agentID]; risk != "" {
-		fmt.Println(bold.Render("!"), risk)
-		fmt.Print("Sign in anyway? [y/N] ")
-		var yes string
-		fmt.Scanln(&yes)
-		if !strings.EqualFold(strings.TrimSpace(yes), "y") && !strings.EqualFold(strings.TrimSpace(yes), "yes") {
-			return fmt.Errorf("sign-in canceled")
-		}
+	if err := askRisk(agentID); err != nil {
+		return err
 	}
 	if _, plug := provider.PluginOf(agentID); plug || provider.PluginServes(agentID) {
 		return pluginLogin(context.Background(), agentID, "")
@@ -652,6 +667,9 @@ func importAccounts(args []string) error {
 	default:
 		if pp, ok := provider.PluginOf(id); ok && pp.ImportFrom != "" {
 			say = []string{pp.ImportFrom}
+		}
+		if id == "agy-cli" {
+			say = append([]string{provider.AntigravityRisk}, say...)
 		}
 	}
 	for _, s := range say {

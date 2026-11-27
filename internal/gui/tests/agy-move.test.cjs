@@ -6,8 +6,9 @@
 // in the line, and the rest are said moved. Not now hides it until the
 // accounts left to move change, a reload too. While it is drawn it stands
 // in for the withdrawn plugin's own line (the same accounts, the same way
-// out); once it goes, that line is back. In every language; the API is
-// faked here.
+// out); once it goes, that line is back. Before Move it says Google may
+// suspend an account used from another agent, agy-cli's too (WdBlink_ on
+// X). In every language; the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -53,11 +54,11 @@ function serve(lang, posts, hold) {
 }
 
 const L = {
-  en: { line: "Antigravity's accounts can move to Antigravity (local agy CLI)", users: "a@x.com, b@x.com move as they are", move: "Move", busy: "Installing agy and checking each account…", failed: "b@x.com: invalid_grant", again: "Try again", done: "1 moved to Antigravity (local agy CLI)" },
-  zh: { line: "Antigravity 的账号可以迁移到 Antigravity（本机 agy CLI）", users: "a@x.com、b@x.com 可以原样迁移", move: "迁移", busy: "正在安装 agy 并逐个检查账号…", failed: "b@x.com：invalid_grant", again: "重试", done: "已有 1 个账号迁移到 Antigravity（本机 agy CLI）" },
-  "zh-TW": { line: "Antigravity 的帳號可以遷移到 Antigravity（本機 agy CLI）", users: "a@x.com、b@x.com 可以原樣遷移", move: "遷移", busy: "正在安裝 agy 並逐一檢查帳號…", failed: "b@x.com：invalid_grant", again: "重試", done: "已有 1 個帳號遷移到 Antigravity（本機 agy CLI）" },
-  ja: { line: "Antigravity のアカウントを Antigravity（ローカル agy CLI）に移行できます", users: "a@x.com、b@x.com はそのまま移行できます", move: "移行", busy: "agy をインストールし、各アカウントを確認しています…", failed: "b@x.com：invalid_grant", again: "再試行", done: "1 件を Antigravity（ローカル agy CLI）に移行しました" },
-  de: { line: "Die Konten von Antigravity können zu Antigravity (lokale agy CLI) umziehen", users: "ziehen a@x.com, b@x.com unverändert um", move: "Umziehen", busy: "agy wird installiert und jedes Konto geprüft…", failed: "b@x.com: invalid_grant", again: "Erneut versuchen", done: "1 zu Antigravity (lokale agy CLI) umgezogen" },
+  en: { line: "Antigravity's accounts can move to Antigravity (local agy CLI)", users: "a@x.com, b@x.com move as they are.", risk: "Google may suspend an Antigravity account it sees used from another agent. Use one you can afford to lose.", move: "Move", busy: "Installing agy and checking each account…", failed: "b@x.com: invalid_grant", again: "Try again", done: "1 moved to Antigravity (local agy CLI)" },
+  zh: { line: "Antigravity 的账号可以迁移到 Antigravity（本机 agy CLI）", users: "a@x.com、b@x.com 可以原样迁移过去。", risk: "Google 可能封禁经其他 Agent 使用的 Antigravity 账号。请用丢了也不心疼的账号。", move: "迁移", busy: "正在安装 agy 并逐个检查账号…", failed: "b@x.com：invalid_grant", again: "重试", done: "已有 1 个账号迁移到 Antigravity（本机 agy CLI）" },
+  "zh-TW": { line: "Antigravity 的帳號可以遷移到 Antigravity（本機 agy CLI）", users: "a@x.com、b@x.com 可以原樣遷移過去。", risk: "Google 可能停權經其他 Agent 使用的 Antigravity 帳號。請用丟了也不心疼的帳號。", move: "遷移", busy: "正在安裝 agy 並逐一檢查帳號…", failed: "b@x.com：invalid_grant", again: "重試", done: "已有 1 個帳號遷移到 Antigravity（本機 agy CLI）" },
+  ja: { line: "Antigravity のアカウントを Antigravity（ローカル agy CLI）に移行できます", users: "a@x.com、b@x.com はそのまま移行できます。", risk: "Google は、他のエージェントから使われている Antigravity アカウントを停止することがあります。失っても困らないアカウントを使ってください。", move: "移行", busy: "agy をインストールし、各アカウントを確認しています…", failed: "b@x.com：invalid_grant", again: "再試行", done: "1 件を Antigravity（ローカル agy CLI）に移行しました" },
+  de: { line: "Die Konten von Antigravity können zu Antigravity (lokale agy CLI) umziehen", users: "a@x.com, b@x.com ziehen unverändert um.", risk: "Google kann ein Antigravity-Konto sperren, wenn es über einen anderen Agenten verwendet wird. Verwenden Sie eines, auf das Sie verzichten können.", move: "Umziehen", busy: "agy wird installiert und jedes Konto geprüft…", failed: "b@x.com: invalid_grant", again: "Erneut versuchen", done: "1 zu Antigravity (lokale agy CLI) umgezogen" },
 };
 
 const launch = (engine) => engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" });
@@ -83,6 +84,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const text = await line.innerText();
       assert.ok(text.includes(w.line), `no line: ${text}`);
       assert.ok(text.includes(w.users), `doesn't name the accounts: ${text}`);
+      // agy-cli has no account yet: the sign-in's risk step is said before
+      // Move, in the same words (WdBlink_ on X)
+      assert.ok(text.includes(w.users + (/^(zh|ja)/.test(lang) ? "" : " ") + w.risk), `doesn't say the risk: ${text}`);
       assert.equal(await go.innerText(), w.move);
       assert.equal(await page.locator("#movable .withdrawn").count(), 0, "two lines for the same accounts");
       // the line fits a narrow window: nothing runs off its side
