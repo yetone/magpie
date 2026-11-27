@@ -216,9 +216,19 @@ type probeMade struct {
 func makeProbeChunk(probes []*rowChunk, since time.Time, renames provider.Renames, hosts map[string]string) *rowChunk {
 	var c *rowChunk
 	sites := sync.OnceValue(func() map[string]string { return sitesOf(hosts) })
+	// made to size from the blocks' counts: grown a row at a time, a quarter
+	// at each copy past the first few, the list was made about five times
+	// over, ~22 MB for each of the warm-up's two reads of a real log's
+	// probes (#2278). Only the first block read can hold rows before since.
+	n := 0
+	for _, b := range probes {
+		if since.IsZero() || !b.Latest.Before(since) {
+			n += b.Count
+		}
+	}
 	eachProbe(probes, since, func(r Record, off int64) {
 		if c == nil {
-			c = &rowChunk{}
+			c = &rowChunk{Rows: make([]packedRow, 0, n)}
 		}
 		if r.Source == SourceMCP {
 			// a tool call names the provider its gateway call went to, by id

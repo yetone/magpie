@@ -182,3 +182,29 @@ func TestProbeChunkLetGoAtRest(t *testing.T) {
 		}
 	}
 }
+
+// The chunk's rows are made to size from the blocks' counts: grown a row
+// at a time, a real log's probes were made about five times over, ~22 MB
+// for each of the warm-up's reads (#2278). A since inside a block leaves
+// room for that block's earlier rows at most.
+func TestProbeChunkRowsMadeToSize(t *testing.T) {
+	at := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	rows := probeRows{}
+	n := 2*logBlockRows + 7
+	for i := range n {
+		rows.add(Record{Time: at.Add(time.Duration(i) * time.Second), Agent: "magpie", Provider: "p", Host: "api.example.com", Status: 500, Source: SourceProbe}, int64(i))
+	}
+	blocks := rows.done()
+	releaseProbes()
+	c := probeChunk(blocks, time.Time{}, provider.Renames{}, nil)
+	if c == nil || len(c.Rows) != n || cap(c.Rows) != n {
+		t.Fatalf("all probes: %d rows in room for %d, want %d in %d", len(c.Rows), cap(c.Rows), n, n)
+	}
+	releaseProbes()
+	since := at.Add(time.Duration(logBlockRows+3) * time.Second)
+	c = probeChunk(blocks, since, provider.Renames{}, nil)
+	if want := n - logBlockRows - 3; c == nil || len(c.Rows) != want || cap(c.Rows) > want+logBlockRows {
+		t.Fatalf("since inside the second block: %d rows in room for %d, want %d", len(c.Rows), cap(c.Rows), want)
+	}
+	releaseProbes()
+}
