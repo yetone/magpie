@@ -359,6 +359,24 @@ the user asking for it.**
   first.
 - Seen 1× (2026-11-24).
 
+**A read the system asks the user about (the keychain, the Secret
+Service, Credential Manager) happens on the user's own action, once.**
+Review where such a read is called from, not only what it reads.
+- plugins cdc58e35 (zcode 0.1.72, 11-27) read ZCode 3.18's key from the
+  keychain inside stateOf. The loader, every request, the model list,
+  the usage card and the check-in call stateOf. The key was kept only
+  for the plugin host's life, and a no was retried after five minutes.
+  So "magpie-bun wants to use ZCode Credential Encryption" came back
+  again and again, after ZCode had quit too (heyedisonwong on X). The
+  loop's harm scan passed it: it read only ZCode's own entry and sent
+  nothing anywhere. bfb01958 (0.1.73) reads it only in the sign-in's
+  callback, keeps the key with the sign-in, and takes a no as final;
+  063aaff26 raised the mover's min.
+- For any such read, trace its callers up to a user action. Keep what
+  it returns with the sign-in, and never ask again on your own after a
+  no.
+- Seen 1× (2026-11-27).
+
 **Before deleting or overwriting a live credential, find every record that
 could match the same key.**
 - 43a65950 matched Codex accounts by display name. Two Team seats of one
