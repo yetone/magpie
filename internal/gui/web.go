@@ -123,6 +123,9 @@ func StartWeb(addr, version string) (*Web, error) {
 	}
 	w := &Web{Addr: ln.Addr().String(), key: key, quit: make(chan struct{})}
 	host, port, _ := net.SplitHostPort(w.Addr)
+	// artifacts' links name the page's address when it has a public one
+	// (#7665)
+	gateway.SetArtifactsAt(artifactsAtWeb(host, port))
 	if ip := net.ParseIP(host); ip == nil || ip.IsUnspecified() {
 		host = "127.0.0.1"
 	}
@@ -200,6 +203,7 @@ func (w *Web) Close() {
 		w.srv.Close()
 		close(pageDone)
 	}
+	gateway.SetArtifactsAt("")
 	// The gateway keeps idle Claude sessions as it ends. Wait for that
 	// before returning or replacing this process, or the next turn has
 	// to replay the whole conversation instead of resuming its session.
@@ -601,7 +605,7 @@ func closesWhenDraining(h http.Handler) http.Handler {
 // webHandler is what `magpie web` on port serves: the page and its API
 // behind the key, or box's sign-in, compressed for the browser.
 func webHandler(port, key, where string, box boxSignIn, page http.Handler) http.Handler {
-	return webCompressed(webGuard("magpie_web_"+port, key, where, box, webOwnPage(page)))
+	return webCompressed(webArtifactPages(webGuard("magpie_web_"+port, key, where, box, webArtifactLinks(webOwnPage(page)))))
 }
 
 // webOwnPage turns away a request for /api that another page sent with
@@ -736,10 +740,13 @@ func ownWeb(w Windows) bool { _, ok := w.(webHost); return ok }
 // forwarding header arrives from loopback looking like an agent here
 // (reported privately by Coffemon). Agents here use the gateway's own
 // port. Everything else (the page, its /api/*) stays behind the page's
-// allow list and key.
+// allow list and key. So does an artifact's address (/a/<ref>/) while
+// magpie isn't on the network, where the gateway opens it to no other
+// computer: the browser signed in to the page opens it there
+// (webArtifactLinks, #7665).
 func onePort(page http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		if !gateway.ClientPath(r.URL.Path) {
+		if !gateway.ClientPath(r.URL.Path) || strings.HasPrefix(r.URL.Path, gateway.ArtifactPagePath) && !gateway.ArtifactsOpenAway() {
 			page.ServeHTTP(rw, r)
 			return
 		}

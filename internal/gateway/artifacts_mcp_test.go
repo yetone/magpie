@@ -390,3 +390,72 @@ func TestArtifactsGuideTool(t *testing.T) {
 		t.Fatalf("speech: %v %s", isErr, said)
 	}
 }
+
+// #7665: with magpie web at MAGPIE_PUBLIC_URL (SetArtifactsAt), what an
+// agent is told and lists names the page there, where the user's browser
+// on another computer is signed in; open_artifact still opens this
+// computer's browser at this computer's address, and the gateway's own
+// /a/ still opens to that browser alone.
+func TestArtifactLinksAtWebAddress(t *testing.T) {
+	h := artifacts(t)
+	SetArtifactsAt("https://magpie.example.com/")
+	t.Cleanup(func() { SetArtifactsAt("") })
+	said, isErr := artifactsCall(t, h, artifactPublishTool, map[string]any{"html": "<title>Plan</title><p>hi"})
+	if isErr {
+		t.Fatal(said)
+	}
+	id := publishedID(t, said)
+	at := "https://magpie.example.com/a/" + id + "/"
+	if !strings.Contains(said, "Published \"Plan\": "+at+"\n") || strings.Contains(said, URL()) || !strings.Contains(said, "signed in to magpie web") {
+		t.Fatalf("publish: %s", said)
+	}
+	for tool, args := range map[string]map[string]any{artifactReadTool: {"id": id}, artifactListTool: {}} {
+		if said, isErr := artifactsCall(t, h, tool, args); isErr || !strings.Contains(said, at) || strings.Contains(said, URL()) {
+			t.Errorf("%s: %s", tool, said)
+		}
+	}
+	if u := ArtifactURL(id, 2); u != "https://magpie.example.com/a/"+id+"@2/" {
+		t.Errorf("a version: %s", u)
+	}
+	var opened string
+	was := openArtifactURL
+	openArtifactURL = func(u string) error { opened = u; return nil }
+	t.Cleanup(func() { openArtifactURL = was })
+	if said, isErr := artifactsCall(t, h, artifactOpenTool, map[string]any{"id": id}); isErr || opened != URL()+"/a/"+id+"/" {
+		t.Errorf("open: %q %s", opened, said)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/a/"+id+"/", nil)
+	r.RemoteAddr, r.Host = "192.0.2.7:4000", "magpie.example.com"
+	if w := httptest.NewRecorder(); func() int { h.ServeHTTP(w, r); return w.Code }() < 400 {
+		t.Error("the gateway opened a page to another computer")
+	}
+
+	// an agent away (#7890) is given magpie web's address too, not the
+	// one it called magpie at, which the user's browser isn't signed in to
+	for tool, args := range map[string]map[string]any{artifactPublishTool: {"id": id, "html": "<p>away"}, artifactReadTool: {"id": id}, artifactListTool: {}} {
+		said, isErr := awayCall(t, h, "http://magpie:3425", t.TempDir(), tool, args)
+		if isErr || !strings.Contains(said, at) || strings.Contains(said, "http://magpie:3425") {
+			t.Errorf("%s away: %s", tool, said)
+		}
+		if tool == artifactPublishTool && !strings.Contains(said, "signed in to magpie web") {
+			t.Errorf("publish away: %s", said)
+		}
+	}
+
+	// on the network, the gateway opens the address without a key
+	// (artifactPageAsked), as the publish says
+	t.Setenv("MAGPIE_ADDR", "0.0.0.0:3425")
+	if said, _ := artifactsCall(t, h, artifactPublishTool, map[string]any{"id": id, "html": "<p>net"}); !strings.Contains(said, at) || !strings.Contains(said, "without a key") || strings.Contains(said, "signed in") {
+		t.Errorf("publish on the network: %s", said)
+	}
+	t.Setenv("MAGPIE_ADDR", "")
+
+	// without it, this computer's address, as before
+	SetArtifactsAt("")
+	if said, _ := artifactsCall(t, h, artifactReadTool, map[string]any{"id": id}); !strings.Contains(said, URL()+"/a/"+id+"/") {
+		t.Errorf("read without a web address: %s", said)
+	}
+	if said, _ := artifactsCall(t, h, artifactPublishTool, map[string]any{"id": id, "html": "<p>two"}); !strings.Contains(said, "private to this computer") {
+		t.Errorf("publish without a web address: %s", said)
+	}
+}

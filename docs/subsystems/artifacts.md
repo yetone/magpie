@@ -79,7 +79,9 @@ the text of its answers, never for access:
 
 - every address it answers is at that base (`artifactCaller.link`); the
   publish answer says so, and names `MAGPIE_PUBLIC_URL` when the base is
-  the Host called rather than it;
+  the Host called rather than it. When `magpie web` serves artifacts at
+  `MAGPIE_PUBLIC_URL` (below), the address is that one instead, as for an
+  agent here;
 - a `file_path` (or a file in `files` given by path) that is relative, or
   that magpie's computer doesn't have, is answered with why: the file is
   on the agent's computer, so pass the page as `html` and its files as
@@ -166,7 +168,9 @@ address, so:
   web`'s port hands `/a/` to the gateway too (`clientPrefixes` in
   [oneport.go](../../internal/gateway/oneport.go), `_api/` left out), so
   the browser UI behind a proxy or in a container opens one at its own
-  address, judged there as from another computer.
+  address, judged there as from another computer. Off the network the
+  port keeps `/a/` for its own sign-in instead (`onePort`,
+  `gateway.ArtifactsOpenAway`; [In magpie web](#in-magpie-web-signed-in)).
 - `nosniff`, `Referrer-Policy: no-referrer`. A numbered version is
   immutable and cached for a year; the newest is `no-cache` with an ETag
   of its version.
@@ -810,8 +814,49 @@ The addresses are this computer's (127.0.0.1). A viewer of `magpie web`
 from another computer (`remotePage` in app.js) opens, copies and installs
 them at the page's own address instead (`at` in artifacts.js), which its
 port hands to the gateway: the page reads there as a shared copy, while
-magpie is on the network (above). An agent away is given its own address,
-above.
+magpie is on the network (above), and through the page's sign-in off it
+(below). An agent away is given its own address, above.
+
+## In magpie web, signed in
+
+`magpie web` behind a proxy at `MAGPIE_PUBLIC_URL` gives artifacts' links
+at that address and opens them to the browser signed in to it, while
+magpie itself listens on loopback (#7665,
+[internal/gui/web_artifacts.go](../../internal/gui/web_artifacts.go)):
+
+- **Links.** `StartWeb` hands the page's public address to the gateway
+  (`artifactsAtWeb`: `MAGPIE_PUBLIC_URL` without a port, a proxy's; with
+  one, its host on the page's own port, and none for a page on loopback
+  then), through `gateway.SetArtifactsAt`; `Close` takes it back.
+  `ArtifactURL` names it, so `publish_artifact`, `read_artifact`,
+  `list_artifacts` and `delete_artifact` give it to an agent here or away
+  (`artifactCaller.link`), and the publish answer says whether the
+  address takes the sign-in or, on the network, no key.
+  `open_artifact` opens this computer's browser, so it keeps this
+  computer's address (`ArtifactLocalURL`), as Work › Artifacts' list does
+  (artifacts.js moves it to the page's address away). It holds only when
+  the gateway runs in `magpie web`'s process (`magpie serve`, the Docker
+  image); `magpie artifacts`, a process of its own, and a gateway another
+  magpie serves give this computer's addresses.
+- **Sign-in.** Off the network, `onePort` leaves `/a/` to the page, behind
+  `webGuard` (the page's cookie, or a LazyCat box's sign-in). Signed in, a
+  navigation is sent on (302, `no-store`, `no-referrer`) to
+  `/_magpie/a/<token>/<ref>/<file>` (`webArtifactLinks`); any other
+  request mode (a script of a page on the same site, with the Lax cookie)
+  gets 403 and no token.
+- **The token.** The page runs in the gateway's sandbox, an opaque origin
+  whose own requests carry no cookie, so the token in its folder's path
+  lets its files in (`webArtifactPages`, ahead of `webGuard`, as a plugin
+  page's token is). It is an HMAC of the artifact's id under this run's
+  `pageSecret`: that artifact, every version, GET and HEAD only. A wrong
+  one gets 404; a navigation with one (a tab from before a restart) goes
+  back to `/a/<ref>/`, through the sign-in.
+- **What is served.** `gateway.ServeArtifactElsewhere`: the files,
+  `artifactPageCSP`, `nosniff` and `no-referrer` of `artifactPage`, the
+  page alone (no viewer shell), and the shared copy's runtime
+  (`SharedRuntime`, every capability null). No `_api/` is served there,
+  so a page that keeps data or assets shows without them, and
+  `publish_artifact` says so when the version declares one.
 
 ## Sharing
 

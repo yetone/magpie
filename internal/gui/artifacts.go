@@ -55,6 +55,10 @@ type artifactJSON struct {
 	SharedVersion int    `json:"sharedVersion,omitempty"`
 }
 
+// artifactsJSON is the artifacts as the Library's page lists them, at
+// this computer's address wherever agents' links point (SetArtifactsAt):
+// the app opens them here, and artifacts.js moves them to the page's own
+// address in a browser on another computer.
 func artifactsJSON() ([]artifactJSON, error) {
 	list, err := artifact.List()
 	if err != nil {
@@ -75,10 +79,10 @@ func artifactsJSON() ([]artifactJSON, error) {
 	}
 	for _, a := range list {
 		j := artifactJSON{ID: a.ID, Title: a.Title, Description: a.Description, Created: a.Created, Updated: a.Updated,
-			URL: gateway.ArtifactURL(a.ID, 0), Versions: make([]artifactVersionJSON, 0, len(a.Versions))}
+			URL: gateway.ArtifactLocalURL(a.ID, 0), Versions: make([]artifactVersionJSON, 0, len(a.Versions))}
 		for i := len(a.Versions) - 1; i >= 0; i-- {
 			v := a.Versions[i]
-			vj := artifactVersionJSON{N: v.N, At: v.At, Label: v.Label, Agent: v.Agent, Files: len(v.Files), Size: v.Size, URL: gateway.ArtifactURL(a.ID, v.N)}
+			vj := artifactVersionJSON{N: v.N, At: v.At, Label: v.Label, Agent: v.Agent, Files: len(v.Files), Size: v.Size, URL: gateway.ArtifactLocalURL(a.ID, v.N)}
 			if v.Agent != "" && v.Agent != artifact.PageAgent {
 				vj.AgentName = nameOf(v.Agent)
 			}

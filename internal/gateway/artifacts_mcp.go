@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -70,15 +71,52 @@ const (
 // included, out of the sandbox) and downloads.
 const artifactPageCSP = "sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
 
-// ArtifactURL is the address of artifact id's page on this computer;
-// version 0 is the newest.
+// ArtifactURL is the address of artifact id's page that its links give,
+// version 0 being the newest: on this computer, or, while magpie web is
+// served at MAGPIE_PUBLIC_URL (SetArtifactsAt), there (#7665), where a
+// browser signed in to the page opens it.
 func ArtifactURL(id string, version int) string {
-	ref := id
-	if version > 0 {
-		ref += "@" + strconv.Itoa(version)
+	if at := artifactsAt.Load(); at != nil {
+		return strings.TrimRight(*at, "/") + ArtifactPath(id, version)
 	}
-	return URL() + ArtifactPagePath + ref + "/"
+	return ArtifactLocalURL(id, version)
 }
+
+// ArtifactLocalURL is the address of artifact id's page on this
+// computer, where open_artifact opens it.
+func ArtifactLocalURL(id string, version int) string {
+	return URL() + ArtifactPath(id, version)
+}
+
+// ArtifactPath is the path of artifact id's page, at whichever address
+// serves it: the gateway's on this computer, or magpie web's.
+func ArtifactPath(id string, version int) string {
+	if version > 0 {
+		return ArtifactPagePath + id + "@" + strconv.Itoa(version) + "/"
+	}
+	return ArtifactPagePath + id + "/"
+}
+
+// artifactsAt is the address artifacts' links are at, when not this
+// computer's (SetArtifactsAt).
+var artifactsAt atomic.Pointer[string]
+
+// SetArtifactsAt has artifacts' links name base, where magpie web serves
+// them (#7665); "" puts them back on this computer.
+func SetArtifactsAt(base string) {
+	if base == "" {
+		artifactsAt.Store(nil)
+		return
+	}
+	artifactsAt.Store(&base)
+}
+
+// ArtifactsOpenAway: the gateway serves an artifact's page to another
+// computer's browser without a key, as magpie is on the network
+// (remoteKeyed, artifactPageAsked). magpie web's port hands such a
+// request to the gateway then, and takes it behind its own sign-in
+// otherwise (#7665).
+func ArtifactsOpenAway() bool { return remoteKeyed() }
 
 // openArtifactURL opens an address in the user's browser; tests stand in.
 var openArtifactURL = proc.OpenBrowser
@@ -379,13 +417,15 @@ func artifactBase(s string) string {
 func (c *artifactCaller) away() bool { return c.base != "" }
 
 // link is the address of artifact id's page (version 0: the newest) for
-// the caller: at the address it reaches magpie at when it is away, else
-// this computer's (ArtifactURL).
+// the caller: magpie web's when it is served at MAGPIE_PUBLIC_URL
+// (SetArtifactsAt), for a caller here or away (#7665); else, for one
+// away, at the address it reaches magpie at; else this computer's
+// (ArtifactURL).
 func (c *artifactCaller) link(id string, version int) string {
-	if c == nil || c.base == "" {
+	if c == nil || c.base == "" || artifactsAt.Load() != nil {
 		return ArtifactURL(id, version)
 	}
-	return c.base + strings.TrimPrefix(ArtifactURL(id, version), URL())
+	return c.base + ArtifactPath(id, version)
 }
 
 // artifactFarFile is why an agent on another computer can't give the
@@ -665,6 +705,16 @@ func artifactPublish(c *artifactCaller, a artifactArgs) (string, error) {
 	switch {
 	case err != nil:
 		fmt.Fprintf(&b, "Whether it is shared doesn't read: %v. Give the user the address.", err)
+	case sh == nil && artifactsAt.Load() != nil:
+		// magpie web's address, for an agent here or away (link)
+		if remoteKeyed() {
+			b.WriteString("Give the user the address: a browser that reaches magpie there opens it, without a key.")
+		} else {
+			b.WriteString("It is private: give the user the address, which opens in a browser signed in to magpie web there.")
+		}
+		if len(v.Capabilities) > 0 {
+			b.WriteString(" What it does beyond showing (its data, Claude, files) works in a browser on magpie's own computer only; there it shows without them.")
+		}
 	case sh == nil && c.away():
 		b.WriteString("Give the user the address: a browser that reaches magpie there opens it, without a key.")
 		if c.base != publicURL() {
@@ -817,7 +867,8 @@ func artifactOpen(c *artifactCaller, a artifactArgs) (string, error) {
 		// a browser would open on the computer magpie runs on, not the user's
 		return "", fmt.Errorf("magpie runs on another computer than yours, so it opens no browser for you: give the user the address, %s", c.link(art.ID, n))
 	}
-	u := ArtifactURL(art.ID, n)
+	// it opens in this computer's browser, at this computer's address
+	u := ArtifactLocalURL(art.ID, n)
 	if err := openArtifactURL(u); err != nil {
 		return "", fmt.Errorf("the browser didn't open: %v; the address is %s", err, u)
 	}
@@ -875,19 +926,40 @@ func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "an artifact opens in a browser on this computer, at "+URL(), http.StatusForbidden)
 		return
 	}
-	ref := r.PathValue("ref")
+	serveArtifact(s, w, r, ArtifactPagePath, r.PathValue("ref"), r.PathValue("path"), reader)
+}
+
+// ServeArtifactElsewhere serves an artifact's page and files, as
+// artifactPage does to another computer's browser, to one that magpie
+// web let in through its sign-in (#7665), with the artifact's folders
+// under base: the same sandbox and headers, the page alone (no viewer
+// shell), and the runtime a shared copy runs, every capability null.
+// None of the page's _api is served there: its store, Claude, app files
+// and assets stay the gateway's, for this computer's browser.
+func ServeArtifactElsewhere(w http.ResponseWriter, r *http.Request, base, ref, name string) {
+	serveArtifact(nil, w, r, base, ref, name, true)
+}
+
+// serveArtifact serves the page or file name of the artifact version ref
+// names, in its folder under base; reader: to another computer's
+// browser. s is the gateway serving it, nil for magpie web.
+func serveArtifact(s *Server, w http.ResponseWriter, r *http.Request, base, ref, name string, reader bool) {
 	id, n, ok := ArtifactRef(ref)
 	if !ok || strings.Contains(ref, "/") {
 		http.NotFound(w, r)
 		return
 	}
-	if !strings.HasPrefix(r.URL.Path, ArtifactPagePath+ref+"/") {
+	if !strings.HasPrefix(r.URL.Path, base+ref+"/") {
 		// the page's relative links are to its own folder
-		http.Redirect(w, r, ArtifactPagePath+ref+"/", http.StatusFound)
+		http.Redirect(w, r, base+ref+"/", http.StatusFound)
 		return
 	}
-	name := r.PathValue("path")
-	if app, ok := strings.CutPrefix(name, artifactAPIDir); ok && n == 0 {
+	if app, ok := strings.CutPrefix(name, artifactAPIDir); ok && (s == nil || n == 0) {
+		if s == nil {
+			// magpie web serves the page's files, none of its _api
+			http.NotFound(w, r)
+			return
+		}
 		s.artifactApp(w, r, id, app)
 		return
 	}
