@@ -3937,6 +3937,10 @@ func refusalAsksAgain(n int) bool {
 
 // release sends a held reply after all: nobody else is left to try.
 func (h *holdWriter) release() {
+	h.releaseWithQuotaReset(time.Time{})
+}
+
+func (h *holdWriter) releaseWithQuotaReset(back time.Time) {
 	if h.passing || h.status == 0 {
 		return
 	}
@@ -3958,8 +3962,15 @@ func (h *holdWriter) release() {
 		}
 		return
 	}
+	b := retell(h.retold, h.held.Bytes())
+	if h.status == http.StatusTooManyRequests && !back.IsZero() {
+		if hinted := withQuotaResetHint(b, back); !bytes.Equal(hinted, b) {
+			h.header.Del("Content-Length")
+			b = hinted
+		}
+	}
 	h.pass()
-	h.w.Write(retell(h.retold, h.held.Bytes()))
+	h.w.Write(b)
 	h.flush()
 }
 

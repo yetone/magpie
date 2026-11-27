@@ -3706,6 +3706,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// weren't tried for that, not for being held too (#2517)
 			msg, back = checkpointCappedError(call.Model, *checkpoint, sealer, time.Now())
 			record = checkpointCappedRecord(sealer)
+			held = sealer
 		} else {
 			msg, back = cappedError(call.Model, held, time.Now())
 			if strictHeld != nil {
@@ -3717,6 +3718,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			w.Header().Set("Retry-After", strconv.Itoa(int(d.Seconds())+1))
 		}
 		call.Status, call.Error = 429, record
+		if from == provider.Anthropic {
+			msg = quotaResetHint(msg, cappedQuotaResetBack(held, time.Now()))
+		}
 		writeError(w, from, 429, msg)
 		turnedAway()
 		return
@@ -4349,6 +4353,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					w.Header().Set("Retry-After", strconv.Itoa(int(d.Seconds())+1))
 				}
 				call.Status, call.Error = 429, cappedRecord(ws)
+				if from == provider.Anthropic && !kept.sent && i == 0 && len(all) == 1 && len(pl.capped) == 0 && len(pl.held) == 0 {
+					msg = quotaResetHint(msg, cappedQuotaResetBack(ws, time.Now()))
+				}
 				failTo(w, kept, from, 429, msg)
 				break
 			}
@@ -6185,7 +6192,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// Codex is told in its stream, the one place it compacts on it
 			failTo(w, kept, from, call.Status, call.Error)
 		} else {
-			hw.release()
+			var back time.Time
+			if from == provider.Anthropic && last && !pass && !hw.passing && !kept.sent && hw.status == http.StatusTooManyRequests && (held || try.Rest != nil) && len(pl.held) == 0 && len(pl.capped) == 0 {
+				// Include candidates probeLeft did not ask again, as well as
+				// those added to the walk later. Each must be known spent.
+				back = quotaResetBack(time.Now(), all, cands)
+			}
+			hw.releaseWithQuotaReset(back)
 			if hw.passing {
 				clientResponseID = call.Usage.ResponseID
 			}
