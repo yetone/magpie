@@ -60,7 +60,8 @@ func sessionsMCPTools() []any {
 			"name":  sessionsReadTool,
 			"title": "Read session",
 			"description": "Reads a session's conversation as text: the prompts, the replies, and the tools called, shortened. " +
-				"With find, it starts a few messages before where those words were said; from goes on where the last read ended.",
+				"With find, it starts a few messages before where those words were said; from goes on where the last read ended; " +
+				"full gives each message and tool call whole, where a read otherwise cuts a message at 8000 characters.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -68,6 +69,7 @@ func sessionsMCPTools() []any {
 					"find":      map[string]any{"type": "string", "description": "Start a few messages before where these words were said"},
 					"from":      map[string]any{"type": "integer", "minimum": 0, "description": "Start at this message, as a read before says"},
 					"max_chars": map[string]any{"type": "integer", "minimum": 1000, "maximum": sessions.TextReadMost, "default": sessions.TextReadChars},
+					"full":      map[string]any{"type": "boolean", "default": false, "description": "Each message whole, never cut at 8000 characters"},
 				},
 				"required": []string{"session"},
 			},
@@ -84,6 +86,21 @@ type sessionsArgs struct {
 	Find     string    `json:"find"`
 	From     flexCount `json:"from"`
 	MaxChars flexCount `json:"max_chars"`
+	Full     flexFlag  `json:"full"`
+}
+
+// flexFlag is a yes or no as a model may write it: true, or "true" or 1;
+// no for anything else.
+type flexFlag bool
+
+func (f *flexFlag) UnmarshalJSON(b []byte) error {
+	switch strings.Trim(strings.ToLower(string(b)), `"`) {
+	case "true", "1", "yes":
+		*f = true
+	default:
+		*f = false
+	}
+	return nil
 }
 
 func (s *Server) sessionsMCPCall(r *http.Request, m mcpMessage) (any, map[string]any) {
@@ -139,6 +156,9 @@ var sessionsHow = sessions.TextHow{
 	More: "ask for a higher limit",
 	Read: "Read one with " + sessionsReadTool + "(session, find).",
 	From: func(_ sessions.Session, n int) string { return fmt.Sprintf("%s with from=%d", sessionsReadTool, n) },
+	Whole: func(_ sessions.Session, n int) string {
+		return fmt.Sprintf("%s with from=%d, full=true", sessionsReadTool, n)
+	},
 }
 
 func sessionsSearch(r *http.Request, a sessionsArgs) (string, error) {
@@ -172,5 +192,12 @@ func sessionsRead(a sessionsArgs) (string, error) {
 	if !found {
 		return "", fmt.Errorf("no session %s", a.Session)
 	}
-	return sessions.SessionText(s, sessions.ReadAsk{Find: a.Find, From: int(a.From), MaxChars: int(a.MaxChars)}, sessionsHow)
+	how := sessionsHow
+	if a.Full {
+		// the next read keeps each message whole too
+		how.From = func(_ sessions.Session, n int) string {
+			return fmt.Sprintf("%s with from=%d, full=true", sessionsReadTool, n)
+		}
+	}
+	return sessions.SessionText(s, sessions.ReadAsk{Find: a.Find, From: int(a.From), MaxChars: int(a.MaxChars), Whole: bool(a.Full)}, how)
 }

@@ -21,6 +21,9 @@ type TextHow struct {
 	Read string
 	// From: how to read s on from message n
 	From func(s Session, n int) string
+	// Whole: how to read s from message n with each message whole, said
+	// under a message cut to its first partMax characters
+	Whole func(s Session, n int) string
 }
 
 const (
@@ -79,39 +82,75 @@ func SaidText(found SaidFound, needle string, how TextHow) string {
 	return b.String()
 }
 
-// ReadAsk is what part of a session SessionText gives: from message
-// From on, or, with Find, from a few messages before where those words
-// were said; MaxChars of it at most.
+// ReadAsk is what part of a session SessionText (and ReadTranscript)
+// gives: from message From on, or, with Find, from a few messages before
+// where those words were said; MaxChars of it at most; each message
+// whole with Whole, else cut to its first partMax characters.
 type ReadAsk struct {
 	Find     string
 	From     int
 	MaxChars int
+	Whole    bool
+}
+
+// readAsked is the transcript ask reads, and the message its text starts
+// at: From when asked, else a few before the first that says Find.
+func readAsked(s Session, ask ReadAsk) (Transcript, int, error) {
+	from := max(ask.From, 0)
+	if needle := NeedleOf(ask.Find); needle != "" && from == 0 {
+		tr, err := transcriptAt(s, needle, ask.Whole)
+		if err != nil {
+			return tr, 0, err
+		}
+		return tr, max(tr.From, textNear(tr, needle)-textLead), nil
+	}
+	// read from where it is asked: a "more" past a long session's first
+	// transcriptMax characters read the same cut start again
+	tr, err := transcriptAfter(s, from, ask.Whole)
+	return tr, from, err
+}
+
+// textChars is the most characters a read gives, asked for most.
+func textChars(most int) int {
+	if most <= 0 {
+		most = TextReadChars
+	}
+	return min(max(most, 1000), TextReadMost)
+}
+
+// ReadTranscript is the part of s's conversation ask asks for, as
+// SessionText reads it, for a reader that takes the parts themselves
+// (magpie sessions show --json): from message From on, else, with Find,
+// as TranscriptAt reads it. With MaxChars it holds the parts up to that
+// many characters of text (at least one), starting where SessionText's
+// text would, and is Cut when more follow; Next says where they start.
+// Without it, it holds what one read does, transcriptMax.
+func ReadTranscript(s Session, ask ReadAsk) (Transcript, error) {
+	tr, from, err := readAsked(s, ask)
+	if err != nil || ask.MaxChars <= 0 {
+		return tr, err
+	}
+	if skip := from - tr.From; skip > 0 && skip <= len(tr.Parts) {
+		tr.Parts, tr.From = tr.Parts[skip:], from
+	}
+	most, size := textChars(ask.MaxChars), 0
+	for i, p := range tr.Parts {
+		if size += len(p.Text); size > most && i > 0 {
+			tr.Parts, tr.Cut = tr.Parts[:i], true
+			break
+		}
+	}
+	return tr, nil
 }
 
 // SessionText is s's conversation as text: the prompts, the replies and
 // the tools called, shortened, each message numbered.
 func SessionText(s Session, ask ReadAsk, how TextHow) (string, error) {
-	var tr Transcript
-	var err error
-	from := max(ask.From, 0)
-	if needle := NeedleOf(ask.Find); needle != "" && from == 0 {
-		tr, err = TranscriptAt(s, needle)
-		if err == nil {
-			from = max(tr.From, textNear(tr, needle)-textLead)
-		}
-	} else {
-		// read from where it is asked: a "more" past a long session's
-		// first transcriptMax characters read the same cut start again
-		tr, err = TranscriptAfter(s, from)
-	}
+	tr, from, err := readAsked(s, ask)
 	if err != nil {
 		return "", err
 	}
-	most := ask.MaxChars
-	if most <= 0 {
-		most = TextReadChars
-	}
-	most = min(max(most, 1000), TextReadMost)
+	most := textChars(ask.MaxChars)
 
 	var b strings.Builder
 	b.WriteString(SessionRef(s))
@@ -134,7 +173,10 @@ func SessionText(s Session, ask ReadAsk, how TextHow) (string, error) {
 		if n < from {
 			continue
 		}
-		line := partText(n, p)
+		line := partText(n, p, ask.Whole)
+		if p.Cut > 0 && !ask.Whole && how.Whole != nil && line != "" && (p.Kind == "text" || p.Kind == "context") {
+			line += fmt.Sprintf("(cut: %d more characters of this message; %s)\n", p.Cut, how.Whole(s, n))
+		}
 		if line == "" {
 			end = n + 1
 			continue
@@ -162,9 +204,18 @@ func textNear(tr Transcript, needle string) int {
 	return 0
 }
 
-// partText is one part as SessionText shows it.
-func partText(n int, p Part) string {
+// partText is one part as SessionText shows it: a tool's call or answer
+// on one line, shortened, unless whole.
+func partText(n int, p Part, whole bool) string {
 	text := strings.TrimSpace(p.Text)
+	if whole && text != "" {
+		switch p.Kind {
+		case "tool_use":
+			return fmt.Sprintf("\n[%d] %s called %s:\n%s\n", n, p.Role, p.Name, text)
+		case "tool_result":
+			return fmt.Sprintf("[%d] tool answered:\n%s\n", n, text)
+		}
+	}
 	switch p.Kind {
 	case "text", "context":
 		if text == "" {

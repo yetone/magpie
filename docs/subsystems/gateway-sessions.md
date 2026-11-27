@@ -795,6 +795,27 @@ reached the end. The Markdown export reads the whole file and was never
 cut. Verification: `TestTranscriptAfterReadsTheRest`,
 `TestSessionTextReadsPastTheCut`; browser `sessions-talk-rest.test.cjs`.
 
+Each part of a transcript is cut to its first `partMax` (8,000)
+characters, its `cut` the characters left off, while the search index
+reads the whole text, so a hit can be past the cut. A read asked
+`ReadAsk.Whole` (`magpie sessions show --full`, `read_session`'s
+`full`) keeps every part whole (`keepAs`); parts are numbered the same
+either way, since only an empty part is left out. Without it,
+`SessionText` says under a cut message how many characters were left off
+and how to read it whole (`TextHow.Whole`), and shows tool calls and
+answers whole only with it. `magpie sessions show --json` reads through
+`ReadTranscript`, the same read as the text: from `--from`, else at
+`--find`, a page of `--max-chars` when given (else up to
+`transcriptMax`, as before), with `next` the `--from` of the rest and
+`notes` naming `--full` when a message was cut. Before, `--json` read
+from the start whatever `--from` said, and nothing could show a message
+past 8,000 characters (hdhfhf_hdh219 on X). The sheet
+(`/api/sessions/transcript`) still shows a long message's first 8,000
+characters with no note; its Markdown export is whole. Verification:
+`TestReadTranscriptWhole`, `TestSessionTextWhole`,
+`TestReadTranscriptPages`, `TestSessionsShowJSONFrom`,
+`TestSessionsShowFull`, `TestSessionsMCPReadFull`.
+
 The sheet's "turn i / N" counts the whole session. A first read that is cut,
 or starts past the start (a search's, `from` > 0), carries `turns`, the
 user's text messages in the whole file, and `turnsBefore`, those among the
@@ -893,7 +914,7 @@ update; turning gateway mode on or off closes the index (`Reset` →
 - The `magpie-sessions` MCP server (`SessionsMCPPath`,
   `/mcp/magpie/sessions`, [`sessions_mcp.go`](../../internal/gateway/sessions_mcp.go))
   gives an agent `search_sessions(query, agent?, limit)` and
-  `read_session(session, find?, from?, max_chars?)`, as text: each hit's
+  `read_session(session, find?, from?, max_chars?, full?)`, as text: each hit's
   `agent:id`, title, folder, time and the words round it; a read numbers
   each message, shortens tool calls and answers, leaves thinking out, and
   says how to go on (`from=`). Like Magpie Memory it answers the agents on

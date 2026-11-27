@@ -24,7 +24,7 @@ import (
 
 const sessionsSearchUsage = "usage: magpie sessions search <words…> [--agent <agent>] [--days N|today|all] [--limit N] [--wait <duration>] [--json]"
 
-const sessionsShowUsage = "usage: magpie sessions show <agent:id> [--find <words>] [--from N] [--max-chars N] [--json]"
+const sessionsShowUsage = "usage: magpie sessions show <agent:id> [--find <words>] [--from N] [--max-chars N] [--full] [--json]"
 
 // searchWait is how long `magpie sessions search` waits for the index to
 // be brought up to date: the first time on a long history it is made,
@@ -35,9 +35,7 @@ const searchWait = 60 * time.Second
 var sessionsTextHow = sessions.TextHow{
 	More: "ask with a higher --limit",
 	Read: "Read one with: magpie sessions show <agent:id> --find <words>",
-	From: func(s sessions.Session, n int) string {
-		return fmt.Sprintf("magpie sessions show %s --from %d", sessions.SessionRef(s), n)
-	},
+	// From and Whole: showHow, which keeps show's own flags
 }
 
 // errNotAsked: nothing is read until the user allows it.
@@ -53,6 +51,7 @@ type searchOpts struct {
 	find  string
 	from  int
 	most  int
+	full  bool // show: each message whole, never cut at 8000 characters
 }
 
 // parseSearchArgs reads the arguments of search (or show): words, and
@@ -84,6 +83,12 @@ func parseSearchArgs(args []string, show bool) (searchOpts, error) {
 				return o, fmt.Errorf("--json takes no value\n%s", use)
 			}
 			o.json = true
+			continue
+		case name == "--full" && show:
+			if has {
+				return o, fmt.Errorf("--full takes no value\n%s", use)
+			}
+			o.full = true
 			continue
 		case name == "-h" || name == "--help":
 			return o, fmt.Errorf("%s", use)
@@ -229,28 +234,67 @@ func sessionsShowTo(w io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
+	ask := sessions.ReadAsk{Find: o.find, From: o.from, MaxChars: o.most, Whole: o.full}
+	how := showHow(o)
 	if o.json {
-		var tr sessions.Transcript
-		if needle := sessions.NeedleOf(o.find); needle != "" {
-			tr, err = sessions.TranscriptAt(s, needle)
-		} else {
-			tr, err = sessions.TranscriptOf(s)
-		}
+		// the parts the text would show, from where it would: --json
+		// read from the start whatever --from said (hdhfhf_hdh219 on X)
+		tr, err := sessions.ReadTranscript(s, ask)
 		if err != nil {
 			return err
+		}
+		var notes []string
+		cut, first := 0, -1
+		for i, p := range tr.Parts {
+			if p.Cut > 0 && (p.Kind == "text" || p.Kind == "context") {
+				if cut++; first < 0 {
+					first = tr.From + i
+				}
+			}
+		}
+		if cut > 0 {
+			notes = append(notes, fmt.Sprintf("%d message(s) cut short, the first at %d (each part's cut is the characters left off); --full gives every message whole: %s", cut, first, how.Whole(s, first)+" --json"))
+		}
+		next := tr.Next()
+		if next > 0 {
+			notes = append(notes, "more from message "+strconv.Itoa(next)+": "+how.From(s, next)+" --json")
 		}
 		s.Path = tildePath(s.Path)
 		return writeJSON(w, struct {
 			Session    sessions.Session    `json:"session"`
 			Transcript sessions.Transcript `json:"transcript"`
-		}{s, tr})
+			// Next is the --from of the rest, when there is more
+			Next  int      `json:"next,omitempty"`
+			Notes []string `json:"notes,omitempty"`
+		}{s, tr, next, notes})
 	}
-	text, err := sessions.SessionText(s, sessions.ReadAsk{Find: o.find, From: o.from, MaxChars: o.most}, sessionsTextHow)
+	text, err := sessions.SessionText(s, ask, how)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(w, text)
 	return nil
+}
+
+// showHow is how show's text says to read on: the next read keeps the
+// flags this one was given (--max-chars, --full), and a message cut
+// short names --full.
+func showHow(o searchOpts) sessions.TextHow {
+	how := sessionsTextHow
+	var keep string
+	if o.most > 0 {
+		keep += " --max-chars " + strconv.Itoa(o.most)
+	}
+	if o.full {
+		keep += " --full"
+	}
+	how.From = func(s sessions.Session, n int) string {
+		return fmt.Sprintf("magpie sessions show %s --from %d%s", sessions.SessionRef(s), n, keep)
+	}
+	how.Whole = func(s sessions.Session, n int) string {
+		return fmt.Sprintf("magpie sessions show %s --from %d --full", sessions.SessionRef(s), n)
+	}
+	return how
 }
 
 // findSession is the session ref names: agent:id as search prints it,

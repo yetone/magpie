@@ -28,6 +28,17 @@ type Transcript struct {
 	Turns       int `json:"turns,omitempty"`
 	TurnsBefore int `json:"turnsBefore,omitempty"`
 	size        int // characters of Parts' text, kept up as they are added
+	whole       bool
+}
+
+// Next is the number of the message a read of the rest starts at (as
+// From, TranscriptAfter's n), when t stops before the session's end; 0
+// when it reaches it.
+func (t Transcript) Next() int {
+	if !t.Cut {
+		return 0
+	}
+	return t.From + len(t.Parts)
 }
 
 // transcriptMax is the characters of all of a transcript's parts.
@@ -59,7 +70,7 @@ func (t *Transcript) add(_ bool, p Part) bool {
 		t.Cut = true
 		return false
 	}
-	if p, ok := keep(p); ok {
+	if p, ok := keepAs(p, t.whole); ok {
 		t.Parts = append(t.Parts, p)
 		t.size += len(p.Text)
 	}
@@ -67,11 +78,14 @@ func (t *Transcript) add(_ bool, p Part) bool {
 }
 
 // TranscriptOf reads a session's conversation from its (main) file.
-func TranscriptOf(s Session) (Transcript, error) {
+func TranscriptOf(s Session) (Transcript, error) { return transcriptOf(s, false) }
+
+// transcriptOf is TranscriptOf, each part whole with whole.
+func transcriptOf(s Session, whole bool) (Transcript, error) {
 	if !Reads(s.Agent) {
 		return Transcript{Parts: []Part{}}, ErrNotRead
 	}
-	out := Transcript{Parts: []Part{}}
+	out := Transcript{Parts: []Part{}, whole: whole}
 	if !HasTranscript(s.Agent) || s.Path == "" {
 		return out, ErrNoTranscript
 	}
@@ -88,8 +102,13 @@ const transcriptLead = 6
 // part, the parts before it are left out (but a few) and From says how
 // many were.
 func TranscriptAt(s Session, needle string) (Transcript, error) {
+	return transcriptAt(s, needle, false)
+}
+
+// transcriptAt is TranscriptAt, each part whole with whole.
+func transcriptAt(s Session, needle string, whole bool) (Transcript, error) {
 	if needle == "" {
-		return TranscriptOf(s)
+		return transcriptOf(s, whole)
 	}
 	if !Reads(s.Agent) {
 		return Transcript{Parts: []Part{}}, ErrNotRead
@@ -101,7 +120,7 @@ func TranscriptAt(s Session, needle string) (Transcript, error) {
 	// found one's place among them noted, and the characters before it
 	at, saidAt, n, size, sizeAt, saidSize := -1, -1, 0, 0, 0, 0
 	if err := readTranscript(s, func(_ bool, p Part) bool {
-		p, ok := keep(p)
+		p, ok := keepAs(p, whole)
 		if !ok {
 			return true
 		}
@@ -125,9 +144,9 @@ func TranscriptAt(s Session, needle string) (Transcript, error) {
 		at, sizeAt = saidAt, saidSize
 	}
 	if at < 0 || sizeAt < transcriptMax {
-		return TranscriptOf(s)
+		return transcriptOf(s, whole)
 	}
-	return TranscriptAfter(s, max(0, at-transcriptLead))
+	return transcriptAfter(s, max(0, at-transcriptLead), whole)
 }
 
 // TranscriptAfter is TranscriptOf from the part after the first n it
@@ -136,8 +155,15 @@ func TranscriptAt(s Session, needle string) (Transcript, error) {
 // only up to its first transcriptMax characters (usrname1833 on Discord:
 // a long session's sheet stopped before its last turns).
 func TranscriptAfter(s Session, n int) (Transcript, error) {
+	return transcriptAfter(s, n, false)
+}
+
+// transcriptAfter is TranscriptAfter, each part whole with whole: the
+// parts are numbered as TranscriptAfter numbers them, since a part is
+// left out only when it says nothing, whole or not.
+func transcriptAfter(s Session, n int, whole bool) (Transcript, error) {
 	if n <= 0 {
-		return TranscriptOf(s)
+		return transcriptOf(s, whole)
 	}
 	if !Reads(s.Agent) {
 		return Transcript{Parts: []Part{}}, ErrNotRead
@@ -145,7 +171,7 @@ func TranscriptAfter(s Session, n int) (Transcript, error) {
 	if !HasTranscript(s.Agent) || s.Path == "" {
 		return Transcript{Parts: []Part{}}, ErrNoTranscript
 	}
-	out := Transcript{Parts: []Part{}, From: n}
+	out := Transcript{Parts: []Part{}, From: n, whole: whole}
 	i := 0
 	err := readTranscript(s, func(in bool, p Part) bool {
 		if _, ok := keep(p); !ok {

@@ -203,7 +203,8 @@ magpie sessions read              # which agents' history magpie may read</pre><
 magpie sessions search "rate limit" --agent codex --days 7 --limit 5
 magpie sessions search login --json
 magpie sessions show claude:&lt;id&gt; --find login    # that session, from where it was said
-magpie sessions show claude:&lt;id&gt; --from 40 --json</pre></div>
+magpie sessions show claude:&lt;id&gt; --from 40 --json
+magpie sessions show claude:&lt;id&gt; --full          # each message whole, not cut at 8000 characters</pre></div>
     <p>只读取你允许 magpie 读取的 Agent。长历史上第一次搜索会建立一份索引，之后的搜索接着用。</p>
     <h2 id="price"><a class="anchor" href="#price">价格从哪来</a></h2>
     <p>每次请求按“实际价格”计费：你给该供应商和模型设了价格就用你的；没设就用供应商自己目录里的价格；再没有就用 models.dev 上模型厂商的价格。</p>

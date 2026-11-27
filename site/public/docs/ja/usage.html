@@ -203,7 +203,8 @@ magpie sessions read              # which agents' history magpie may read</pre><
 magpie sessions search "rate limit" --agent codex --days 7 --limit 5
 magpie sessions search login --json
 magpie sessions show claude:&lt;id&gt; --find login    # that session, from where it was said
-magpie sessions show claude:&lt;id&gt; --from 40 --json</pre></div>
+magpie sessions show claude:&lt;id&gt; --from 40 --json
+magpie sessions show claude:&lt;id&gt; --full          # each message whole, not cut at 8000 characters</pre></div>
     <p>読み取りを許可したエージェントだけを読みます。履歴が長いと最初の検索で話した内容の索引を作り、次からはそれを使います。</p>
     <h2 id="price"><a class="anchor" href="#price">価格の出どころ</a></h2>
     <p>リクエストは実効価格で数えられます。そのプロバイダーとモデルにあなたが設定した価格、なければプロバイダー自身のカタログの価格、それもなければ models.dev にあるモデル提供元の価格です。</p>

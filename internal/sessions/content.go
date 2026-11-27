@@ -68,6 +68,17 @@ func (c *Content) add(input bool, p Part) bool {
 	return true
 }
 
+// keepAs is keep, or with whole the part trimmed and never cut: a read
+// that asks for each message as it was said (magpie sessions show
+// --full).
+func keepAs(p Part, whole bool) (Part, bool) {
+	if !whole {
+		return keep(p)
+	}
+	p.Text = strings.TrimSpace(p.Text)
+	return p, p.Text != ""
+}
+
 // keep is a part trimmed and cut to what one may be, unless it says nothing.
 func keep(p Part) (Part, bool) {
 	p.Text = strings.TrimSpace(p.Text)

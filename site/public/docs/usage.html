@@ -203,7 +203,8 @@ magpie sessions read              # which agents' history magpie may read</pre><
 magpie sessions search "rate limit" --agent codex --days 7 --limit 5
 magpie sessions search login --json
 magpie sessions show claude:&lt;id&gt; --find login    # that session, from where it was said
-magpie sessions show claude:&lt;id&gt; --from 40 --json</pre></div>
+magpie sessions show claude:&lt;id&gt; --from 40 --json
+magpie sessions show claude:&lt;id&gt; --full          # each message whole, not cut at 8000 characters</pre></div>
     <p>They read only the agents you allow magpie to read. The first search on a long history builds an index of what was said, kept for the next one.</p>
     <h2 id="price"><a class="anchor" href="#price">Where a price comes from</a></h2>
     <p>A call is counted at its effective price: what you set for that provider and model if you did, otherwise what the provider's own catalogue lists, otherwise what models.dev lists for the model's maker.</p>
