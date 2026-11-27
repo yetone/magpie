@@ -1189,7 +1189,14 @@ The Antigravity desktop app's stable and Insiders stores are read by
 store. Each conversation takes its title and workspace from the
 `conversation_summaries.db` beside its own store, including later title
 updates. Model calls reuse the app's read-only SQLite/protobuf reader,
-including response folding and gateway matching. Insiders session ids
+including response folding and gateway matching. A call counts once by
+the vendor's response id its step names (`antigravityCallID`), in
+whichever conversation's database it is: a subagent's call is written in
+its database and its parent's, and was counted once for each
+(Taytay_19891213 on X). A step with no response id counts by its
+conversation and step. Only Usage's call reads are deduplicated this way;
+the Sessions page's per-conversation totals still hold the shared call in
+both. Insiders session ids
 have an `insiders-` prefix in magpie, leaving stable ids unchanged and
 keeping equal UUIDs in the two stores from sharing a session or call id.
 The files themselves are not renamed. Sessions stay read-only with no
@@ -1206,6 +1213,8 @@ reads the session again. A conversation with no transcript is
 Verification: `TestAntigravityInsidersSessions` covers Insiders alone,
 both stores with the same UUID, per-model tokens, call ids, summary refresh
 and turning the existing reading choice off, using #2190's real step bytes.
+`TestAntigravityAppSubagentCallOnce` puts one of those steps in a second
+conversation's database beside a call alike in all but its response id.
 `TestAntigravityAppTranscript` reads a conversation the app's 2.30 language
 server had with a read_file call (testdata/antigravity-2.30-tools) from
 stable, Insiders and a WSL distro's store; `TestAntigravityAppNoTranscript`.

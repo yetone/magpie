@@ -529,8 +529,30 @@ func readAntigravityCalls(f file) (*callFile, bool) {
 		st.Calls = append(st.Calls, Call{
 			Agent: "antigravity", Time: c.at, Session: st.Session, Model: c.model, Tokens: c.tokens,
 			TTFT: t.ttft, Millis: t.millis,
-			Msg: st.str("antigravity:" + st.Session + ":" + strconv.FormatInt(c.step, 10)),
+			Msg: st.str(antigravityCallID(st.Session, c)),
 		})
 	}
 	return st, true
+}
+
+// antigravityCallID is the id a call counts once by over every file
+// (callsFor, and the Usage page's visibleLocal, keep the first file's
+// call of an id). A call whose step names the vendor's response id is
+// that response, whichever conversation's database holds it: a
+// subagent's call is written in its own database and in its parent's,
+// each under its own step, and was counted once for each
+// (Taytay_19891213 on X: 728 calls in a day where 424 were made).
+// antigravityRead already reads one response's steps in one database as
+// one call. A step with no response id is its own conversation's step.
+// Insiders' ids stay apart from stable's, as its sessions do
+// (antigravityInsiders).
+func antigravityCallID(session string, c agAppCall) string {
+	if c.response == "" {
+		return "antigravity:" + session + ":" + strconv.FormatInt(c.step, 10)
+	}
+	store := ""
+	if strings.HasPrefix(session, "insiders-") {
+		store = "insiders-"
+	}
+	return "antigravity:" + store + "response:" + c.response
 }
