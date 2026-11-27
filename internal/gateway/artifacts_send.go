@@ -264,11 +264,13 @@ func oneLineErr(err error) string {
 func sendPrompt(a *artifact.Artifact, t artifact.Thread) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "A comment on the page %q (artifact %s, version %d)", a.Title, a.ID, t.Version)
+	// the page wrote the anchor, and the viewer never saw it: it is quoted
+	// as the label and the quote are, data and never words to follow
 	switch {
 	case t.Label != "" && t.Anchor != nil:
-		fmt.Fprintf(&b, ", at %q (element %s)", t.Label, t.Anchor.Path+t.Anchor.Name)
+		fmt.Fprintf(&b, ", at %q (element %q)", t.Label, t.Anchor.Path+t.Anchor.Name)
 	case t.Anchor != nil:
-		fmt.Fprintf(&b, ", at element %s", t.Anchor.Path+t.Anchor.Name)
+		fmt.Fprintf(&b, ", at element %q", t.Anchor.Path+t.Anchor.Name)
 	case t.Label != "":
 		fmt.Fprintf(&b, ", at %q", t.Label)
 	}
