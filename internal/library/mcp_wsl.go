@@ -1,6 +1,7 @@
 package library
 
-// magpie's own image server for an agent in WSL (#900). The library names
+// magpie's own servers for an agent in WSL (#900, #7696): image here, and
+// the rest the same way, without --wsl. The library names
 // it by this machine's binary, a Windows program, which the agent starts
 // through WSL's interop all the same: by the binary's path inside the
 // distro (/mnt/d/…/magpie-windows-amd64.exe), with --wsl telling it the
@@ -28,6 +29,15 @@ func isSelf(s *Server) bool {
 	return !s.Remote() && len(s.Args) >= 2 && s.Args[0] == "mcp" && s.Args[1] == "image"
 }
 
+// isBuiltinWSL is whether s is one of magpie's own `magpie mcp <name>`
+// servers (image, search, artifacts, browser, vision, memory, sessions,
+// api, and any added later), which an agent in WSL starts through interop
+// by the binary's path in the distro (#7696). Only image is told the
+// distro (--wsl); the others take no arguments of that kind.
+func isBuiltinWSL(s *Server) bool {
+	return isSelf(s) || ownServer(s) && len(s.Args) >= 2
+}
+
 // side is s as the file's agent is given it: magpie's own server, for an
 // agent in WSL, by the binary's path there; an error says why the agent
 // can't start s.
@@ -35,7 +45,7 @@ func (f *mcpFile) side(s *Server) (*Server, error) {
 	if !f.WSL || s.Remote() || !windowsPath.MatchString(s.Command) {
 		return s, nil
 	}
-	if !isSelf(s) || f.Distro == "" {
+	if !isBuiltinWSL(s) || f.Distro == "" {
 		return nil, fmt.Errorf("it runs a Windows program (%s), which an agent in WSL can't start: give it a command WSL has", s.Command)
 	}
 	exe, mount, err := wslExe(f.Distro, s.Command)
@@ -44,12 +54,16 @@ func (f *mcpFile) side(s *Server) (*Server, error) {
 	}
 	c := *s
 	c.Command = exe
-	c.Args = []string{"mcp", "image", "--wsl", f.Distro}
-	if mount != "/mnt/" {
-		c.Args = append(c.Args, "--mount", mount)
-	}
-	if f.Home != "" {
-		c.Args = append(c.Args, "--home", f.Home)
+	if isSelf(s) {
+		c.Args = []string{"mcp", "image", "--wsl", f.Distro}
+		if mount != "/mnt/" {
+			c.Args = append(c.Args, "--mount", mount)
+		}
+		if f.Home != "" {
+			c.Args = append(c.Args, "--home", f.Home)
+		}
+	} else {
+		c.Args = slices.Clone(s.Args)
 	}
 	if len(s.Env) > 0 {
 		// a Windows program is given only the variables WSLENV names

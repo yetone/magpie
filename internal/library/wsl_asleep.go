@@ -90,7 +90,7 @@ func (sh *shape) reaches(s *Server) bool {
 		return false
 	case sh.NoEnvRefs && (s.Remote() && hasRef(s.Headers) || !s.Remote() && hasRef(s.Env)):
 		return false
-	case !s.Remote() && windowsPath.MatchString(s.Command) && !isSelf(s):
+	case !s.Remote() && windowsPath.MatchString(s.Command) && !isBuiltinWSL(s):
 		return false
 	}
 	return true

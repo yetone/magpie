@@ -295,6 +295,100 @@ func TestWSLMagpieImage(t *testing.T) {
 	}
 }
 
+// magpie's other built-in MCP servers (search, artifacts, browser, vision,
+// memory, sessions) run through WSL's interop by their distro binary path
+// too, keeping their own subcommand arguments without --wsl/--home (#7696).
+func TestWSLMagpieBuiltinServers(t *testing.T) {
+	h := wslSandbox(t)
+	probed := 0
+	answer := "/mnt/d/tools/Magpie/magpie-windows-amd64.exe\ninterop:on\n"
+	old := wslProbe
+	wslProbe = func(distro, script string) (string, error) {
+		probed++
+		return answer, nil
+	}
+	reset := func() {
+		wslExes.Lock()
+		wslExes.at, wslExes.out = nil, nil
+		wslExes.Unlock()
+	}
+	reset()
+	t.Cleanup(func() { wslProbe = old; reset() })
+	thisMagpie(t, `D:\tools\Magpie\magpie-windows-amd64.exe`)
+
+	for _, tc := range []struct {
+		name string
+		sub  string
+	}{
+		{"magpie-search", "search"},
+		{"magpie-artifacts", "artifacts"},
+		{"magpie-browser", "browser"},
+		{"magpie-vision", "vision"},
+		{"magpie-memory", "memory"},
+		{"magpie-sessions", "sessions"},
+		{"magpie-api", "api"},
+	} {
+		srv := Server{
+			Name:      tc.name,
+			Transport: "stdio",
+			Command:   `D:\tools\Magpie\magpie-windows-amd64.exe`,
+			Args:      []string{"mcp", tc.sub},
+			Env:       map[string]string{"MAGPIE_GATEWAY": "http://127.0.0.1:4000"},
+			Agents:    []string{wslCodex, wslClaude},
+		}
+		res := ok(t)(SaveServer("", srv))
+		if len(res.Problems) != 0 {
+			t.Fatalf("%s problems: %+v", tc.name, res.Problems)
+		}
+		if !(&shape{MCP: "codex"}).reaches(&srv) {
+			t.Fatalf("asleep shape did not reach %s", tc.name)
+		}
+	}
+
+	codex := read(t, filepath.Join(h, ".codex/config.toml"))
+	for _, want := range []string{
+		"[mcp_servers.magpie-search]",
+		"[mcp_servers.magpie-artifacts]",
+		`command = "/mnt/d/tools/Magpie/magpie-windows-amd64.exe"`,
+		`args = ["mcp", "search"]`,
+		`args = ["mcp", "artifacts"]`,
+		`WSLENV = "MAGPIE_GATEWAY"`,
+	} {
+		if !strings.Contains(codex, want) {
+			t.Errorf("codex@wsl config.toml missing %s:\n%s", want, codex)
+		}
+	}
+	if strings.Contains(codex, "--wsl") || strings.Contains(codex, "--home") {
+		t.Errorf("non-image built-in server unexpectedly got --wsl/--home:\n%s", codex)
+	}
+	claude := read(t, filepath.Join(h, ".claude.json"))
+	if !strings.Contains(claude, `"/mnt/d/tools/Magpie/magpie-windows-amd64.exe"`) || !strings.Contains(claude, `"magpie-artifacts"`) {
+		t.Errorf("claude@wsl .claude.json missing translated built-in servers:\n%s", claude)
+	}
+	if probed != 1 {
+		t.Errorf("distro probed %d times, want 1 (cached)", probed)
+	}
+	if res := ok(t)(Sync()); len(res.Changed) != 0 || len(res.Problems) != 0 {
+		t.Errorf("re-sync changed something or failed: %+v", res)
+	}
+
+	// A non-magpie Windows program with "mcp search" args is still refused.
+	other := Server{Name: "other-search", Transport: "stdio", Command: `C:\tools\other.exe`, Args: []string{"mcp", "search"}, Agents: []string{wslCodex}}
+	if res, err := SaveServer("", other); err != nil || len(res.Problems) != 1 || !strings.Contains(res.Problems[0].Error, "Windows program") {
+		t.Errorf("non-magpie Windows binary should be refused: res=%+v err=%v", res, err)
+	}
+	if (&shape{MCP: "codex"}).reaches(&other) {
+		t.Error("asleep shape should not reach non-magpie Windows binary")
+	}
+
+	// Interop off is reported as an interop error for built-in servers too.
+	reset()
+	answer = "/mnt/d/tools/Magpie/magpie-windows-amd64.exe\ninterop:off\n"
+	if res, err := Sync(); err != nil || len(res.Problems) == 0 || !strings.Contains(res.Problems[0].Error, "interop") {
+		t.Errorf("interop off: res=%+v err=%v", res, err)
+	}
+}
+
 // TJHHHH on Discord: magpie kept starting WSL while they repaired it. An
 // agent made while its distro ran, which the user then stops (wsl
 // --shutdown), is no target: writing the library there would start it.
