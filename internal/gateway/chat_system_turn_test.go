@@ -20,9 +20,9 @@ import (
 // result stays where it came, said as a <system-reminder> in that turn, as
 // a Responses (#502) or Anthropic client's already is.
 //
-// The requests are the reporter's own (their 120-record prefix, request A,
-// then request B with the reply and the reminder), then a tool round that
-// repeats the reminder, as ZCode does.
+// The requests are Asher-S-Wu's own from #7204 (their 120-record prefix,
+// request A, then request B with the reply and the reminder), then a tool
+// round that repeats the reminder, as ZCode does.
 func chatReminderTurns(model string) []string {
 	var recs []string
 	for i := range 120 {
