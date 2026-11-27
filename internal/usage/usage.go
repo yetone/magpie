@@ -431,13 +431,12 @@ func Load(since time.Time) []Record {
 	defer f.Close()
 	var out []Record
 	reader := bufio.NewReaderSize(f, 64<<10)
-	var r Record // one for every line, as readLogSnapshot's
 	for {
 		b, err := reader.ReadBytes('\n')
 		if err != nil {
 			break
 		} // an unfinished line is left for the next read
-		r = Record{}
+		var r Record
 		if json.Unmarshal(b, &r) == nil && !r.IsProbe() && (since.IsZero() || !r.Time.Before(since)) {
 			out = append(out, r)
 		}
@@ -1382,9 +1381,8 @@ func LastSeen(agent string) time.Time {
 	}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
-	var r Record // one for every line, as readLogSnapshot's
 	for sc.Scan() {
-		r = Record{}
+		var r Record
 		if json.Unmarshal(sc.Bytes(), &r) == nil && r.Agent == agent && r.Via == "" && !r.IsProbe() && r.Time.After(last) {
 			last = r.Time
 		}
