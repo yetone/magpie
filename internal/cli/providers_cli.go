@@ -1821,14 +1821,8 @@ func serve() error {
 	go stats.Run(version, "serve")
 	catalog.Seed()         // the shipped copy, when models.dev can't be reached
 	go catalog.KeepFresh() // new models' prices, in a gateway left running
-	// a signed-in account's list exists only at its vendor: asked for here
-	// as the app and the terminal ask (#1789), or a headless gateway offered
-	// the agents Cursor's fallback Auto alone; asked again while one is left
-	go func() {
-		for provider.FetchNew(20 * time.Second) {
-			time.Sleep(time.Minute)
-		}
-	}()
+	// ListenAndServe fetches missing account lists while serving, including
+	// accounts signed in by another process after startup (#7945)
 	// Codex's background app-server, restarted when it has the list from
 	// before a change and no codex session is on it
 	go agent.KeepCodexDaemonCurrent(context.Background())

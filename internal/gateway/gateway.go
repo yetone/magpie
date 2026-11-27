@@ -1026,6 +1026,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		// and fetches the partner list every hour, asked for or not
 		bg.Go("provider.KeepPartnersFresh", func() { provider.KeepPartnersFresh(ctx) })
 		bg.Go("provider.KeepPluginsListed", func() { provider.KeepPluginsListed(ctx) }) // models a plugin's vendor drops or adds, while magpie runs
+		bg.Go("provider.KeepNewListed", func() { provider.KeepNewListed(ctx) })         // accounts signed in after the gateway started
 		// and renews the plugins' sign-ins as they come due, used or not (#5080)
 		bg.Go("provider.KeepPluginsSignedIn", func() { provider.KeepPluginsSignedIn(ctx) })
 		// and those a signed-in account's vendor adds (a ChatGPT plan's new GPT)

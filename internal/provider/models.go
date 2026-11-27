@@ -723,7 +723,7 @@ func fetchNewGo(timeout time.Duration) {
 	}
 	run(func() {
 		defer newFetches.Unlock()
-		fetchDue(due, timeout)
+		fetchDue(context.Background(), due, timeout)
 	})
 }
 
@@ -752,13 +752,13 @@ func FetchNew(timeout time.Duration) (missing bool) {
 	defer newRunning.Add(-1)
 	newFetches.Lock()
 	defer newFetches.Unlock()
-	return fetchNewHeld(timeout)
+	return fetchNewHeld(context.Background(), timeout)
 }
 
 // fetchNewHeld is FetchNew with newFetches held.
-func fetchNewHeld(timeout time.Duration) (missing bool) {
+func fetchNewHeld(ctx context.Context, timeout time.Duration) (missing bool) {
 	due, skipped := newDue(All())
-	if fetchDue(due, timeout) {
+	if fetchDue(ctx, due, timeout) {
 		missing = true
 	}
 	// one waiting to be asked again, unless another's fetch listed it
@@ -807,20 +807,23 @@ func newDue(ps []Provider) (due, skipped []newFetch) {
 
 // fetchDue asks each of due for its list, each for at most timeout, and
 // reports whether one failed; newFetches held.
-func fetchDue(due []newFetch, timeout time.Duration) (failed bool) {
+func fetchDue(ctx context.Context, due []newFetch, timeout time.Duration) (failed bool) {
 	for _, f := range due {
+		if ctx.Err() != nil {
+			return true
+		}
 		p := f.p
 		// listed since by another's fetch, as a plugin's accounts are
 		if _, ok := p.Listed(); ok && !f.decide {
 			continue
 		}
 		newFetches.m[p.ID] = time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		fctx, cancel := context.WithTimeout(ctx, timeout)
 		var err error
 		if f.decide && p.Account == nil {
-			_, err = p.fetchDecide(p.ownRequests(p.Via(ctx), probelog.KindList))
+			_, err = p.fetchDecide(p.ownRequests(p.Via(fctx), probelog.KindList))
 		} else {
-			_, err = p.Fetch(ctx)
+			_, err = p.Fetch(fctx)
 		}
 		if err != nil {
 			log.Println(p.ID + ": " + err.Error())
