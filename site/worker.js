@@ -117,7 +117,10 @@ export default {
       const got = await liveAPI(req, env, ctx);
       if (got) return got;
     }
-    if (url.pathname === "/api/shares" || url.pathname.startsWith("/api/shares/")) return shareAPI(req, env, ctx);
+    // a path neither knows (a malformed id, an unknown call) is a 404,
+    // not a Worker exception
+    if (url.pathname === "/api/shares" || url.pathname.startsWith("/api/shares/"))
+      return (await shareAPI(req, env, ctx)) || Response.json({ error: "no such call" }, { status: 404 });
     if (url.pathname.startsWith("/a/")) {
       const got = await sharePage(req, env);
       if (got) return got;
