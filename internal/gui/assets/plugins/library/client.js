@@ -8393,6 +8393,20 @@ magpie.plugin("library", (ctx) => {
       p.dataset.why = "found";
       out.push(p);
     }
+    // the router's description, in the agent's prompt, has room for so
+    // many names; the rest are only in the list it opens (niuniu_8964 on X)
+    const unnamed = new Map();
+    for (const a of skillAgents()) {
+      if (!a.gone && a.skillRouter === "on" && a.routerUnnamed > 0) unnamed.set(a.routerUnnamed, [...(unnamed.get(a.routerUnnamed) || []), a.name]);
+    }
+    for (const [n, who] of unnamed) {
+      const agents = who.join(", ");
+      const p = el("p", "lib-aside lib-hub-why", n === 1
+        ? t("{agents} sees 1 of the router's skills only once it opens the router: its description has no room to name it.", { agents })
+        : t("{agents} sees {n} of the router's skills only once it opens the router: its description has no room to name them.", { n, agents }));
+      p.dataset.why = "unnamed";
+      out.push(p);
+    }
     return out;
   }
 

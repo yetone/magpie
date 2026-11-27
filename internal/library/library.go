@@ -194,6 +194,10 @@ type Applied struct {
 	// Router: magpie put the skill router's entry, magpie-skills, in the
 	// agent's skills folder
 	Router bool `json:"router,omitempty"`
+	// RouterUnnamed is how many of the skills the router lists its
+	// description had no room to name (routerDesc): the agent finds them
+	// only in its SKILL.md
+	RouterUnnamed int `json:"routerUnnamed,omitempty"`
 	// RouterRules are the rules magpie put in Claude Code's
 	// permissions.allow so it reads a listed skill without asking.
 	RouterRules []string `json:"routerRules,omitempty"`

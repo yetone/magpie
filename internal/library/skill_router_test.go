@@ -103,7 +103,7 @@ func TestSkillRouter(t *testing.T) {
 	}
 	md := read(t, filepath.Join(entry, "SKILL.md"))
 	m := parseMeta([]byte(md))
-	if m.Name != RouterSkill || m.Description == "" || len(m.Description) > routerDescMax {
+	if m.Name != RouterSkill || m.Description == "" || descLen(m.Description) > routerDescMax {
 		t.Fatalf("front matter: %+v", m)
 	}
 	if strings.Contains(md, "## deploy") || !strings.Contains(md, "## pdf") || !strings.Contains(md, "## xlsx") {
@@ -430,13 +430,156 @@ func TestRouterDescFits(t *testing.T) {
 		names = append(names, fmt.Sprintf("skill-%03d-with-a-long-name", i))
 		descs = append(descs, strings.Repeat("说明文字", 60))
 	}
-	d := routerDesc(names, func(i int) string { return descs[i] })
-	if len(d) > routerDescMax || !utf8.ValidString(d) {
-		t.Fatalf("%d bytes, valid %v", len(d), utf8.ValidString(d))
+	d, unnamed := routerDesc(names, func(i int) string { return descs[i] })
+	if descLen(d) > routerDescMax || !utf8.ValidString(d) || unnamed == 0 {
+		t.Fatalf("%d long, valid %v, %d unnamed", descLen(d), utf8.ValidString(d), unnamed)
 	}
-	few := routerDesc([]string{"pdf"}, func(int) string { return "Read PDFs. Use for any .pdf file" })
-	if !strings.Contains(few, "pdf (Read PDFs)") {
-		t.Fatalf("one skill: %q", few)
+	few, unnamed := routerDesc([]string{"pdf"}, func(int) string { return "Read PDFs. Use for any .pdf file" })
+	if !strings.Contains(few, "pdf (Read PDFs)") || unnamed != 0 {
+		t.Fatalf("one skill: %q, %d unnamed", few, unnamed)
+	}
+}
+
+// routerSkills93 are 93 skills' names, as a library of that size has them
+// (niuniu_8964 on X), sorted as writeRouter lists them, one in Chinese.
+func routerSkills93() []string {
+	names := []string{
+		"agent-browser", "api-design-review", "arxiv-digest", "aws-cost-audit", "bash-strict-mode",
+		"bigquery-sql", "brand-voice", "changelog-writer", "chart-from-csv", "ci-flake-hunter",
+		"cloudflare-workers", "code-review-checklist", "commit-message", "competitive-brief", "contract-redline",
+		"cron-job-doctor", "css-layout-debug", "d3-charts", "data-cleaning", "db-migration-plan",
+		"dependency-upgrade", "design-tokens", "docker-compose-fix", "docx", "email-triage",
+		"eslint-config", "expense-report", "feature-flag-cleanup", "figma-to-code", "financial-model",
+		"git-bisect", "github-actions", "go-concurrency", "grant-proposal", "graphql-schema",
+		"helm-chart", "i18n-strings", "incident-postmortem", "interview-loop", "ios-release",
+		"jira-grooming", "k8s-debug", "kotlin-coroutines", "landing-page-copy", "latex-paper",
+		"lighthouse-perf", "log-query", "meeting-notes", "memory-leak-hunt", "mermaid-diagrams",
+		"migration-rollback", "mobile-a11y", "monorepo-tooling", "nextjs-app-router", "notion-export",
+		"oncall-handoff", "openapi-client", "pdf", "playwright-tests", "pptx",
+		"pr-description", "privacy-review", "product-spec", "prompt-eval", "python-packaging",
+		"rails-upgrade", "react-hooks-audit", "readme-polish", "regex-builder", "release-notes",
+		"rust-borrowck-help", "sales-call-prep", "security-threat-model", "seo-audit", "sql-optimizer",
+		"sqlite-forensics", "stripe-billing", "swiftui-previews", "tailwind-refactor", "terraform-plan",
+		"test-coverage-gaps", "tripwire-reuse-first", "typescript-strict", "ui-copy-review", "user-interview-synth",
+		"vector-search", "video-subtitles", "web-scraping", "webhook-debug", "xlsx",
+		"youtube-summary", "zod-schemas", "周报生成",
+	}
+	slices.Sort(names)
+	return names
+}
+
+// With more skills than the description has room to name, it names as
+// many as fit, each whole and in their order, and says how many more the
+// SKILL.md lists (niuniu_8964 on X: with 93 skills it was cut in the middle
+// of a name, and 37 of them were named nowhere an agent sees first).
+func TestRouterDescWholeNames(t *testing.T) {
+	names := routerSkills93()
+	if len(names) != 93 {
+		t.Fatalf("%d names", len(names))
+	}
+	desc := func(i int) string {
+		return "Use when the user asks for " + names[i] + " work: it walks through the steps, the checks to run and the mistakes to avoid. Includes scripts and templates."
+	}
+	d, unnamed := routerDesc(names, desc)
+	if descLen(d) > routerDescMax || !utf8.ValidString(d) {
+		t.Fatalf("%d long, valid %v: %q", descLen(d), utf8.ValidString(d), d)
+	}
+	if strings.Contains(d, "…") {
+		t.Fatalf("cut: %q", d)
+	}
+	if unnamed <= 0 || unnamed >= len(names) {
+		t.Fatalf("%d unnamed: %q", unnamed, d)
+	}
+	tail := fmt.Sprintf(", and %d more, each listed in this skill's SKILL.md.", unnamed)
+	_, list, found := strings.Cut(strings.TrimSuffix(d, tail), "SKILL.md: ")
+	if !found || !strings.HasSuffix(d, tail) {
+		t.Fatalf("no count of the rest: %q", d)
+	}
+	named := len(names) - unnamed
+	if got := strings.Split(list, ", "); !slices.Equal(got, names[:named]) {
+		t.Fatalf("named %q, want %q", got, names[:named])
+	}
+	// no room was left for one more
+	if descLen(d)+len(", ")+descLen(names[named]) <= routerDescMax {
+		t.Fatalf("room for %s too: %d long", names[named], descLen(d))
+	}
+	// the text is in the agent's prompt: no app or vendor named
+	for _, w := range []string{"magpie", "Magpie", "Codex", "Claude", "OpenAI", "Anthropic"} {
+		if strings.Contains(d, w) {
+			t.Fatalf("names %s: %q", w, d)
+		}
+	}
+}
+
+// The limit is a count of characters, as Codex counts it, not of bytes: a
+// description in Chinese that fits in 1024 characters goes whole, though
+// it is past 1024 bytes.
+func TestRouterDescCountsCharacters(t *testing.T) {
+	var names []string
+	for i := range 15 {
+		names = append(names, fmt.Sprintf("skill-%02d", i))
+	}
+	const zh = "把本周的会议纪要提交记录和待办事项整理成一份周报发给团队并抄送项目负责人和产品经理以及设计师"
+	d, unnamed := routerDesc(names, func(int) string { return zh })
+	if unnamed != 0 || len(d) <= routerDescMax || descLen(d) > routerDescMax {
+		t.Fatalf("%d unnamed, %d bytes, %d long: %q", unnamed, len(d), descLen(d), d)
+	}
+	for _, n := range names {
+		if !strings.Contains(d, n+" ("+zh+")") {
+			t.Fatalf("%s's description cut: %q", n, d)
+		}
+	}
+	// a character past U+FFFF counts two, as a UTF-16 count does
+	if got := descLen("a周😀"); got != 4 {
+		t.Fatalf("descLen: %d", got)
+	}
+}
+
+// The page reads how many skills the router's description leaves unnamed
+// for each agent given the router, from what the last sync wrote.
+func TestSkillRouterUnnamedInView(t *testing.T) {
+	h := sandbox(t)
+	src := filepath.Join(h, "src")
+	// a library's skill goes by a name fit for a file (nameFor): the
+	// Chinese one by its folder's
+	var names []string
+	for _, n := range routerSkills93() {
+		dir := n
+		if n == "周报生成" {
+			dir = "weekly-report"
+		}
+		skill(t, filepath.Join(src, dir), n, "Use for "+n+" work, with its checks and scripts")
+		names = append(names, dir)
+	}
+	slices.Sort(names)
+	ok(t)(InstallSkills(src, names, []string{"claude"}))
+	if got := agentView(t, routerView(t), "claude").RouterUnnamed; got != 0 {
+		t.Fatalf("router off: %d unnamed", got)
+	}
+	ok(t)(SetSkillRouter(true))
+	md := read(t, filepath.Join(h, ".claude", "skills", RouterSkill, "SKILL.md"))
+	desc := parseMeta([]byte(md)).Description
+	// every skill is still in the body
+	for _, n := range names {
+		if !strings.Contains(md, "## "+n+"\n") {
+			t.Fatalf("%s not listed", n)
+		}
+	}
+	_, want := routerDesc(names, func(int) string { return "" })
+	got := agentView(t, routerView(t), "claude").RouterUnnamed
+	if want == 0 || got != want || !strings.Contains(desc, fmt.Sprintf("and %d more", want)) {
+		t.Fatalf("%d unnamed in the view, want %d; description %q", got, want, desc)
+	}
+	// with few enough kept out of the router, every name fits again
+	for _, n := range names[:60] {
+		ok(t)(SkillRouterHow(n, true))
+	}
+	if got := agentView(t, routerView(t), "claude").RouterUnnamed; got != 0 {
+		t.Fatalf("33 listed: %d unnamed", got)
+	}
+	ok(t)(SetSkillRouter(false))
+	if got := agentView(t, routerView(t), "claude").RouterUnnamed; got != 0 {
+		t.Fatalf("router off again: %d unnamed", got)
 	}
 }
 

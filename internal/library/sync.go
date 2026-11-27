@@ -540,6 +540,9 @@ type AgentView struct {
 	// own link (routerWhy): copies, liveagent, shared, taken or own; or
 	// "none" for an agent whose folder takes it and has no skill to list
 	SkillRouter string `json:"skillRouter,omitempty"`
+	// RouterUnnamed, for an agent given the router, is how many of the
+	// skills it lists the description in the agent's prompt doesn't name
+	RouterUnnamed int `json:"routerUnnamed,omitempty"`
 	// How is the way it is given its skills, link or copy, and HowOwn its
 	// own over the library's; MustCopy is one that can only take copies
 	// (in WSL, Claude Desktop, LiveAgent). CopyWhy is why it gets copies
@@ -873,6 +876,8 @@ func readView(problems []Problem, kind readKind) (*View, error) {
 					// the folder takes it, yet no skill is listed there:
 					// none is ticked for the agent, or each is kept direct
 					av.SkillRouter = routerNone
+				} else if a != nil {
+					av.RouterUnnamed = a.RouterUnnamed
 				}
 			}
 		}

@@ -5,7 +5,9 @@
 // button that keeps it out of the router (skills/router-direct), and a
 // skill only for the user to type gets none. A skill kept out shows "Not
 // through the router", and the same button lists it again. An agent that
-// keeps its own skills is named under the row with why. In every
+// keeps its own skills is named under the row with why, and one whose
+// router description has no room for every name with how many are only in
+// its list. In every
 // language, both engines, wide and narrow: no sideways scroll.
 // No backend: the API is faked here.
 const assert = require("node:assert/strict");
@@ -23,7 +25,9 @@ const fixture = (st) => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   skillRouter: st.on,
   agents: [
-    { id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, ...(st.on ? { skillRouter: "on" } : {}) },
+    { id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, ...(st.on ? { skillRouter: "on", routerUnnamed: 37 } : {}) },
+    { id: "codex", name: "Codex", icon: "", skills: `${HOME}/.codex/skills`, ...(st.on ? { skillRouter: "on", routerUnnamed: 1 } : {}) },
+    { id: "opencode", name: "OpenCode", icon: "", skills: `${HOME}/.config/opencode/skills`, ...(st.on ? { skillRouter: "on", routerUnnamed: 37 } : {}) },
     { id: "pi", name: "Pi", icon: "", skills: `${HOME}/.agents/skills`, ...(st.on ? { skillRouter: "shared" } : {}) },
   ],
   instructions: { agents: [], sets: [] }, servers: [], foundServers: [], projects: [], foundSkills: [{ name: "mine", description: "Its own", agents: ["claude"] }], problems: [],
@@ -101,6 +105,14 @@ const crowded = (page) => page.evaluate(() => {
   return { n: kids.length, out };
 });
 
+// a control the list's length has put under the Library's sticky head
+// (four lines over the list in German at 420px) is brought to the middle
+// first, as a reader scrolls to it
+const press = async (loc) => {
+  await loc.evaluate((e) => e.scrollIntoView({ block: "center" }));
+  await loc.click();
+};
+
 const shot = async (page, name) => {
   if (!process.env.ARTIFACT_DIR) return;
   await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
@@ -169,13 +181,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // its prompt, the router can't list it, and the page says so
         const found = v.locator('.lib-hub-why[data-why="found"]');
         assert.equal((await found.textContent()).trim(), w("{agents} has skills of its own that aren't in the library, so the router doesn't list them: bring them in below.", { agents: "Claude Code" }));
-        assert.equal(await v.locator(".lib-hub-why").count(), 2);
+        // the router's description has no room for every name (niuniu_8964
+        // on X): how many are only in its list, the agents with the same
+        // count on one line
+        const unnamed = v.locator('.lib-hub-why[data-why="unnamed"]');
+        assert.deepEqual((await unnamed.allTextContents()).map((s) => s.trim()), [
+          w("{agents} sees {n} of the router's skills only once it opens the router: its description has no room to name them.", { n: 37, agents: "Claude Code, OpenCode" }),
+          w("{agents} sees 1 of the router's skills only once it opens the router: its description has no room to name it.", { agents: "Codex" }),
+        ]);
+        assert.equal(await v.locator(".lib-hub-why").count(), 4);
         assert.deepEqual(await sideways(page), []);
         { const c = await crowded(page); assert.ok(c.n > 2, "the body is measured"); assert.deepEqual(c.out, [], "cards apart, on"); }
         await shot(page, `${engine}-${lang}-${width}-on`);
 
         // pdf kept out of the router
-        await pdf.locator(".lib-routedirect").click();
+        await press(pdf.locator(".lib-routedirect"));
         await v.locator(".lib-tag.lib-direct").waitFor();
         assert.deepEqual(st.sent.shift(), ["direct", { name: "pdf", on: true }]);
         assert.equal((await v.locator(".lib-tag.lib-direct").textContent()).trim(), w("Not through the router"));
@@ -184,12 +204,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await shot(page, `${engine}-${lang}-${width}-direct`);
 
         // the same button lists it again
-        await v.locator(".lib-routedirect.on").click();
+        await press(v.locator(".lib-routedirect.on"));
         await v.locator(".lib-tag.lib-direct").waitFor({ state: "detached" });
         assert.deepEqual(st.sent.shift(), ["direct", { name: "pdf", on: false }]);
 
         // off again: no router buttons
-        await v.locator(".lib-skillrouter .lib-switch").click();
+        await press(v.locator(".lib-skillrouter .lib-switch"));
         await v.locator(".lib-routedirect").first().waitFor({ state: "detached" });
         assert.deepEqual(st.sent.shift(), ["router", { on: false }]);
         assert.deepEqual(st.sent, []);

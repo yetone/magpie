@@ -79,9 +79,28 @@ const (
 	routerNone      = "none"      // its folder takes it, but no skill is listed there
 )
 
-// routerDescMax is the most a SKILL.md's description may be: Codex
-// refuses a skill whose description is longer.
+// routerDescMax is the most a SKILL.md's description may be: the Agent
+// Skills spec's 1024 characters, past which Codex refused the skill (its
+// loader's validate_len, counting chars().count(), until at least the
+// codex-core-skills split, #15749; its source of 2026-11-24 checks no
+// more). It is measured by descLen.
 const routerDescMax = 1024
+
+// descLen is s's length as routerDescMax is measured: in UTF-16 units,
+// which is Codex's count of characters for all but the characters past
+// U+FFFF (two each here), and the length an agent in JavaScript counts. A
+// byte count would take a CJK description as three times as long as it is
+// (niuniu_8964 on X: the router's description was cut at 1,021 characters).
+func descLen(s string) int {
+	n := 0
+	for _, r := range s {
+		n++
+		if r > 0xFFFF {
+			n++
+		}
+	}
+	return n
+}
 
 // SetSkillRouter turns the router on or off: on, each agent that can take
 // it is given magpie-skills in place of the links of the skills it lists;
@@ -206,16 +225,17 @@ func (l *Library) placeRouter(t *Target, routed, slash map[string]bool, a *Appli
 			res.changed(id)
 		}
 		os.RemoveAll(dir)
-		a.Router = false
+		a.Router, a.RouterUnnamed = false, 0
 		l.routerAllow(t, nil, a, res)
 		l.routerCommands(t, nil, a, res)
 		return
 	}
-	changed, at, err := writeRouter(dir, t.Skills, routed)
+	changed, at, unnamed, err := writeRouter(dir, t.Skills, routed)
 	if err != nil {
 		res.fail(id, "skill:"+RouterSkill, err)
 		return
 	}
+	a.RouterUnnamed = unnamed
 	placeStubs(t, slash, at, res)
 	if !routerOurs(p) || realDir(p) != realDir(dir) {
 		unlink(p) // magpie's, to an old folder: routerWhy left a user's alone
@@ -344,8 +364,9 @@ func (l *Library) routerAllow(t *Target, want []string, a *Applied, res *Result)
 
 // writeRouter writes the router's folder dir for the skills folder at
 // skills: a link under .skills to each skill routed, and the SKILL.md
-// that lists them. It reports whether anything there changed.
-func writeRouter(dir, skills string, routed map[string]bool) (bool, map[string]string, error) {
+// that lists them. It reports whether anything there changed, and how many
+// of the skills the description has no room to name (routerDesc).
+func writeRouter(dir, skills string, routed map[string]bool) (bool, map[string]string, int, error) {
 	names := slices.Sorted(func(yield func(string) bool) {
 		for n := range routed {
 			if !yield(n) {
@@ -355,14 +376,14 @@ func writeRouter(dir, skills string, routed map[string]bool) (bool, map[string]s
 	})
 	links := filepath.Join(dir, ".skills")
 	if err := os.MkdirAll(links, 0o755); err != nil {
-		return false, nil, err
+		return false, nil, 0, err
 	}
 	changed := false
 	es, _ := os.ReadDir(links)
 	for _, e := range es {
 		if !routed[e.Name()] {
 			if err := os.RemoveAll(filepath.Join(links, e.Name())); err != nil {
-				return false, nil, err
+				return false, nil, 0, err
 			}
 			changed = true
 		}
@@ -389,7 +410,7 @@ func writeRouter(dir, skills string, routed map[string]bool) (bool, map[string]s
 		ats[n] = at
 	}
 	var b strings.Builder
-	desc := routerDesc(names, func(i int) string { return list[i].desc })
+	desc, unnamed := routerDesc(names, func(i int) string { return list[i].desc })
 	q, _ := json.Marshal(desc)
 	fmt.Fprintf(&b, "---\nname: %s\ndescription: %s\n---\n\n", RouterSkill, q)
 	b.WriteString("# The user's skills\n\n")
@@ -411,15 +432,15 @@ func writeRouter(dir, skills string, routed map[string]bool) (bool, map[string]s
 	}
 	md := filepath.Join(dir, "SKILL.md")
 	if old, err := os.ReadFile(md); err == nil && string(old) == b.String() {
-		return changed, ats, nil
+		return changed, ats, unnamed, nil
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, nil, err
+		return false, nil, 0, err
 	}
 	tmp := md + ".tmp"
 	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
-		return false, nil, err
+		return false, nil, 0, err
 	}
-	return true, ats, os.Rename(tmp, md)
+	return true, ats, unnamed, os.Rename(tmp, md)
 }
 
 // routedAt is the folder of the routed skill n the router's SKILL.md
@@ -516,8 +537,12 @@ func routerCommand(n, at string) []byte {
 }
 
 // routerDesc is the router's description: what it is, then each skill's
-// name with the start of its own description, cut to what Codex takes.
-func routerDesc(names []string, desc func(int) string) string {
+// name with the start of its own description, at most routerDescMax long.
+// With no room for every name even alone, it names as many as fit, whole
+// and in their order, and says how many more the SKILL.md lists; the
+// second value is how many it leaves unnamed. It goes in the agent's
+// prompt, so it names neither magpie nor any vendor.
+func routerDesc(names []string, desc func(int) string) (string, int) {
 	const head = "The user's skills. Read this before any task one of them may fit, to find the skill and read its SKILL.md: "
 	short := func(d string, n int) string {
 		if i := strings.IndexAny(d, ".。;；\n"); i > 0 {
@@ -536,16 +561,28 @@ func routerDesc(names []string, desc func(int) string) string {
 				parts[i] += " (" + d + ")"
 			}
 		}
-		if s := head + strings.Join(parts, "; ") + "."; len(s) <= routerDescMax {
-			return s
+		if s := head + strings.Join(parts, "; ") + "."; descLen(s) <= routerDescMax {
+			return s, 0
 		}
 	}
-	s := head + strings.Join(names, ", ")
-	if len(s) > routerDescMax-1 {
-		r := []rune(s[:routerDescMax-len("…")])
-		s = strings.TrimRight(string(r[:len(r)-1]), ", ") + "…"
+	more := func(k int) string {
+		if k == 0 {
+			return fmt.Sprintf("%d skills, each listed in this skill's SKILL.md.", len(names))
+		}
+		return fmt.Sprintf(", and %d more, each listed in this skill's SKILL.md.", len(names)-k)
 	}
-	return s
+	fit, at := 0, descLen(head)
+	for k, name := range names {
+		if k > 0 {
+			at += len(", ")
+		}
+		at += descLen(name)
+		if at+descLen(more(k+1)) > routerDescMax {
+			break
+		}
+		fit = k + 1
+	}
+	return head + strings.Join(names[:fit], ", ") + more(fit), len(names) - fit
 }
 
 // slashAgent is whether the agent t's loader keeps a skill whose SKILL.md
