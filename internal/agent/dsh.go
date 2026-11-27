@@ -1940,6 +1940,12 @@ func dshPutProviders(providers *yaml.Node, on bool, models []catalog.Model, gw s
 	for _, m := range models {
 		byRoute[dshRouteOf(m)] = append(byRoute[dshRouteOf(m)], m)
 	}
+	type routeOf struct {
+		key string
+		cfg dshPiRoute
+		cur *yaml.Node
+	}
+	var routes []routeOf
 	for _, k := range dshKinds {
 		ms := byRoute[k.key]
 		if len(ms) == 0 && (k.key != dshRoute || len(models) > 0) {
@@ -1952,10 +1958,16 @@ func dshPutProviders(providers *yaml.Node, on bool, models []catalog.Model, gw s
 		if v := yamlKey(yamlKey(providers, k.key), "api"); v != nil && v.Kind == yaml.ScalarNode {
 			api = v.Value
 		}
+		routes = append(routes, routeOf{k.key, dshKindConfig(k, ms, api, gw), yamlKey(providers, k.key)})
+	}
+	cfgs, curs := make([]*dshPiRoute, len(routes)), make([]*yaml.Node, len(routes))
+	for i := range routes {
+		cfgs[i], curs[i] = &routes[i].cfg, routes[i].cur
+	}
+	dshOutputsKept(cfgs, curs)
+	for _, r := range routes {
 		var route yaml.Node
-		cfg := dshKindConfig(k, ms, api, gw)
-		cur := yamlKey(providers, k.key)
-		dshOutputsKept(&cfg, cur)
+		cfg, cur := r.cfg, r.cur
 		if err := route.Encode(cfg); err != nil {
 			return err
 		}
@@ -1970,7 +1982,7 @@ func dshPutProviders(providers *yaml.Node, on bool, models []catalog.Model, gw s
 				yamlSetKey(cur, route.Content[j].Value, route.Content[j+1])
 			}
 		} else {
-			yamlSetKey(providers, k.key, &route)
+			yamlSetKey(providers, r.key, &route)
 		}
 	}
 	return nil
@@ -2020,21 +2032,32 @@ func dshKeepCompat(cur, route *yaml.Node) {
 }
 
 // dshOutputsKept keeps a maxTokens the user typed into one of magpie's
-// models on route cur, in dsh's Models page or by hand, in r, the route as
-// magpie writes it (outputsKept). One record serves every file dsh keeps
-// the route in: what magpie wanted for a model is the same in each.
-func dshOutputsKept(r *dshPiRoute, cur *yaml.Node) {
+// models on routes curs, in dsh's Models page or by hand, in rs, the
+// routes as magpie writes them (outputsKept), rs[i] the one curs[i] is in
+// the file now. One record serves every route and every file dsh keeps
+// them in: what magpie wanted for a model is the same in each. Every
+// route goes in one call: a call a route wrote the record with only its
+// own models, so each sync wrote stash.json once a route, each dropping
+// what the routes before had recorded (and every cache built on the files
+// read with it), and a maxTokens typed into a model of any route but the
+// last had no record to stay by, and was written over.
+func dshOutputsKept(rs []*dshPiRoute, curs []*yaml.Node) {
 	want := map[string]int{}
-	for _, m := range r.Models {
-		if m.MaxTokens > 0 {
-			want[m.ID] = m.MaxTokens
+	for _, r := range rs {
+		for _, m := range r.Models {
+			if m.MaxTokens > 0 {
+				want[m.ID] = m.MaxTokens
+			}
 		}
 	}
 	if len(want) == 0 {
 		return
 	}
 	have := map[string]int{}
-	if cur != nil && cur.Kind == yaml.MappingNode {
+	for _, cur := range curs {
+		if cur == nil || cur.Kind != yaml.MappingNode {
+			continue
+		}
 		if ms := yamlKey(cur, "models"); ms != nil && ms.Kind == yaml.SequenceNode {
 			for _, m := range ms.Content {
 				id, mt := yamlKey(m, "id"), yamlKey(m, "maxTokens")
@@ -2046,9 +2069,11 @@ func dshOutputsKept(r *dshPiRoute, cur *yaml.Node) {
 		}
 	}
 	kept := outputsKept("dsh:routes", want, have)
-	for i := range r.Models {
-		if n := kept[r.Models[i].ID]; n > 0 {
-			r.Models[i].MaxTokens = n
+	for _, r := range rs {
+		for i := range r.Models {
+			if n := kept[r.Models[i].ID]; n > 0 {
+				r.Models[i].MaxTokens = n
+			}
 		}
 	}
 }
