@@ -2559,7 +2559,14 @@ signed in before the plugin gave the API. `providers.json`'s `searchesSet`
 records that the list held one, set on every read and store where it does,
 so a list the user emptied stays empty. Search APIs are asked only after
 the providers (or first, when the user put them first), so the API added
-adds a way to search and takes none away.
+adds a way to search and takes none away. A list that holds a withdrawn
+plugin's API (`searchSuccessors`: the Antigravity plugin's
+`antigravity:antigravity`, which users set up by hand while agy-cli had no
+search) gets its successor's (`agy-cli:agy`) in front of it instead, once
+that provider is signed in (`carrySearch`, Kayphoon on #7632): switched off
+and mixed as the old one, the old one kept after it, and each old API
+carried once (`searchesCarried`), so agy removed after that stays removed.
+Covered by `TestWithdrawnSearchCarriedToAgy`.
 Its pages are cleaned like a built-in's (`searchPlain`, `clipText`, six at
 most). It is asked with the time left of a quarter of the search's limit, and
 `plugin.RunSearch` returns when that is out, though the plugin's own fetch may

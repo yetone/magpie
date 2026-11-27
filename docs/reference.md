@@ -1569,8 +1569,10 @@ on the command line, where the plugin's name or the id alone will do when it
 names one API; an empty `magpie search` lists the plugins' APIs). An API
 that signs in to the plugin's own provider (agy-cli's) is added by itself
 when you sign in to that provider and no search API was ever set up; one you
-remove stays removed. magpie keeps its keys (several, tried in turn, a refused
-one resting), its order and its place in the request log, masks the query
+remove stays removed. A list that has the withdrawn Antigravity plugin's
+search gets agy-cli's in front of it, once, while you are signed in to
+agy-cli. magpie keeps its keys (several, tried in turn, a refused one
+resting), its order and its place in the request log, masks the query
 as it does for every search API, and asks the plugin only while the
 plugin is on and the Web search plugin is.
 

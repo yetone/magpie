@@ -819,6 +819,10 @@ type file struct {
 	// user's (they removed the last); magpie adds none of its own then
 	// (AdoptSignedInSearch). Kept from the read on, whatever is stored.
 	SearchesSet bool `json:"searchesSet,omitempty"`
+	// SearchesCarried are the withdrawn plugins' search APIs whose
+	// successor's API magpie put beside them once (carrySearch), so one
+	// the user removes after that stays removed.
+	SearchesCarried []string `json:"searchesCarried,omitempty"`
 	// NoAutoGroups: the user turned off the groups magpie finds on its
 	// own (SetAutoGroups); the groups they made or changed stay.
 	NoAutoGroups bool `json:"noAutoGroups,omitempty"`

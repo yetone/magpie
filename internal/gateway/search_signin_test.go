@@ -239,3 +239,138 @@ func TestSignedInSearchAdopted(t *testing.T) {
 	}
 	adopt(seek.ID)
 }
+
+// A search list holding the withdrawn Antigravity plugin's search API,
+// which Kayphoon (#7632) set up by hand while agy-cli had none, gets
+// agy-cli's in front of it once agy-cli is signed in, and a search then
+// asks agy: the list was never empty, so the adoption above left it as it
+// was and agy was never used. The old entry stays after it, switched off
+// and mixed as it was, and it is carried once: agy removed by the user
+// stays removed, and one the user put on the list already is not added
+// again.
+func TestWithdrawnSearchCarriedToAgy(t *testing.T) {
+	bun := testenv.Bun(t)
+	fresh(t)
+	t.Setenv("MAGPIE_BUN", bun)
+	t.Cleanup(plugin.Settle)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	// a plugin of agy-cli's id and search hook: agy-cli:agy, as the real
+	// one's, signing in as its provider agy-cli
+	dir := filepath.Join(t.TempDir(), "agy-cli")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	js := `export default async () => ({
+  auth: { provider: "agy-cli", methods: [{ type: "api", label: "agy" }] },
+  search: {
+    agy: { name: "Antigravity (agy)", auth: "agy-cli", async execute({ query }, ctx) {
+      const a = await ctx.getAuth()
+      return [{ title: "agy " + a.accountId, url: "https://agy.invalid/" + query, text: "found" }]
+    } },
+  },
+})
+`
+	if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte(js), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugin.Add(ctx, dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugin.Providers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	const agy, old = "agy-cli:agy", "antigravity:antigravity"
+	if _, ok := provider.SearchVendorOf(agy); !ok {
+		t.Fatalf("no %s in %+v", agy, provider.AllSearchVendors())
+	}
+	// Kayphoon's list: a SearXNG, then the old plugin's API, whose plugin
+	// is gone; written as magpie wrote it, vendors and all
+	writeList := func(list []map[string]any, carried []string) {
+		t.Helper()
+		b, err := os.ReadFile(provider.Path())
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		m := map[string]any{}
+		if len(b) > 0 {
+			if err := json.Unmarshal(b, &m); err != nil {
+				t.Fatal(err)
+			}
+		}
+		m["searches"], m["searchesSet"] = list, true
+		if carried == nil {
+			delete(m, "searchesCarried")
+		} else {
+			m["searchesCarried"] = carried
+		}
+		b, _ = json.Marshal(m)
+		if err := os.WriteFile(provider.Path(), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeList([]map[string]any{{"vendor": "searxng", "url": "https://searx.example"}, {"vendor": old, "mix": true}}, nil)
+	adopt := func(want string) {
+		t.Helper()
+		id, err := provider.AdoptSignedInSearch()
+		if err != nil || id != want {
+			t.Fatalf("adopted %q %v, want %q", id, err, want)
+		}
+	}
+	list := func() string {
+		var out []string
+		for _, a := range provider.StoredSearchAPIs() {
+			s := a.Vendor
+			if a.Off {
+				s += "(off)"
+			}
+			if a.Mix {
+				s += "(mix)"
+			}
+			out = append(out, s)
+		}
+		return strings.Join(out, " ")
+	}
+
+	adopt("") // agy-cli not signed in: nothing yet
+	if got := list(); got != "searxng "+old+"(mix)" {
+		t.Fatalf("before the sign-in: %s", got)
+	}
+	later := time.Now().Add(time.Hour).UnixMilli()
+	if _, err := plugin.Import(ctx, "agy-cli", map[string]any{"type": "oauth", "access": "acc", "refresh": "r", "expires": later, "accountId": "k@agy"}); err != nil {
+		t.Fatal(err)
+	}
+	adopt(agy)
+	if got := list(); got != "searxng "+agy+"(mix) "+old+"(mix)" {
+		t.Fatalf("carried: %s", got)
+	}
+	// a search asks agy: the old plugin is gone, so agy is the one API
+	// besides the SearXNG, which is taken out here
+	if err := provider.SwitchSearchAPI("searxng", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, hits, err := New().apiSearch(ctx, "go"); err != nil || len(hits) != 1 || hits[0].Title != "agy k@agy" {
+		t.Fatalf("the search after the carry: %+v %v", hits, err)
+	}
+	adopt("") // once
+	if err := provider.RemoveSearchAPI(agy); err != nil {
+		t.Fatal(err)
+	}
+	adopt("") // removed by the user: stays removed
+	if got := list(); got != "searxng(off) "+old+"(mix)" {
+		t.Fatalf("after removing agy: %s", got)
+	}
+
+	// switched off, the old one gives agy switched off; one the user had
+	// put on the list already stays where they put it
+	writeList([]map[string]any{{"vendor": old, "off": true}}, nil)
+	adopt(agy)
+	if got := list(); got != agy+"(off) "+old+"(off)" {
+		t.Fatalf("an old one switched off: %s", got)
+	}
+	writeList([]map[string]any{{"vendor": old}, {"vendor": agy}}, nil)
+	adopt("")
+	if got := list(); got != old+" "+agy {
+		t.Fatalf("agy set up already: %s", got)
+	}
+}
