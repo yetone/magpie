@@ -55,7 +55,7 @@ func lastQuotasPath() string { return filepath.Join(filepath.Dir(Path()), "quota
 // read ran out of time and is asked again (usage.mjs's DUE_FOR_RENEWAL,
 // STILL_READING and its timeouts). Its quota showed nothing at all an
 // hour after a chat (punk2sang on X).
-var passing = lazyre.New(`(?i)is due to be renewed|is still reading|asked again in a minute|not read yet|a setup-token can't read|doesn't read a saved account|rate.?limit|too many requests|429|internal server error|bad gateway|service unavailable|gateway timeout|deadline exceeded|timeout|timed out|connection (refused|reset)|no such host|network is unreachable|EOF|asks again|fetch failed|unable to connect|ECONN[A-Z]+|ENOTFOUND|EAI_AGAIN|socket hang up|HTTP 5\d\d`)
+var passing = lazyre.New(`(?i)ClinePass limits couldn't be read|is due to be renewed|is still reading|asked again in a minute|not read yet|a setup-token can't read|doesn't read a saved account|rate.?limit|too many requests|429|internal server error|bad gateway|service unavailable|gateway timeout|deadline exceeded|timeout|timed out|connection (refused|reset)|no such host|network is unreachable|EOF|asks again|fetch failed|unable to connect|ECONN[A-Z]+|ENOTFOUND|EAI_AGAIN|socket hang up|HTTP 5\d\d`)
 
 // keyTag names a key's card among the last readings, by what it is (a
 // plan's windows, a balance) and a digest of the key, never the key: a

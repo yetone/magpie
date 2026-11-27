@@ -55,3 +55,25 @@ func TestPluginWindowNamedByModelCountsThatModel(t *testing.T) {
 		t.Error("a window naming no served model was scoped")
 	}
 }
+
+func TestClinePluginUsageWindowsOnlyCountClinePassModels(t *testing.T) {
+	now := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	var u plugin.Usage
+	if err := json.Unmarshal([]byte(`{"windows":[{"name":"Weekly","used":80,"resetsAt":"2026-12-01T00:00:00Z"}]}`), &u); err != nil {
+		t.Fatal(err)
+	}
+	q := scopePluginWindows("cline", quotaOfPlugin(SubscriptionQuota{Provider: "cline-plugin", User: "u"}, u))
+	a := allowanceOf(q.Windows, now)
+	if used, _ := a.For("cline-pass/mythomax-l2-13b", now); used != 80 {
+		t.Fatalf("ClinePass model used %v, want 80", used)
+	}
+	for _, model := range []string{"cline-free/deepseek-v4.1-flash", "openai/gpt-5.5"} {
+		if used, _ := a.For(model, now); used != 0 {
+			t.Errorf("%s counted against ClinePass window: %v", model, used)
+		}
+	}
+	other := scopePluginWindows("other", quotaOfPlugin(SubscriptionQuota{Provider: "other-plugin", User: "u"}, u))
+	if used, _ := allowanceOf(other.Windows, now).For("openai/gpt-5.5", now); used != 80 {
+		t.Fatalf("non-Cline plugin window was unexpectedly scoped: %v", used)
+	}
+}

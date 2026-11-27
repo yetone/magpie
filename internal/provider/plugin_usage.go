@@ -126,7 +126,28 @@ func pluginLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	keepPluginPlan(pp, key, u.Plan)
 	// a wallet's spend counted, for a cap to hold it (#5770)
-	return withWalletSpend(namedModelWindows(quotaOfPlugin(q, u), pp.Models), l.User, time.Now())
+	q = namedModelWindows(quotaOfPlugin(q, u), pp.Models)
+	q = scopePluginWindows(pp.ID, q)
+	return withWalletSpend(q, l.User, time.Now())
+}
+
+// scopePluginWindows scopes the windows a plugin tells without models
+// to what they hold back. Cline's plugin tells ClinePass's 5 hours,
+// Weekly and Month that way, and they hold back cline-pass/ models only,
+// never a cline-free/ one or what the account's credits pay for (#7911).
+// The scope is a Model, not a matches func as the built-in key's
+// (clinePassOnly), because keepLast writes a Model down and keeps no
+// window it can't, so a reading that failed keeps the bar.
+func scopePluginWindows(providerID string, q SubscriptionQuota) SubscriptionQuota {
+	if providerID != "cline" {
+		return q
+	}
+	for i, w := range q.Windows {
+		if w.Model == "" && w.Family == "" && w.Pool == "" && w.matches == nil && !w.Text && !w.Aside {
+			q.Windows[i].Model = clinePassPrefix
+		}
+	}
+	return q
 }
 
 // namedModelWindows scopes each window that says no models but is named
