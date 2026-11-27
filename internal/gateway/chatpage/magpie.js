@@ -22,6 +22,39 @@
   var picked = store.get(PICKED);
   if (picked) setCookie(picked);
 
+  // A past conversation's "…" shows only while the pointer is on its row
+  // (the page's .item:hover .action). Its menu (Rename, Delete) is put in
+  // <body> and placed from the "…" again whenever that changes size, so
+  // on the way to Delete the pointer left the row, the "…" was hidden
+  // and the menu went to the top-left corner (Zaneyunlive on X). The row
+  // whose "…" opened the menu keeps it shown while the menu is open.
+  // The class names are the release's (TestChatPageMenuClasses).
+  var ROW = "item-ff6fc9", ACTION = "action-ff6fc9", MENU = "menu-_5f384", OPEN = "data-magpie-menu";
+  var keep = document.createElement("style");
+  keep.textContent = "." + ROW + "[" + OPEN + "] ." + ACTION + "{display:flex}";
+  document.head.appendChild(keep);
+  function menuOpen() {
+    for (var c = document.body.firstElementChild; c; c = c.nextElementSibling) if (c.classList.contains(MENU)) return true;
+    return false;
+  }
+  function release() {
+    if (menuOpen()) return;
+    var rows = document.querySelectorAll("[" + OPEN + "]");
+    for (var i = 0; i < rows.length; i++) rows[i].removeAttribute(OPEN);
+  }
+  // capture: before the page's own click opens or closes the menu
+  document.addEventListener("click", function (e) {
+    var act = e.target instanceof Element && e.target.closest("." + ACTION);
+    var row = act && act.closest("." + ROW);
+    if (!row) return;
+    var rows = document.querySelectorAll("[" + OPEN + "]");
+    for (var i = 0; i < rows.length; i++) if (rows[i] !== row) rows[i].removeAttribute(OPEN);
+    row.setAttribute(OPEN, "");
+    // a click that closed the menu leaves no menu: let go of the row
+    setTimeout(release, 0);
+  }, true);
+  new MutationObserver(release).observe(document.body, { childList: true });
+
   var css = [
     "#magpie-model{position:fixed;top:12px;right:64px;z-index:2147483000;font:13px/1.2 system-ui,-apple-system,sans-serif;color-scheme:inherit}",
     "#magpie-model button{all:unset;box-sizing:border-box;cursor:pointer}",

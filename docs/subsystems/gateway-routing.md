@@ -2031,6 +2031,10 @@ so the page calls the routes below at whatever address it was opened at.
 `deepseek-chat`) and draws a model picker in its top bar, read from
 `GET /deepseek-chat/models` (the caller's models, a DeepSeek flash model
 first as the page's default) and sent as the `magpie_chat_model` cookie.
+It also keeps a past conversation's "…" shown while its menu is open: the
+page shows it only on the row's hover and places the menu in `<body>`
+from it again, so with the "…" hidden the menu went to the top-left
+corner (`TestChatPageMenuClasses`, `chat-page-history-menu.test.cjs`).
 
 - Files: the page's own files (GET and HEAD) are the only keyless routes,
   in `readOnlyRoutes` and, while shared, `lanGuard`'s `chatPageOpen`, the

@@ -45,6 +45,40 @@ func TestChatPageIsTheRelease(t *testing.T) {
 	}
 }
 
+// magpie.js keeps a past conversation's "…" shown while its menu is open
+// by the release's own class names: they are the release's, a row's "…"
+// is hidden but on hover, and its menu is placed in <body>.
+func TestChatPageMenuClasses(t *testing.T) {
+	files, err := chatPageFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var css []byte
+	for name, b := range files {
+		if strings.HasPrefix(name, "static/css/") && strings.HasSuffix(name, ".css") {
+			css = append(css, b...)
+		}
+	}
+	js := string(chatPageJS)
+	for _, want := range []string{
+		`.action-ff6fc9{flex-shrink:0;margin-left:4px;display:none}`,
+		`:is(.item-ff6fc9:hover,.item-ff6fc9.active-ff6fc9) .action-ff6fc9{display:flex}`,
+		`.menu-_5f384{`,
+	} {
+		if !bytes.Contains(css, []byte(want)) {
+			t.Errorf("the release's CSS has no %s", want)
+		}
+	}
+	for _, name := range []string{`"item-ff6fc9"`, `"action-ff6fc9"`, `"menu-_5f384"`} {
+		if !strings.Contains(js, name) {
+			t.Errorf("magpie.js doesn't name %s", name)
+		}
+	}
+	if main := string(files[chatDemoMain]); !strings.Contains(main, `(0,tj.createPortal)((0,a.jsx)("div",{ref:o,className:sf.MK,style:u??void 0,role:"menu"`) {
+		t.Error("the history menu isn't put in <body> as magpie.js expects")
+	}
+}
+
 // The page's files are the same bytes for everyone, so another computer
 // opens them with no key while magpie is shared; every call they make,
 // the model list included, needs one. The page can load nothing from
