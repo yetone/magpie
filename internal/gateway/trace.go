@@ -420,6 +420,9 @@ type Weighed struct {
 	// CapTurn: held short of Capped, as its next turn is taken to spend
 	// this many points (nearCapHeld)
 	CapTurn float64 `json:"capTurn,omitempty"`
+	// CapAhead: of CapTurn, what its turns no reading has yet are taken
+	// to spend (turnSpends.ahead)
+	CapAhead float64 `json:"capAhead,omitempty"`
 	// CapAmount: held (Capped) at a window's fixed amount of its own unit
 	// rather than a share: CapCount of it used, in CapUnit
 	CapAmount float64 `json:"capAmount,omitempty"`

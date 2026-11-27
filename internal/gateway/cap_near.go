@@ -190,11 +190,19 @@ const maxTurnSpend = 2 * nearCapPoints
 // Counting every turn come back as read, the turns of five sessions sent
 // together, out as the reading was told, were never ahead of it, and the
 // account went past its cap by a round of them (#6958).
+//
+// The turns a reading has that left it where it last moved to are in it,
+// and spent under a point between them, as a usage is told in whole
+// points: a point at most is ahead for them, not what a turn is taken to
+// spend for each. Counted each at that, the 29 turns read at 41% since one
+// took an account from 40% were 29 points ahead of it, and it was held at
+// 41% of its 70% cap (gakiclin1 on X).
 func (t *turnSpends) ahead(who string, used float64, turns, read, out int) float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.noteLocked(who, used, min(read, turns))
-	return s.guess() * float64(out+max(turns-s.turns, 0))
+	g := s.guess()
+	return g*float64(out+max(turns-s.read, 0)) + min(g*float64(s.read-s.turns), 1)
 }
 
 // own is what one more turn on who is taken to spend, as learned (ahead
@@ -317,7 +325,7 @@ func (s *Server) nearCapHeld(c candidate, now time.Time) *capHold {
 	if h == nil {
 		return nil
 	}
-	return &capHold{cap: h.Cap, used: h.Used, back: h.Back, turn: turn + ahead}
+	return &capHold{cap: h.Cap, used: h.Used, back: h.Back, turn: turn + ahead, ahead: ahead}
 }
 
 // phaseQueue is the phase of a request that waits, before any try is begun,

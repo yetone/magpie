@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -148,7 +149,7 @@ func TestTurnSpendsAhead(t *testing.T) {
 		t.Fatalf("ahead %v; want 4 turns out at 1.5", got)
 	}
 	// one more came back unread, three out
-	if got := ts.ahead("a", 63, 3, 3, 3); got != 6 {
+	if got := ts.ahead("a", 63, 3, 2, 3); got != 6 {
 		t.Fatalf("ahead %v; want 4 turns at 1.5", got)
 	}
 	if got := ts.own("a"); got != 1.5 {
@@ -203,6 +204,99 @@ func TestTurnSpendsAhead(t *testing.T) {
 	ts.ahead("d", 80, 5, 5, 0)
 	if got := ts.own("d"); got != 4 {
 		t.Fatalf("own %v; want the five's 4 a turn", got)
+	}
+	// gakiclin1 on X: a point learned over one turn, then 29 turns read
+	// that left a usage told in whole points where it was. They spent
+	// under a point between them, and are in the reading: a point for
+	// them, not 29, and a turn's point for each one no reading has
+	ts.ahead("e", 40, 0, 0, 0)
+	ts.ahead("e", 41, 1, 1, 0)
+	for n := 2; n <= 30; n++ {
+		ts.ahead("e", 41, n, n, 0)
+	}
+	if got := ts.ahead("e", 41, 30, 30, 0); got != 1 {
+		t.Fatalf("ahead %v; want the point 29 turns read at 41%% spent at most", got)
+	}
+	if got := ts.ahead("e", 41, 32, 30, 1); got != 4 {
+		t.Fatalf("ahead %v; want that point and 3 turns no reading has, at 1", got)
+	}
+}
+
+// gakiclin1 on X: a Claude Code account capped at 70% was held at 41%,
+// "its next turn would take it past its 70% cap: a turn there has spent
+// up to 30 points". One turn had taken it from 40% to 41%, so a turn was
+// taken to spend a point there, and the 29 after it came back and were
+// read at 41%, a usage told in whole points that a big plan's turns move
+// one at a time. Each was counted ahead of the reading as though none had
+// it, at that point, and the account was held 29 points short of its
+// cap. It is held a turn short of it: its point, and the point a reading
+// in whole points may be under what was spent.
+func TestNearCapHeldByTurnsNotRead(t *testing.T) {
+	fresh(t)
+	var mu sync.Mutex
+	used := 40.0
+	old := allowances
+	t.Cleanup(func() { allowances = old })
+	five, week := time.Now().Add(3*time.Hour), time.Now().Add(4*24*time.Hour)
+	allowances = func(string) map[string]provider.Allowance {
+		mu.Lock()
+		defer mu.Unlock()
+		return map[string]provider.Allowance{"me@example.com": {
+			{Used: used, Resets: five, Span: 5 * time.Hour},
+			{Used: 10, Resets: week, Span: 7 * 24 * time.Hour},
+		}}
+	}
+	c := candidate{p: provider.Provider{ID: "claude", AccountCaps: map[string]int{"me@example.com": 70},
+		Account: &provider.Account{Agent: "claude", User: "me@example.com"}}, model: "claude-sonnet-5", rest: "claude"}
+	srv := New()
+	who := c.who()
+	// at reading, the turns come back, read of them in the latest reading,
+	// checked as the next turn is routed
+	at := func(reading float64, back, read int) (ahead float64, near bool) {
+		mu.Lock()
+		used = reading
+		mu.Unlock()
+		srv.lanes.mu.Lock()
+		if srv.lanes.turns == nil {
+			srv.lanes.turns = map[string]int{}
+		}
+		srv.lanes.turns[who] = back
+		srv.lanes.mu.Unlock()
+		srv.lanes.readThrough(who, read)
+		_, ahead, near = srv.nearCapOf(c, time.Now())
+		return ahead, near
+	}
+	at(40, 0, 0)
+	at(41, 1, 1) // one turn, a point
+	for n := 2; n <= 30; n++ {
+		at(41, n, n)
+	}
+	if ahead, near := at(41, 30, 30); ahead > 1 || near {
+		t.Fatalf("29 turns read at 41%%: %v points ahead, near %v; want 1 at most, not near a 70%% cap", ahead, near)
+	}
+	if h := srv.nearCapHeld(c, time.Now()); h != nil {
+		t.Fatalf("held at %v%% of a %d%% cap by %v points; want let in", h.used, h.cap, h.turn)
+	}
+	// read at 69%, and a turn back since that no reading has: its point
+	// and the next turn's would pass the cap
+	at(69, 32, 31)
+	h := srv.nearCapHeld(c, time.Now())
+	if h == nil || h.turn != 2 || h.ahead != 1 {
+		t.Fatalf("at 69%% of a 70%% cap: held %+v; want held by 2 points, 1 of them the turn no reading has", h)
+	}
+	// the reason tells a turn's own spend apart from the turns no reading
+	// has yet, not their sum as one turn's
+	why, _ := heldReasons([]Weighed{
+		{Name: "Claude", Who: "me@example.com", Used: 69, Capped: 70, CapTurn: 1},
+		{Name: "Claude", Who: "you@example.com", Used: 60, Capped: 70, CapTurn: 12, CapAhead: 8},
+	}, time.Now())
+	for i, want := range []string{
+		"its next turn would take it past its 70% cap: a turn there has spent up to 1 point",
+		"a turn there has spent up to 4 points, and turns its last reading doesn't have yet are taken to spend 8 points",
+	} {
+		if i >= len(why) || !strings.Contains(why[i], want) {
+			t.Fatalf("reasons %q; want %q", why, want)
+		}
 	}
 }
 
