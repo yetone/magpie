@@ -76,20 +76,36 @@ func HTTP2Health() *http.HTTP2Config {
 // context names (With), or else the global one, which a host on the
 // user's own network goes around (onLAN).
 func Func(req *http.Request) (*url.URL, error) {
+	p, _, err := ForRequest(req)
+	return p, err
+}
+
+// ForRequest picks the same proxy as Func and says whether it came from
+// an explicit provider or magpie setting.
+func ForRequest(req *http.Request) (p *url.URL, configured bool, err error) {
 	if err := Held(req.Context()); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if loopback(req.URL.Hostname()) {
-		return nil, nil
+		return nil, false, nil
 	}
 	if c := choiceOf(req.Context()); c != "" {
-		return forChoice(c)
+		p, err := forChoice(c)
+		return p, p != nil, err
 	}
-	p, err := For(req.URL)
+	c := strings.TrimSpace(settings.Shared().Proxy)
+	p, err = forURL(req.URL, c)
 	if p != nil && onLAN(req.URL.Hostname()) {
-		return nil, nil
+		return nil, false, nil
 	}
-	return p, err
+	if p == nil {
+		return nil, false, err
+	}
+	if c != "" {
+		return p, true, err
+	}
+	ep, _ := fromEnv(req.URL)
+	return p, ep != nil, err
 }
 
 type choiceKey struct{}
@@ -427,7 +443,11 @@ func (d *dispatch) CloseIdleConnections() {
 
 // For is the proxy a request to u goes through; nil means direct.
 func For(u *url.URL) (*url.URL, error) {
-	switch s := strings.TrimSpace(settings.Shared().Proxy); s {
+	return forURL(u, strings.TrimSpace(settings.Shared().Proxy))
+}
+
+func forURL(u *url.URL, s string) (*url.URL, error) {
+	switch s {
 	case "direct":
 		return nil, nil
 	case "":

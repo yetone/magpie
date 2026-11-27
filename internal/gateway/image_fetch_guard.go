@@ -204,7 +204,7 @@ func (pt publicTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	// the proxy this request would take, as any other of magpie's: chosen
 	// by the name, before it is pinned to an address
-	proxy, err := netproxy.Func(req)
+	proxy, configured, err := netproxy.ForRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,13 @@ func (pt publicTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, errPrivateAddress
 		}
 	}
-	byName := fake && proxy != nil && onThisComputer(proxy)
+	// A local or explicitly configured HTTP proxy may resolve the name
+	// for HTTPS CONNECT (#7869). No private-address allowance applies to
+	// this path: every address must pass the public check.
+	byName := proxy != nil && fake && onThisComputer(proxy)
+	if proxy != nil && !literal && req.URL.Scheme == "https" && (proxy.Scheme == "http" || proxy.Scheme == "https") && (configured || onThisComputer(proxy)) {
+		byName = byName || allAllowed(fetchAllow{}, addrs)
+	}
 	var tc *tls.Config
 	if upstreamTLS != nil {
 		tc = upstreamTLS.Clone()

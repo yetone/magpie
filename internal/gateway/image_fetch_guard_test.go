@@ -2,8 +2,10 @@ package gateway
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -68,6 +70,122 @@ func resolveTo(t *testing.T, names map[string]string) {
 		return was(context.Background(), host)
 	}
 	t.Cleanup(func() { lookupIP = was })
+}
+
+// TestPublicHTTPSProxyUsesName exercises an HTTP CONNECT proxy whose policy
+// rejects an address authority. The target name still resolves here before the
+// proxy is asked, and a private answer is refused before any CONNECT.
+func TestPublicHTTPSProxyUsesName(t *testing.T) {
+	fresh(t)
+	useProxy(t, "")
+	for _, key := range []string{"HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(key, "")
+	}
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "through named CONNECT")
+	}))
+	t.Cleanup(upstream.Close)
+	wasTLS := upstreamTLS
+	upstreamTLS = &tls.Config{InsecureSkipVerify: true} // the test server cert is for localhost
+	t.Cleanup(func() { upstreamTLS = wasTLS })
+
+	var mu sync.Mutex
+	var authorities []string
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		authorities = append(authorities, r.Host)
+		t.Logf("proxy CONNECT %q", r.Host)
+		mu.Unlock()
+		if strings.HasPrefix(r.Host, "93.184.216.34:") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		conn, rw, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+			return
+		}
+		if err := rw.Flush(); err != nil {
+			return
+		}
+		up, err := net.Dial("tcp", upstream.Listener.Addr().String())
+		if err != nil {
+			t.Logf("proxy upstream dial: %v", err)
+			return
+		}
+		defer up.Close()
+		go io.Copy(up, rw)
+		io.Copy(conn, up)
+	}))
+	t.Cleanup(proxy.Close)
+	useProxy(t, proxy.URL)
+	resolveTo(t, map[string]string{
+		"example.com":   "93.184.216.34",
+		"private.test":  "127.0.0.1",
+		"metadata.test": "169.254.169.254",
+		"lan.test":      "10.0.0.1",
+	})
+
+	req, err := http.NewRequest("GET", "https://example.com/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := publicClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || string(body) != "through named CONNECT" {
+		t.Fatalf("named CONNECT response: %q, %v", body, err)
+	}
+
+	// Also works when the proxy comes from env rather than settings (ALL_PROXY
+	// avoids http.ProxyFromEnvironment's process-wide sync.Once in tests).
+	useProxy(t, "")
+	t.Setenv("ALL_PROXY", proxy.URL)
+	req, err = http.NewRequest("GET", "https://example.com/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = publicClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || string(body) != "through named CONNECT" {
+		t.Fatalf("env ALL_PROXY named CONNECT response: %q, %v", body, err)
+	}
+
+	mu.Lock()
+	got := append([]string(nil), authorities...)
+	mu.Unlock()
+	if len(got) != 2 || got[0] != "example.com:443" || got[1] != "example.com:443" {
+		t.Fatalf("CONNECT authorities %q", got)
+	}
+
+	for _, host := range []string{"private.test", "metadata.test", "lan.test"} {
+		req, err = http.NewRequest("GET", "https://"+host+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = publicClient.Do(req); !errors.Is(err, errPrivateAddress) {
+			t.Fatalf("private target %s through proxy: %v", host, err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(authorities) != 2 {
+		t.Fatalf("private target reached proxy: %q", authorities)
+	}
 }
 
 // An image URL a caller sends to be edited is downloaded by magpie for an
