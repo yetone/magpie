@@ -87,6 +87,12 @@ func TestFakeMCPServer(t *testing.T) {
 	// ok: a log line on stdout first, as some servers write
 	fmt.Println("server starting on stdio")
 	sc := bufio.NewScanner(os.Stdin)
+	// the calls to "together" waiting for a second one (mcp_hub_notes_test.go)
+	type held struct {
+		id       int
+		tok, who json.RawMessage
+	}
+	var together []held
 	for sc.Scan() {
 		var m struct {
 			ID     *int   `json:"id"`
@@ -108,6 +114,39 @@ func TestFakeMCPServer(t *testing.T) {
 				fmt.Fprintln(os.Stderr, "Error: lost the database")
 				os.Exit(5)
 			case "slow":
+				continue
+			case "logs", "together":
+				// a log line and its progress under the call's token, the
+				// one call waiting; "together" waits for a second call and
+				// tells each its own progress, a log line while both wait
+				var meta struct {
+					Token json.RawMessage `json:"progressToken"`
+				}
+				json.Unmarshal(m.Params.Meta, &meta)
+				var a struct {
+					Who json.RawMessage `json:"who"`
+				}
+				json.Unmarshal(m.Params.Arguments, &a)
+				if len(a.Who) == 0 {
+					a.Who = json.RawMessage(`""`)
+				}
+				calls := []held{{*m.ID, meta.Token, a.Who}}
+				if m.Params.Name == "together" {
+					if together = append(together, calls[0]); len(together) < 2 {
+						continue
+					}
+					calls, together = together, nil
+				}
+				fmt.Println(`{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info","data":"working"}}`)
+				for _, c := range calls {
+					if len(c.tok) > 0 {
+						fmt.Printf(`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":%s,"progress":1,"total":2,"message":%s}}`+"\n", c.tok, c.who)
+					}
+				}
+				for _, c := range calls {
+					text, _ := json.Marshal("done " + string(c.who))
+					fmt.Printf(`{"jsonrpc":"2.0","id":%d,"result":{"content":[{"type":"text","text":%s}]}}`+"\n", c.id, text)
+				}
 				continue
 			}
 			said := fmt.Sprintf("%s %s pid=%d", m.Params.Name, m.Params.Arguments, os.Getpid())

@@ -849,12 +849,16 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		}
 		return map[string]any{
 			"protocolVersion": mcpVersion(m),
-			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
-			"serverInfo":      map[string]any{"name": "magpie", "title": title, "version": Version},
-			"instructions":    say,
+			// logging: the servers' log lines are relayed during a call
+			// (hub_notes.go), at the level the client sets
+			"capabilities": map[string]any{"tools": map[string]any{"listChanged": true}, "logging": map[string]any{}},
+			"serverInfo":   map[string]any{"name": "magpie", "title": title, "version": Version},
+			"instructions": say,
 		}, nil
 	case "ping":
 		return map[string]any{}, nil
+	case "logging/setLevel":
+		return hubSetLevel(r, agent, m.Params)
 	case "tools/list":
 		ts := hubTools(r.Context(), agent)
 		where := hubWhere(r)
@@ -899,12 +903,22 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		switch p.Name {
 		case hubFindTool:
 			return hubFind(ts, p.Arguments, hubWhere(r)), nil
-		case hubCallTool:
-			return s.hubCallByName(r, agent, ts, p.Arguments, p.Meta), nil
 		case hubCodeTool:
 			if hubCodeOn(len(ts)) {
+				// its tools' log lines, not their progress: one token's
+				// progress only grows, and a script runs several tools
+				r, end := withHubRelay(r, agent, p.Meta.ProgressToken, false)
+				defer end()
 				return s.hubCodeRun(r, agent, ts, p.Arguments, p.Meta), nil
 			}
+		}
+		// the server's progress and log lines on this call's stream, for
+		// an agent that asked for them (hub_notes.go); ended before the
+		// result is written
+		r, end := withHubRelay(r, agent, p.Meta.ProgressToken, true)
+		defer end()
+		if p.Name == hubCallTool {
+			return s.hubCallByName(r, agent, ts, p.Arguments, p.Meta), nil
 		}
 		if t, ok := hubToolNamed(r.Context(), ts, agent, p.Name); ok {
 			return s.hubCall(r, agent, t, p.Arguments, p.Meta), nil
@@ -1027,6 +1041,9 @@ func (s *Server) hubMCPRun(r *http.Request, agent string, t hubTool, args json.R
 // (the git repositories it works in, keyed by their folder).
 type hubCallMeta struct {
 	ThreadID string `json:"threadId"`
+	// ProgressToken is the agent's, for the server's progress on this
+	// call (hubRelay)
+	ProgressToken json.RawMessage `json:"progressToken"`
 	// Session is the caller's session as another magpie's router passed
 	// it on (HubSessionMeta)
 	Session string `json:"magpie/session"`

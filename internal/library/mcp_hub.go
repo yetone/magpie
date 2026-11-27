@@ -802,6 +802,18 @@ func (b *backend) call(ctx context.Context, tool string, args json.RawMessage, m
 	if err != nil {
 		return nil, err
 	}
+	if note, progress := gateway.HubNoteOf(ctx); note != nil {
+		// the agent is told what the server says of this call
+		// (mcp_hub_notes.go): asked for progress, under a token of its own
+		n := newCallNotes(note)
+		if progress {
+			if meta == nil {
+				meta = map[string]any{}
+			}
+			meta["progressToken"] = n.token
+		}
+		ctx = withNotes(ctx, n)
+	}
 	params := map[string]any{"name": tool, "arguments": args}
 	if meta != nil {
 		params["_meta"] = meta
@@ -895,10 +907,13 @@ type waiters struct {
 	mu   sync.Mutex
 	next int
 	wait map[string]chan *rpcMsg
-	gone error
+	// notes are the waiting calls' that are told the server's
+	// notifications about them (mcp_hub_notes.go)
+	notes map[string]*callNotes
+	gone  error
 }
 
-func (w *waiters) open() (int, chan *rpcMsg, error) {
+func (w *waiters) open(n *callNotes) (int, chan *rpcMsg, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.gone != nil {
@@ -910,13 +925,47 @@ func (w *waiters) open() (int, chan *rpcMsg, error) {
 		w.wait = map[string]chan *rpcMsg{}
 	}
 	w.wait[fmt.Sprint(w.next)] = ch
+	if n != nil {
+		if w.notes == nil {
+			w.notes = map[string]*callNotes{}
+		}
+		w.notes[fmt.Sprint(w.next)] = n
+	}
 	return w.next, ch, nil
 }
 
 func (w *waiters) drop(id int) {
 	w.mu.Lock()
 	delete(w.wait, fmt.Sprint(id))
+	delete(w.notes, fmt.Sprint(id))
 	w.mu.Unlock()
+}
+
+// progressOf is the waiting call the server was given tok for.
+func (w *waiters) progressOf(tok string) *callNotes {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, n := range w.notes {
+		if n.token == tok {
+			return n
+		}
+	}
+	return nil
+}
+
+// lone is the notes of the one request waiting, when only one is: a log
+// line on a stream that every reply shares is that request's, and whose
+// it is isn't known while two are waiting.
+func (w *waiters) lone() *callNotes {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.wait) != 1 {
+		return nil
+	}
+	for id := range w.wait {
+		return w.notes[id]
+	}
+	return nil
 }
 
 func (w *waiters) deliver(m *rpcMsg) {
@@ -924,6 +973,7 @@ func (w *waiters) deliver(m *rpcMsg) {
 	w.mu.Lock()
 	ch := w.wait[id]
 	delete(w.wait, id)
+	delete(w.notes, id)
 	w.mu.Unlock()
 	if ch != nil {
 		ch <- m
@@ -942,6 +992,7 @@ func (w *waiters) end(err error) {
 		close(ch)
 		delete(w.wait, id)
 	}
+	w.notes = nil
 }
 
 func (w *waiters) err() error {
@@ -962,7 +1013,8 @@ type streamConn struct {
 
 // read takes one message off the stream: a reply is its request's, a
 // request of the server's own is answered (ping; nothing else is offered),
-// a note that its tools changed has them listed again.
+// a note that its tools changed has them listed again, and a call's
+// progress or log line goes to the call it is about (mcp_hub_notes.go).
 func (c *streamConn) read(b []byte, changed func()) {
 	var m rpcMsg
 	if json.Unmarshal(b, &m) != nil {
@@ -987,13 +1039,17 @@ func (c *streamConn) read(b []byte, changed func()) {
 		}()
 	case m.Method == "notifications/tools/list_changed":
 		changed()
+	case m.Method == "notifications/progress":
+		c.w.progressOf(progressTokenOf(&m)).take(&m)
+	case m.Method == "notifications/message":
+		c.w.lone().take(&m)
 	case m.Method == "":
 		c.w.deliver(&m)
 	}
 }
 
 func (c *streamConn) ask(ctx context.Context, method string, params any) (*rpcMsg, error) {
-	id, ch, err := c.w.open()
+	id, ch, err := c.w.open(notesOf(ctx))
 	if err != nil {
 		return nil, err
 	}

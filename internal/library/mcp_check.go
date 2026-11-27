@@ -316,6 +316,7 @@ func timedOut(ctx context.Context) ServerHealth {
 type rpcMsg struct {
 	ID     json.RawMessage `json:"id"`
 	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
 	Result json.RawMessage `json:"result"`
 	Error  *struct {
 		Code    int    `json:"code"`
@@ -950,7 +951,8 @@ func (c *httpSession) post(ctx context.Context, body []byte) (*http.Response, er
 }
 
 // call posts a request and reads its reply, as JSON or from an event
-// stream.
+// stream; what else the stream says about it goes to ctx's call
+// (mcp_hub_notes.go).
 func (c *httpSession) call(ctx context.Context, id int, body []byte) (*rpcMsg, *ServerHealth) {
 	res, err := c.post(ctx, body)
 	if err != nil {
@@ -990,7 +992,7 @@ func (c *httpSession) call(ctx context.Context, id int, body []byte) (*rpcMsg, *
 		c.session = sid
 		c.mu.Unlock()
 	}
-	m, err := replyOf(res, id)
+	m, err := replyOf(res, id, notesOf(ctx))
 	if err != nil {
 		if ctx.Err() != nil {
 			h := timedOut(ctx)
@@ -1073,7 +1075,7 @@ func endSession(u string, hdr http.Header, session string) {
 
 // replyOf is the reply to id in a response: its JSON body, or the event
 // stream's message that carries it.
-func replyOf(res *http.Response, id int) (*rpcMsg, error) {
+func replyOf(res *http.Response, id int, notes *callNotes) (*rpcMsg, error) {
 	ct := res.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, "text/event-stream") {
 		done := make(chan struct{})
@@ -1083,8 +1085,15 @@ func replyOf(res *http.Response, id int) (*rpcMsg, error) {
 				continue
 			}
 			var m rpcMsg
-			if json.Unmarshal([]byte(e.data), &m) == nil && m.is(id) {
+			if json.Unmarshal([]byte(e.data), &m) != nil {
+				continue
+			}
+			if m.is(id) {
 				return &m, nil
+			}
+			if m.Method != "" && len(m.ID) == 0 {
+				// sent on this request's stream: about it
+				notes.take(&m)
 			}
 		}
 		return nil, errors.New("the event stream ended without a reply")
