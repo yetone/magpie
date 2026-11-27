@@ -14,6 +14,10 @@ type Kin struct {
 	Args      string
 }
 
+// Family lists every process this user can see, with its parent's id
+// and its command line (#7812: what holds magpie's folders).
+func Family(ctx context.Context) ([]Kin, error) { return family(ctx) }
+
 // EndTrees ends the processes match picks from every process this user
 // can see, each with all it started, and says how many match picked. A
 // process under one already picked goes with that one; magpie and what it

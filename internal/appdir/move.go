@@ -201,6 +201,13 @@ func AskMove(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// what this magpie didn't start, and that won't end when it quits,
+	// would hold the folder at the next start too (#7812)
+	if hs, ok := holders(); ok {
+		if o := notOurs(hs); len(o) > 0 {
+			return "", &HeldError{Dir: Config(), Holders: o}
+		}
+	}
 	b, _ := json.Marshal(asked{To: root, At: time.Now()})
 	if err := os.WriteFile(filepath.Join(Config(), moveAsked), b, 0o600); err != nil {
 		return "", err
@@ -254,6 +261,7 @@ func Move(root string) error {
 	if Portable() != "" {
 		return errors.New("this magpie is portable: its files are in the data folder beside it, which moves with it")
 	}
+	waitFree() // what ran under the magpie that just quit may still be ending
 	cfg, cache := Config(), Cache()
 	prev, _ := linkOf(cfg) // the folder on the other disk, for a move home
 	cfgTo, cacheTo := cfg, cache
@@ -294,6 +302,13 @@ func moveOne(at, to string) error {
 	}
 	if linked && !there {
 		return &UnreachableError{Link: at, Target: cur}
+	}
+	if there {
+		// before anything is copied: on Windows a folder something has a
+		// file in open can't be renamed, which the move does at its end
+		if err := movable(cur); err != nil {
+			return err
+		}
 	}
 	if to == at { // home: the link replaced by its folder, renamed or copied here
 		if err := os.Remove(at); err != nil { // the link only
@@ -472,6 +487,10 @@ func (e *UnreachableError) Error() string {
 // its place would look like a setup lost.
 func Unreachable() error {
 	for _, at := range []string{Config(), Cache()} {
+		// a magpie that died between movable's two renames
+		if _, err := os.Lstat(at); errors.Is(err, fs.ErrNotExist) {
+			os.Rename(at+checkSuffix, at)
+		}
 		t, ok := linkOf(at)
 		if !ok {
 			continue
