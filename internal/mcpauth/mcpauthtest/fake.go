@@ -74,6 +74,9 @@ type Fake struct {
 	Tools []string
 
 	refuse bool // RefuseTokens
+	// renewalStatus is a token endpoint answering every renewal with it
+	// (a 5xx outage, #7915); FailRenewals
+	renewalStatus int
 	// throttle is a token endpoint turning every renewal away with 429
 	// (Throttle), with this Retry-After when it isn't ""
 	throttle     bool
@@ -225,6 +228,10 @@ func New(t *testing.T) *Fake {
 			offline = offline || slices.Contains(strings.Fields(g.scope), "offline_access")
 		case "refresh_token":
 			f.refreshAsked++
+			if f.renewalStatus != 0 {
+				w.WriteHeader(f.renewalStatus)
+				return
+			}
 			if f.throttle {
 				// Canva's answer (#7451, Asher-S-Wu)
 				if f.retryAfter != "" {
@@ -433,6 +440,14 @@ func (f *Fake) Throttle(retryAfter string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.throttle, f.retryAfter = true, retryAfter
+}
+
+// FailRenewals answers every renewal with status, a token endpoint's
+// outage; 0 renews them again.
+func (f *Fake) FailRenewals(status int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.renewalStatus = status
 }
 
 // Unthrottle renews tokens again.

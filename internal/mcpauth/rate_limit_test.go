@@ -243,3 +243,92 @@ func TestRenew429IsTheAccounts(t *testing.T) {
 		t.Fatalf("signed in again, still waits: %+v", r)
 	}
 }
+
+// A token endpoint 5xx is transient: the sign-in stands, a good token is
+// reused while the retry wait runs, and a later successful renewal clears it.
+func TestRenew5xxBacksOffAndRecovers(t *testing.T) {
+	home(t)
+	c := setClock(t)
+	f := mcpauthtest.New(t)
+	f.ExpiresIn = 100
+	f.SignIn(t, "server")
+	r, _ := mcpauth.Get("server")
+	f.FailRenewals(http.StatusServiceUnavailable)
+	for range 3 {
+		tok, err := mcpauth.Token(t.Context(), "server")
+		if err != nil || tok != r.Access {
+			t.Fatalf("Token = %q, %v; want the existing token", tok, err)
+		}
+	}
+	if f.RefreshAsked() != 1 {
+		t.Fatalf("asked to renew %d times, want 1", f.RefreshAsked())
+	}
+	st := mcpauth.StatusOf("server", f.URL)
+	if !st.SignedIn || st.Dead || !st.RetryUnavailable || st.RetryAt == 0 {
+		t.Fatalf("status during outage: %+v", st)
+	}
+	c.add(31 * time.Second)
+	f.FailRenewals(0)
+	tok, err := mcpauth.Token(t.Context(), "server")
+	if err != nil || tok == r.Access {
+		t.Fatalf("recovered Token = %q, %v; want a renewed token", tok, err)
+	}
+	if f.RefreshAsked() != 2 {
+		t.Fatalf("after recovery asked to renew %d times, want 2", f.RefreshAsked())
+	}
+	if st := mcpauth.StatusOf("server", f.URL); st.RetryAt != 0 || st.RetryUnavailable {
+		t.Fatalf("renewal wait survived recovery: %+v", st)
+	}
+}
+
+// A transport failure is transient too. It is backed off across requests and
+// does not turn a still-valid sign-in into invalid_grant.
+func TestRenewUnreachableBacksOff(t *testing.T) {
+	home(t)
+	c := setClock(t)
+	f := mcpauthtest.New(t)
+	f.ExpiresIn = 100
+	f.SignIn(t, "server")
+	r, _ := mcpauth.Get("server")
+	f.Server.Close()
+	for range 3 {
+		tok, err := mcpauth.Token(t.Context(), "server")
+		if err != nil || tok != r.Access {
+			t.Fatalf("Token = %q, %v; want the existing token", tok, err)
+		}
+	}
+	st := mcpauth.StatusOf("server", f.URL)
+	if !st.SignedIn || st.Dead || !st.RetryUnavailable || st.RetryAt == 0 {
+		t.Fatalf("status after unreachable endpoint: %+v", st)
+	}
+	c.add(31 * time.Second)
+	tok, err := mcpauth.Token(t.Context(), "server")
+	if err != nil || tok != r.Access {
+		t.Fatalf("still-valid Token after wait = %q, %v; want existing token", tok, err)
+	}
+	c.add(70 * time.Second)
+	_, err = mcpauth.Token(t.Context(), "server")
+	var unavailable *mcpauth.RenewalUnavailableError
+	if !errors.As(err, &unavailable) || !errors.Is(err, mcpauth.ErrRenewalUnavailable) {
+		t.Fatalf("renewal after expiry: %v", err)
+	}
+	if st := mcpauth.StatusOf("server", f.URL); st.Dead || !st.RetryUnavailable || st.RetryAt == 0 {
+		t.Fatalf("unreachable endpoint status after expiry: %+v", st)
+	}
+}
+
+// An auth-revoked 400 remains permanent and marks the sign-in dead.
+func TestRenewInvalidGrantStillExpires(t *testing.T) {
+	home(t)
+	f := mcpauthtest.New(t)
+	f.SignIn(t, "server")
+	r, _ := mcpauth.Get("server")
+	f.ForgetRefresh()
+	_, err := mcpauth.Renew(t.Context(), "server", r.Access)
+	if !errors.Is(err, mcpauth.ErrExpired) {
+		t.Fatalf("invalid_grant renewal: %v", err)
+	}
+	if st := mcpauth.StatusOf("server", f.URL); !st.Dead || !st.SignedIn {
+		t.Fatalf("invalid_grant status: %+v", st)
+	}
+}

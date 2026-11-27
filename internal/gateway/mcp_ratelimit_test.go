@@ -45,3 +45,38 @@ func TestMCPProxyRenewal429(t *testing.T) {
 		t.Fatalf("asked the server to renew %d times, want 1", n)
 	}
 }
+
+// #7915: a renewal whose token endpoint answers 5xx reaches the agent as
+// 503 with Retry-After, not as a sign-in run out, and requests in the wait
+// don't ask the server to renew again.
+func TestMCPProxyRenewal5xx(t *testing.T) {
+	fresh(t)
+	f := mcpauthtest.New(t)
+	f.SignIn(t, "canva")
+	gw := httptest.NewServer(New().Handler())
+	defer gw.Close()
+	f.Revoke()
+	f.FailRenewals(http.StatusServiceUnavailable)
+	for i := range 3 {
+		req, _ := http.NewRequest("POST", gw.URL+"/mcp/canva", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Authorization", "Bearer "+Token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		ra := resp.Header.Get("Retry-After")
+		if resp.StatusCode != http.StatusServiceUnavailable || ra == "" || resp.Header.Get("WWW-Authenticate") != "" {
+			t.Fatalf("request %d: %d Retry-After %q %v %s", i, resp.StatusCode, ra, resp.Header, b)
+		}
+		if !strings.Contains(string(b), "canva") || strings.Contains(string(b), "sign in to it again") {
+			t.Fatalf("request %d says %s", i, b)
+		}
+	}
+	if n := f.RefreshAsked(); n != 1 {
+		t.Fatalf("asked the server to renew %d times, want 1", n)
+	}
+}

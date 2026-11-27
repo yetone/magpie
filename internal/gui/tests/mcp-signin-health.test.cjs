@@ -33,6 +33,8 @@ function server(lang, calls) {
       { name: "linear", transport: "http", url: "https://mcp.linear.app/mcp", agents: ["claude"], signIn: { signedIn: true, at: 1 } },
       // signed in, its renewal turned away with 429
       { name: "canva", transport: "http", url: "https://mcp.canva.com/mcp", agents: ["claude"], signIn: { signedIn: true, at: 1 } },
+      // signed in, its token endpoint down (5xx) for the renewal (#7915)
+      { name: "figma", transport: "http", url: "https://mcp.figma.com/mcp", agents: ["claude"], signIn: { signedIn: true, at: 1 } },
     ],
   };
   let polls = 0;
@@ -53,6 +55,7 @@ function server(lang, calls) {
         if (n === "linear") s.signIn = { signedIn: true, dead: true, at: 1 };
         if (n === "linear") servers[n] = { state: "auth", code: 401, oauth: true, signIn: s.signIn };
         else if (n === "canva") servers[n] = { state: "error", why: "ratelimited", detail: "the token endpoint answered 429: too_many_requests (Too many refresh_token requests)", signIn: { ...s.signIn, retryAt: Date.now() + 60000 } };
+        else if (n === "figma") servers[n] = { state: "error", why: "renewal-unavailable", detail: "sign-in renewal is temporarily unavailable: retry in 30s (the token endpoint answered 503)", signIn: { ...s.signIn, retryAt: Date.now() + 30000, retryUnavailable: true } };
         else servers[n] = s.signIn.signedIn ? { state: "ok", tools: 7, signIn: s.signIn } : { state: "auth", code: 401, oauth: true, signIn: s.signIn };
       }
       return route.fulfill({ json: { servers } });
@@ -117,6 +120,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const tip = await status("canva").getAttribute("title");
           assert.ok(tip.includes(w("The server is limiting how often magpie renews its sign-in. It stays signed in, and magpie renews it once the wait is over")), tip);
           assert.deepEqual(await tags("canva"), [w("Signed in")]);
+
+          // figma's renewal waits out its token endpoint's outage: still
+          // signed in, amber, never "needs sign-in" (#7915)
+          await status("figma").locator("span", { hasText: w("renewal failed, retrying") }).waitFor();
+          assert.equal(await status("figma").evaluate((b) => b.classList.contains("auth")), true);
+          const figmaTip = await status("figma").getAttribute("title");
+          assert.ok(figmaTip.includes(w("The sign-in is kept. Renewal will be tried again after a wait")), figmaTip);
+          assert.deepEqual(await tags("figma"), [w("Signed in")]);
 
           // notion, checked by a click, then signed in to
           await status("notion").locator("span", { hasText: w("not checked") }).waitFor();

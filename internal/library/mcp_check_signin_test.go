@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -81,6 +82,30 @@ func TestCheckSaysRenewalRateLimited(t *testing.T) {
 			t.Fatalf("check %d of a renewal answered 429: %+v", i, h)
 		}
 		if h.SignIn == nil || !h.SignIn.SignedIn || h.SignIn.Dead || h.SignIn.RetryAt == 0 {
+			t.Fatalf("check %d: sign-in %+v", i, h.SignIn)
+		}
+	}
+	if n := f.RefreshAsked(); n != 1 {
+		t.Fatalf("asked the server to renew %d times, want 1", n)
+	}
+}
+
+// #7915: a renewal whose token endpoint answers 5xx or cannot be reached
+// keeps the sign-in and backs off, reporting renewal-unavailable rather than
+// "needs sign-in".
+func TestCheckSaysRenewalUnavailable(t *testing.T) {
+	sandbox(t)
+	f := mcpauthtest.New(t)
+	ok(t)(SaveServer("", Server{Name: "canva", Transport: "http", URL: f.URL, Agents: []string{}}))
+	f.SignIn(t, "canva")
+	f.Revoke()
+	f.FailRenewals(http.StatusBadGateway)
+	for i := range 2 {
+		h := CheckServer(context.Background(), &Server{Name: "canva", Transport: "http", URL: f.URL})
+		if h.State == "auth" || h.Why != "renewal-unavailable" {
+			t.Fatalf("check %d of a renewal answered 502: %+v", i, h)
+		}
+		if h.SignIn == nil || !h.SignIn.SignedIn || h.SignIn.Dead || !h.SignIn.RetryUnavailable || h.SignIn.RetryAt == 0 {
 			t.Fatalf("check %d: sign-in %+v", i, h.SignIn)
 		}
 	}

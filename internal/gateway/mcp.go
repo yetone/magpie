@@ -219,6 +219,12 @@ func mcpRefused(w http.ResponseWriter, name string, err error) {
 		w.Header().Set("Retry-After", strconv.Itoa(int(rl.Wait()/time.Second)))
 		msg = "the MCP server " + name + ": " + msg
 	}
+	var unavailable *mcpauth.RenewalUnavailableError
+	if errors.As(err, &unavailable) {
+		status = http.StatusServiceUnavailable
+		w.Header().Set("Retry-After", strconv.Itoa(int(unavailable.Wait()/time.Second)))
+		msg = "the MCP server " + name + ": " + msg
+	}
 	http.Error(w, msg, status)
 }
 
