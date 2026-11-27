@@ -1027,7 +1027,10 @@ type MarketSkill struct {
 // many features that an AI could do the setting up); magpie-quota reads
 // what magpie quota tells (ttmouse on X); magpie-sessions searches and
 // reads every agent's sessions through magpie sessions search and show
-// (yansheng1003 on X).
+// (yansheng1003 on X); magpie-api teaches an agent the gateway's own HTTP
+// API, /v1/magpie/quotas, /v1/models and /v1/magpie/route, for one that
+// orchestrates work across models (thedavidweng on X; its copy in
+// internal/gateway/testdata is held to the handlers).
 var featuredSkills = []MarketSkill{{
 	Source: "magpie-community/plugins", SkillID: "magpie-setup", Name: "magpie-setup", Official: true, Featured: true,
 	Description: "Set magpie up as you ask, through its own commands: add keys and subscriptions, point agents at models, build routing groups with fallbacks and time-of-day rules, give devices gateway keys with budgets, and share MCP servers and instructions with every agent.",
@@ -1037,6 +1040,9 @@ var featuredSkills = []MarketSkill{{
 }, {
 	Source: "magpie-community/plugins", SkillID: "magpie-sessions", Name: "magpie-sessions", Official: true, Featured: true,
 	Description: "Search what was said in every coding agent's sessions on this computer through magpie, Claude Code's, Codex's and the others', and read the session a hit is in: find an earlier conversation, decision or fix.",
+}, {
+	Source: "magpie-community/plugins", SkillID: "magpie-api", Name: "magpie-api", Official: true, Featured: true,
+	Description: "Read magpie's own HTTP API from an agent: what is left of every subscription, coding plan and key balance, the models available now, and which model a routing group picked for a session and what it fell back from. For an agent orchestrating work across models.",
 }}
 
 type skillsShEntry struct {

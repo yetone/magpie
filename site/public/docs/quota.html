@@ -192,7 +192,7 @@ magpie quota history --days 7 --json</pre></div>
     <p>The gateway answers the same on a local API, on the port in Settings' Gateway address. Another machine reaches it only while magpie is shared on the local network, with its key as the API key (Authorization: Bearer or x-api-key).</p>
     <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="q-api">Copy</button><pre id="q-api">curl http://127.0.0.1:3425/v1/magpie/quotas
 curl 'http://127.0.0.1:3425/v1/magpie/quotas/history?days=7&provider=codex'</pre></div>
-    <p>magpie's own skill <code>magpie-quota</code> lets an agent read <code>magpie quota --json</code> and wait with <code>magpie quota wait</code>. It is first in the Library's skills market.</p>
+    <p>magpie's own skill <code>magpie-quota</code> lets an agent read <code>magpie quota --json</code> and wait with <code>magpie quota wait</code>. It is first in the Library's skills market. Beside it, <code>magpie-api</code> teaches an agent this API, and <code>/v1/models</code> and <code>/v1/magpie/route</code> (the model a routing group picked) too, for an agent that hands work out across models.</p>
     <h2 id="alert"><a class="anchor" href="#alert">Alerts</a></h2>
     <p>Have the magpie app notify you when any window of a subscription or plan reaches a share used, once each time the window runs, or when a balance falls to an amount or under, in its own currency or credits, once until topped up past it. Both are off until set; <code>off</code> turns either off.</p>
     <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="q-alert">Copy</button><pre id="q-alert">magpie quota alert 80              # notify at 80% used, once per window

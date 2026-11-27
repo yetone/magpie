@@ -233,10 +233,11 @@ func TestFeaturedSkills(t *testing.T) {
 	t.Cleanup(func() { popular.Lock(); popular.list = nil; popular.Unlock() })
 
 	list, _ := MarketSkills("")
-	if len(list) != 4 || list[0].ID != "magpie-community/plugins/magpie-setup" || list[1].ID != "magpie-community/plugins/magpie-quota" || list[2].ID != "magpie-community/plugins/magpie-sessions" || list[3].ID != "o/r/pdf" {
+	if len(list) != 5 || list[0].ID != "magpie-community/plugins/magpie-setup" || list[1].ID != "magpie-community/plugins/magpie-quota" || list[2].ID != "magpie-community/plugins/magpie-sessions" ||
+		list[3].ID != "magpie-community/plugins/magpie-api" || list[4].ID != "o/r/pdf" {
 		t.Fatalf("market: %+v", list)
 	}
-	for _, m := range list[:3] {
+	for _, m := range list[:4] {
 		if !m.Official || !m.Featured || m.Description == "" || m.Icon != gh("magpie-community") || !offered(m.Icon) {
 			t.Fatalf("magpie's own: %+v", m)
 		}
@@ -253,6 +254,12 @@ func TestFeaturedSkills(t *testing.T) {
 	// Leyuu_5 on X: an agent sets magpie up; found by what a user searches
 	for _, q := range []string{"setup", "routing", "gateway key"} {
 		if list, _ := MarketSkills(q); len(list) == 0 || list[0].SkillID != "magpie-setup" {
+			t.Fatalf("%s: %+v", q, list)
+		}
+	}
+	// thedavidweng on X: an orchestrating agent reads magpie's own API
+	for _, q := range []string{"http api", "orchestrat", "magpie-api"} {
+		if list, _ := MarketSkills(q); len(list) == 0 || list[0].SkillID != "magpie-api" {
 			t.Fatalf("%s: %+v", q, list)
 		}
 	}
