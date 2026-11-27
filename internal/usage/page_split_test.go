@@ -175,3 +175,40 @@ func TestKeptPageLeavesSettledBlocksUnpriced(t *testing.T) {
 		t.Fatalf("a page of older rows %+v, cold %+v", deep, cold)
 	}
 }
+
+// A page of rows older than cut keeps its cells and pairs only the chunks
+// reaching back as far as its rows, each reach further only when the one
+// before has too few: the newest page after a few days away paired every
+// chunk of the history. It is the page a pairing of every chunk builds.
+func TestOlderPageReachesBackForItsRows(t *testing.T) {
+	_, _, paired, restart := pageHistory(t)
+	QueryPage(All, Filter{}, 0, 1)
+	all := (*paired)[0]
+	var reached []int
+	pageReaching = func(n int) { reached = append(reached, n) }
+	t.Cleanup(func() { pageReaching = nil })
+	for _, c := range []struct {
+		offset, reaches int
+		input           int
+	}{{3, 2, 101}, {4, 3, 100}} {
+		restart()
+		reached = nil
+		page := QueryPage(All, Filter{}, c.offset, 1)
+		if len(reached) != c.reaches || len(page.Rows) != 1 || page.Rows[0].Input != c.input {
+			t.Fatalf("offset %d: reached %v (all %d), rows %+v", c.offset, reached, all, page.Rows)
+		}
+		if reached[0] >= all {
+			t.Fatalf("offset %d: the first reach paired %d of %d chunks", c.offset, reached[0], all)
+		}
+		restart()
+		os.Remove(pageDiskPath())
+		pageSplitting, pageReaching = nil, nil
+		if cold := QueryPage(All, Filter{}, c.offset, 1); !reflect.DeepEqual(cold, page) {
+			t.Fatalf("offset %d: reached back %+v, cold %+v", c.offset, page, cold)
+		}
+		pageSplitting = func(n int) { *paired = append(*paired, n) }
+		pageReaching = func(n int) { reached = append(reached, n) }
+		restart()
+		QueryPage(All, Filter{}, 0, 1) // the settled cells on disk again
+	}
+}

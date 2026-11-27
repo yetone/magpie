@@ -107,15 +107,22 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 	next := *old
 	next.parts = map[uint64]*chunkPart{}
 	ps = pairRowsIn(cut, until, recent[0], recent[1], recent[2], identities)
-	newest = ps.partsOf(pass, &partCache{old: old.parts, next: next.parts}, identities)
+	counted := ps.partsOf(pass, &partCache{old: old.parts, next: next.parts}, identities)
+	newest = counted
 	n := 0
-	for _, part := range newest {
+	for _, part := range counted {
 		n += part.kept
 	}
 	if n < take {
-		// a page of rows older than cut: every chunk is paired for it
-		cache.pageOldNext = old
-		return nil, nil, nil, false
+		// a page of rows older than cut: its cells stand, and its rows are
+		// read from a pairing that reaches back as far as they are
+		back, backParts, found := pageRowsBack(since, cut, until, take, f, sets, identities)
+		if !found {
+			// older than every reach: every chunk is paired for it
+			cache.pageOldNext = old
+			return nil, nil, nil, false
+		}
+		ps, newest = back, backParts
 	}
 	cache.pageOldNext = &next
 	// the pairing of every chunk is not this page's, and stays the next's
@@ -128,7 +135,63 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 			}
 		}
 	}
-	return append([]*chunkPart{old.cells}, newest...), ps, newest, true
+	return append([]*chunkPart{old.cells}, counted...), ps, newest, true
+}
+
+// pageReach is how many days before cut a page of rows older than it
+// reaches back for them, each further only when the one before has too
+// few: a page of the rows before cut, the newest page of a start after a
+// few days away or of a model not used since, paired every chunk of the
+// history for them, while its cells were kept (~30 MB of a ~125 MB heap
+// on a real history, steady after).
+var pageReach = [...]int{7, 30, 120}
+
+// pageReaching, in tests, is told how many chunks each reach pairs.
+var pageReaching func(chunks int)
+
+// pageRowsBack is the pairing of the chunks a page's take newest rows f
+// keeps are in, reaching back from cut no further than pageReach, and
+// each chunk's part of what f keeps (newest reads its rows): no cells
+// are counted, the page's are cut's. False: since is reached first, or
+// fewer rows are kept that far back.
+func pageRowsBack(since, cut, until time.Time, take int, f Filter, sets [3][]*rowChunk, identities map[string]sessions.CodexIdentity) (*pairedRows, []*chunkPart, bool) {
+	for _, days := range pageReach {
+		from := cut.AddDate(0, 0, -days)
+		if !from.After(since) {
+			return nil, nil, false
+		}
+		recent, _ := splitAt(from, sets)
+		if pageReaching != nil {
+			pageReaching(chunksIn(recent))
+		}
+		ps := pairRowsIn(from, until, recent[0], recent[1], recent[2], identities)
+		parts, n := ps.keptParts(f)
+		if n >= take {
+			return ps, parts, true
+		}
+	}
+	return nil, nil, false
+}
+
+// keptParts is a part of each of ps's chunks, in all's order, with only
+// the rows f keeps counted (kept), and how many in all.
+func (ps *pairedRows) keptParts(f Filter) ([]*chunkPart, int) {
+	parts := make([]*chunkPart, len(ps.all))
+	rows := lentRows()
+	defer rows.release()
+	var r Row
+	n := 0
+	for i, c := range ps.all {
+		part := &chunkPart{}
+		ps.visitChunk(&rows, c, &r, func(_ timedRef, r *Row) {
+			if f.keepsRow(r) {
+				part.kept++
+			}
+		})
+		n += part.kept
+		parts[i] = part
+	}
+	return parts, n
 }
 
 // pageKeyOf is the key of a page's cells until, read through pass, of
