@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+	"github.com/pelletier/go-toml/v2/unstable"
 
 	"github.com/yetone/magpie/internal/filememo"
 )
@@ -46,7 +47,8 @@ func (a *Agent) syncedOnly(p string) bool {
 	if !ok || a.Dir == "" || filepath.Dir(p) != filepath.Clean(a.Dir) {
 		return false
 	}
-	have, err := filememo.Read("agent top keys", p, topKeys(strings.EqualFold(filepath.Ext(n), ".toml")))
+	isTOML := strings.EqualFold(filepath.Ext(n), ".toml")
+	have, err := filememo.Read("agent top keys", p, topKeys(isTOML))
 	if err != nil || len(have) == 0 {
 		return false
 	}
@@ -55,7 +57,21 @@ func (a *Agent) syncedOnly(p string) bool {
 			return false
 		}
 	}
+	if isTOML {
+		// the keys were read without the checks a whole parse makes (a
+		// key given twice); only a file that holds magpie's keys alone
+		// needs them, and it is a small one
+		if _, err := filememo.Read("agent toml whole", p, tomlWhole); err != nil {
+			return false
+		}
+	}
 	return true
+}
+
+// tomlWhole parses a whole TOML document, for its errors.
+func tomlWhole(b []byte) (struct{}, error) {
+	var m map[string]any
+	return struct{}{}, toml.Unmarshal(b, &m)
 }
 
 // topKeys parses a TOML or JSON object's top-level keys.
@@ -63,14 +79,7 @@ func topKeys(isTOML bool) func([]byte) ([]string, error) {
 	return func(b []byte) ([]string, error) {
 		var keys []string
 		if isTOML {
-			var m map[string]any
-			if err := toml.Unmarshal(b, &m); err != nil {
-				return nil, err
-			}
-			for k := range m {
-				keys = append(keys, k)
-			}
-			return keys, nil
+			return tomlTopKeys(b)
 		}
 		var m map[string]json.RawMessage
 		if err := json.Unmarshal(b, &m); err != nil {
@@ -84,4 +93,42 @@ func topKeys(isTOML bool) func([]byte) ([]string, error) {
 		}
 		return keys, nil
 	}
+}
+
+// tomlTopKeys reads a TOML document's top-level keys: each key set before
+// the first table, and the first part of each table's name. It reads the
+// syntax only, building no value and making none of a whole parse's
+// checks across keys (tomlWhole). Codex's config.toml keeps a table for
+// each folder the user trusted, ten thousand and more for some, and a
+// whole parse checks each table's name against the ones before it: ~200ms
+// of a start, each time the file was read again.
+func tomlTopKeys(b []byte) ([]string, error) {
+	var p unstable.Parser
+	p.Reset(b)
+	var keys []string
+	inTable := false
+	for p.NextExpression() {
+		e := p.Expression()
+		switch e.Kind {
+		case unstable.Table, unstable.ArrayTable:
+			inTable = true
+		case unstable.KeyValue:
+			if inTable {
+				continue
+			}
+		default:
+			continue
+		}
+		k := e.Key()
+		if !k.Next() {
+			continue
+		}
+		if key := k.Node().Data; !slices.ContainsFunc(keys, func(s string) bool { return s == string(key) }) {
+			keys = append(keys, string(key))
+		}
+	}
+	if err := p.Error(); err != nil {
+		return nil, err
+	}
+	return keys, nil
 }
