@@ -17,7 +17,7 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 const GRANTS = "A RAM user's AccessKey needs AliyunTokenPlanReadOnlyAccess and AliyunBSSReadOnlyAccess, and Administrator or Subscription plan in Model Studio → Account Management; the main account's needs none";
-const HINT = "The plan's usage is told only to the Alibaba Cloud account's AccessKey (console → AccessKey), not to the plan's API key. Give its AccessKey ID and Secret here for the Usage page to show it. It is used for nothing else.";
+const HINT = "Optional: with the Alibaba Cloud account's AccessKey (console → AccessKey), the Usage page shows the plan's usage. Requests use the plan's API key alone.";
 const plan = { chat: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", anthropic: "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic" };
 const ali = {
   id: "bailian-token-plan", name: "Bailian Token Plan", icon: "alibabacloud-color", preset: "bailian-token-plan", ...plan, responses: "", catalog: "",
@@ -105,7 +105,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.keyboard.press("Escape");
       await page.locator(".row.provider", { hasText: "Volcengine Ark" }).click();
       const vak = page.locator(".editor .volc-ak");
-      await vak.waitFor();
+      // none saved: under Advanced, folded
+      await vak.waitFor({ state: "attached" });
       assert.equal(await vak.locator("xpath=following-sibling::div[contains(@class,'hint')]").count(), 0);
       assert.ok(!(await page.locator(".editor").textContent()).includes("AliyunTokenPlan"));
       assert.deepEqual(errors, []);

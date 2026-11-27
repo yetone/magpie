@@ -4,8 +4,10 @@
 // AccessKey ID and Secret Access Key. The saved Secret is never shown, only
 // that one is saved; Save posts the ID as typed and a Secret only when a new
 // one was typed, Remove posts clearAccessKey, and an ID with no Secret is
-// refused before anything is posted. Other providers have neither and post
-// none. In English and Chinese, and every string in every language.
+// refused before anything is posted, Advanced opened to the Secret. They
+// are under Advanced, open when a key is saved, folded when none is. Other
+// providers have neither and post none. In English and Chinese, and every
+// string in every language.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -57,7 +59,7 @@ function serve(lang, posts, fresh) {
 
 const strings = [
   "AccessKey ID", "Secret Access Key", "saved · paste a new one to replace it", "Remove",
-  "The plan's 5-hour, weekly and monthly windows are told only to the account's access key (Volcengine console → API Access Keys), not to the plan's API key. Give it here for the Usage page to show them; it is used for nothing else.",
+  "Optional: with the account's access key (Volcengine console → API Access Keys), the Usage page shows the plan's 5-hour, weekly and monthly windows. Requests use the plan's API key alone.",
   "Give the access key's Secret too",
 ];
 const words = {
@@ -165,6 +167,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".editor").waitFor({ state: "detached" });
 
       await sheet.locator('.tile[data-pick="Volcengine Ark"]').click();
+      await page.locator(".editor.new").waitFor();
+      // optional: under Advanced, folded
+      const adv = page.locator(".editor details.advanced");
+      assert.equal(await adv.evaluate((d) => d.open), false, "Advanced folded");
+      assert.equal(await ak(page).evaluate((x) => !!x.closest("details.advanced")), true, "under Advanced");
+      assert.equal(await ak(page).isVisible(), false);
+      await adv.locator(":scope > summary").scrollIntoViewIfNeeded();
+      await adv.locator(":scope > summary").click();
       await ak(page).waitFor();
       assert.equal(await sk(page).inputValue(), "");
       assert.notEqual(await sk(page).getAttribute("placeholder"), w.saved, "nothing is saved yet");
@@ -172,6 +182,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await ak(page).fill(" AKLTnew ");
       assert.equal(await press(page, posts, w.add), null, "an ID with no Secret posts nothing");
       assert.equal(await page.locator(".editor .editor-error").textContent(), w.one);
+      assert.equal(await adv.evaluate((d) => d.open), true);
       await sk(page).fill("sk-new");
       const saved = await press(page, posts, w.add);
       assert.equal(saved.body.new, true);

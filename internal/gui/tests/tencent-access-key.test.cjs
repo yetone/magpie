@@ -7,7 +7,9 @@
 // that one is saved; Save posts the SecretId and a SecretKey only when a new
 // one was typed, Remove posts clearAccessKey, and a SecretId with no
 // SecretKey is refused at an Enterprise region, never at one that hides
-// them. A 420px window; English and Chinese, every string in every language.
+// them. They are under Advanced, open when a key is saved and folded when
+// none is (tencent-plan-api-key-only.test.cjs). A 420px window; English and
+// Chinese, every string in every language.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -61,7 +63,7 @@ function serve(lang, list, posts) {
   };
 }
 
-const hint = "Token Plan Enterprise's usage is told only to the Tencent Cloud account's API key (console → Access management → API keys), not to the plan's API key. Give its SecretId and SecretKey here for the Usage page to show it; a sub-user's key that may read TokenHub is enough. It is used for nothing else.";
+const hint = "Optional, for Token Plan Enterprise only: with the Tencent Cloud account's API key (console → Access management → API keys; a sub-user's that may read TokenHub is enough), the Usage page shows the plan's usage. Requests use the plan's API key alone; the personal plan needs nothing more.";
 const strings = ["SecretId", "SecretKey", hint, "Enterprise plan · China", "Enterprise plan · Global"];
 const words = {
   en: { saved: "saved · paste a new one to replace it", remove: "Remove", save: "Save", add: "Add", one: "Give the access key's Secret too" },
@@ -103,6 +105,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const b = page.locator(".editor .segs.regions .opt").nth(i);
       await b.scrollIntoViewIfNeeded();
       await b.click();
+    };
+    // Advanced unfolded, where the access key is
+    const unfold = async (page) => {
+      const d = page.locator(".editor details.advanced");
+      if (await d.evaluate((x) => x.open)) return;
+      await d.locator(":scope > summary").scrollIntoViewIfNeeded();
+      await d.locator(":scope > summary").click();
+      await ak(page).waitFor();
     };
     const shown = async (page) => {
       const [a, s] = [await ak(page).isVisible(), await sk(page).isVisible()];
@@ -187,6 +197,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await edit(page, "Tencent personal");
       await region(page, ENT);
+      await unfold(page);
       assert(await shown(page));
       assert.notEqual(await sk(page).getAttribute("placeholder"), w.saved, "nothing is saved yet");
       await ak(page).fill(" AKIDnew ");
@@ -208,6 +219,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".editor.new").waitFor();
       assert.equal(await shown(page), false, "hidden at the plan it opens at");
       await region(page, ENT);
+      await unfold(page);
       assert(await shown(page));
       const labels = await page.locator(".editor label").allTextContents();
       assert(labels.includes("SecretId") && labels.includes("SecretKey"), labels.join(" | "));

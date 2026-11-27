@@ -7520,11 +7520,13 @@ async function pluginSignIn(id, e) {
 }
 
 // openProvider: a provider opened in the Providers tab
-async function openProvider(id) {
+async function openProvider(id, { advanced: open } = {}) {
   if (view === "providers" && !await leaveDraft()) return;
   if (!await show("providers")) return;
   closeModal();
   adding = false; editing = id; draft = null; presetQuery = "";
+  // the access key a Usage card asks for is under Advanced
+  if (open) advanced = { of: id, open: true };
   // the list not in yet (the tab not opened before), show's load draws it
   // with this one open
   if (providers) renderProviders();
@@ -8211,7 +8213,7 @@ function advancedSet(d, p) {
     !!d.rateWindows?.length ||
     !!(d.searches || d.authHeader || d.passUserAgent === false || d.unredacted || d.countFree || d.billing || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff || d.noBalanceProbe || d.http1 || d.socket || d.imageFilesOff || d.passErrors || d.clientCert || d.serverCA || d.serverPin || d.resolve) ||
     !!d.fallback?.length || !!(p?.balanceToken?.set || p?.connectAgents || p?.maxImages) ||
-    (p?.accessKey?.vendor === "aws" && !!(p.accessKey.id || p.accessKey.secretSet));
+    !!(p?.accessKey && (p.accessKey.id || p.accessKey.secretSet));
 }
 function priceRateError(ed) {
   shown(ed.querySelector("input.price-rate"))?.focus(NO_SCROLL);
@@ -10328,16 +10330,17 @@ function drawEditor(p, presetID) {
       ...field(secretName, pair, aws
         ? t("In place of the API key: an AWS access key that may call Bedrock, which signs each request. A temporary key needs its session token too.")
         : tc
-        ? t("Token Plan Enterprise's usage is told only to the Tencent Cloud account's API key (console → Access management → API keys), not to the plan's API key. Give its SecretId and SecretKey here for the Usage page to show it; a sub-user's key that may read TokenHub is enough. It is used for nothing else.")
+        ? t("Optional, for Token Plan Enterprise only: with the Tencent Cloud account's API key (console → Access management → API keys; a sub-user's that may read TokenHub is enough), the Usage page shows the plan's usage. Requests use the plan's API key alone; the personal plan needs nothing more.")
         : access.vendor === "alibaba"
-        ? t("The plan's usage is told only to the Alibaba Cloud account's AccessKey (console → AccessKey), not to the plan's API key. Give its AccessKey ID and Secret here for the Usage page to show it. It is used for nothing else.")
-        : t("The plan's 5-hour, weekly and monthly windows are told only to the account's access key (Volcengine console → API Access Keys), not to the plan's API key. Give it here for the Usage page to show them; it is used for nothing else.")),
+        ? t("Optional: with the Alibaba Cloud account's AccessKey (console → AccessKey), the Usage page shows the plan's usage. Requests use the plan's API key alone.")
+        : t("Optional: with the account's access key (Volcengine console → API Access Keys), the Usage page shows the plan's 5-hour, weekly and monthly windows. Requests use the plan's API key alone.")),
     ];
-    // rarely used beside the API key: at the top of Advanced (#7687)
-    if (aws) {
-      advIn.prepend(...rows);
-      import("./awstoken.js").then(() => { dropToken = awsToken(rows.at(-1), access, draft); }, () => {});
-    } else ed.append(...rows);
+    // rarely used beside the API key, and never needed for requests but
+    // Bedrock's: at the top of Advanced (#7687), so a plan's own API key
+    // reads as enough (big_yooooo on X: Token Plan 个人版 asked for a
+    // SecretId and SecretKey it has no use for)
+    advIn.prepend(...rows);
+    if (aws) import("./awstoken.js").then(() => { dropToken = awsToken(rows.at(-1), access, draft); }, () => {});
     // the plan at some regions only (Tencent's 企业版)
     const at = pr?.accessKeyRegions;
     if (at?.length) {
@@ -10678,7 +10681,7 @@ function drawEditor(p, presetID) {
         if (draft.sessionToken) body.sessionToken = draft.sessionToken;
         else if (draft.clearSessionToken) body.clearSessionToken = true;
       }
-      if (accessShown() && body.accessKeyID && !body.secretAccessKey && !(access.secretSet && !draft.clearAccessKey)) { if (aws) adv.open = true; ed.querySelector(".volc-sk")?.focus(NO_SCROLL); return editorError(t("Give the access key's Secret too"), "warn"); }
+      if (accessShown() && body.accessKeyID && !body.secretAccessKey && !(access.secretSet && !draft.clearAccessKey)) { adv.open = true; ed.querySelector(".volc-sk")?.focus(NO_SCROLL); return editorError(t("Give the access key's Secret too"), "warn"); }
     }
     if (vertex) body.vertex = vertexOfDraft();
     if (isNew && custom && !body.name) { name.focus(); return editorError(t("Give it a name"), "warn"); }
@@ -19049,7 +19052,7 @@ function quotaWindows(sub) {
     if (key || sub.seeAt) {
       const go = el("button", "quota-fix", t(key ? "Open settings" : "Open the console ↗"));
       go.type = "button";
-      go.onclick = (ev) => { ev.stopPropagation(); key ? openProvider(sub.provider) : api("open", { url: sub.seeAt }).catch(() => {}); };
+      go.onclick = (ev) => { ev.stopPropagation(); key ? openProvider(sub.provider, { advanced: true }) : api("open", { url: sub.seeAt }).catch(() => {}); };
       e.append(" ", go);
     }
     // read again from here too: a failed reading is the one most wanted
