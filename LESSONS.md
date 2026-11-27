@@ -465,6 +465,22 @@ and its failure message counts against what it compared.**
   measured.
 - Seen 1× (2026-11-16).
 
+**An edit to a file a cache is keyed by costs every user a rebuild.**
+internal/usage's requests-v1.bin is named by a hash of rowSource's
+files (the `//go:embed` list in request_disk.go), and log-v1.bin by
+logSource's. Change one byte in one of them and every user's next start
+throws the file away and reads every call shard again.
+- e8e3a3eb2 (11-27, v0.1.4970) reused one Record in usage.go's Load and
+  last-request reader, two readers off the pages' path. usage.go is in
+  rowSource, so on a long history the first start took ~14 s of CPU and
+  ~2.6 GB of allocations. 3b7a657e7 (v0.1.4971) put usage.go back byte
+  for byte and kept the half in log_index.go, which only the cheap
+  log-v1.bin key covers.
+- Before editing a file in either embed list, ask whether the change has
+  to be there. If it does, say in the body that the cache rebuilds, and
+  what that costs on a long history. A tidy-up there is never free.
+- Seen 1× (2026-11-27).
+
 **A full run gives the slow packages room.** `go test ./...` at the default
 10m timeout times out in internal/gateway (#2108), and under load in
 internal/provider and internal/agent. Use -timeout 45m, so "every package
