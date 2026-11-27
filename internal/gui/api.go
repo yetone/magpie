@@ -3443,9 +3443,13 @@ func held(h http.Handler) http.Handler {
 			// 5x the CPU.
 			defer tightenGC()()
 		}
-		if !(api && r.Method == http.MethodGet) && r.URL.Path != "/api/update/using" && r.URL.Path != "/api/page-away" {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/update/using" && r.URL.Path != "/api/page-away" {
 			// anything that may have written drops what was held, once it
-			// has answered with it (a page's word of input writes nothing)
+			// has answered with it (a page's word of input writes nothing).
+			// A GET writes nothing, under /api or not: the page's own
+			// files, icons and logos each dropped every provider's, agent's
+			// and catalog's lists, ~90 a page open, and the next read
+			// built them all again (#2278)
 			defer provider.Changed()
 		}
 		h.ServeHTTP(rw, r)
