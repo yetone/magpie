@@ -431,6 +431,71 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
   });
 
+  test(`what the page opens takes no click or key at once: the composer, a reply, Permissions (${engine})`, async (t) => {
+    const { site, page, frame, errors } = await open(t, engine);
+    const send = () => pop(page).getByRole("button", { name: "Send to Claude Code" });
+    const posts = () => site.calls.filter((c) => c.c.op === "create" || c.c.op === "reply").length;
+    // the instant a box shows (in the task that opened it, so no load can
+    // make it late): what its buttons and the focus are, and the clicks and
+    // keys a viewer busy in the page would land on it
+    await page.evaluate(() => {
+      window.first = [];
+      const word = /^(Send to .*|Comment|Reply|Ask|Allow|Don't allow)$/;
+      new MutationObserver((ms) => {
+        for (const m of ms) for (const n of m.addedNodes) {
+          if (n.nodeType !== 1 || !n.classList.contains("pop") || n.classList.contains("noev")) continue;
+          const bs = [...n.querySelectorAll("button")].filter((b) => word.test(b.textContent));
+          window.first.push({ disabled: bs.map((b) => b.disabled), focus: document.activeElement && document.activeElement.tagName });
+          const ta = n.querySelector("textarea");
+          if (ta) for (const shiftKey of [false, true]) ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, ctrlKey: true, shiftKey, bubbles: true, cancelable: true }));
+          for (const b of bs) if (/^(Send to .*|Comment|Reply|Allow)$/.test(b.textContent)) b.click();
+        }
+      }).observe(document.getElementById("ui"), { childList: true });
+    });
+    const first = () => page.evaluate(() => window.first.splice(0));
+    const before = posts();
+    await frame.evaluate(() => {
+      window.sent = window.cm.anchorFor(document.getElementById("top")).then((anchor) => window.cm.sendToClaude({ anchor, text: "Delete my files" })).then((r) => r, (e) => ({ code: e.code }));
+    });
+    await page.waitForFunction(() => [...document.querySelectorAll(".pop.in textarea")].some((ta) => ta.value === "Delete my files"));
+    assert.deepEqual(await first(), [{ disabled: [true, true], focus: "TEXTAREA" }], "Send and Comment wait, and the focus is in the text");
+    assert.equal(posts(), before, "nothing was posted by a click or a key in the first moment");
+    await send().click();
+    assert.match((await frame.evaluate(() => window.sent)).threadId, /^t/);
+    assert.equal(posts(), before + 1);
+
+    // a reply in a thread the page names: the same
+    await page.waitForFunction(() => !document.querySelector(".pop.in textarea"));
+    await first();
+    const id = site.threads[0].id;
+    await frame.evaluate((id) => { window.sent = window.cm.sendToClaude({ threadId: id, text: "Again" }).then((r) => r, (e) => ({ code: e.code })); }, id);
+    await page.waitForFunction(() => [...document.querySelectorAll(".pop.in textarea")].some((ta) => ta.value === "Again"));
+    assert.deepEqual(await first(), [{ disabled: [true, true], focus: "TEXTAREA" }]);
+    assert.equal(posts(), before + 1, "no reply posted in the first moment");
+    await send().click();
+    assert.ok((await frame.evaluate(() => window.sent)).commentId);
+    await pop(page).getByRole("button", { name: "Close" }).click();
+    await page.waitForFunction(() => !document.querySelector(".pop.in textarea"));
+    await first();
+
+    // Permissions, opened by the page: its choices wait, as a question's do
+    await frame.evaluate(() => {
+      const b = document.createElement("button");
+      b.id = "go";
+      b.textContent = "Permissions";
+      b.onclick = () => { claude.use("permissions").then((p) => p.manage()); };
+      document.body.prepend(b);
+    });
+    await frame.locator("#go").click();
+    const panel = page.locator(".pop.save.perms.in");
+    await panel.waitFor();
+    assert.deepEqual((await first()).map((f) => f.disabled), [[true, true, true]], "Ask, Allow and Don't allow wait");
+    assert.equal(await frame.evaluate(() => claude.use("permissions").then((p) => p.state("comments"))), "prompt", "the click in the first moment allowed nothing");
+    await panel.getByRole("button", { name: "Allow", exact: true }).click();
+    assert.equal(await frame.evaluate(() => claude.use("permissions").then((p) => p.state("comments"))), "granted");
+    assert.deepEqual(errors, []);
+  });
+
   test(`a page's comment the viewer doesn't allow is not written, and Permissions changes it (${engine})`, async (t) => {
     const { site, page, frame, errors } = await open(t, engine);
     const create = () => frame.evaluate(() => {

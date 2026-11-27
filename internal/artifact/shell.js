@@ -343,6 +343,16 @@
     node.style.transformOrigin = (left > x ? "0 " : "100% ") + Math.max(0, Math.min(h, y - top)) + "px";
     requestAnimationFrame(function () { node.classList.add("in"); });
   }
+  // how long a question, or a composer the page opened, waits before its
+  // buttons take a click: a click meant for the page, under where it
+  // appears, answers nothing
+  var ARM = 400;
+  function holdClicks(node) {
+    var until = Date.now() + ARM;
+    node.addEventListener("click", function (e) {
+      if (Date.now() < until) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+  }
   function composerBox(opts) {
     // opts: placeholder, submit(text, send) -> Promise, onEsc
     var ta = el("textarea");
@@ -355,15 +365,17 @@
     if (canSend) send = button(t("Send to {agent}", { agent: agent.name }));
     var row = el("div", "row", [err, send, go]);
     var box = el("div", "compose", [ta, row]);
-    var busy = false;
+    // held: just opened by the page's word, nothing posts yet (a click or
+    // a key the viewer meant for the page lands here otherwise)
+    var busy = false, held = 0;
     function sync() {
       var empty = !ta.value.trim();
-      go.disabled = empty || busy;
-      if (send) send.disabled = empty || busy;
+      go.disabled = empty || busy || !!held;
+      if (send) send.disabled = empty || busy || !!held;
     }
     function submit(toAgent) {
       var text = ta.value.trim();
-      if (!text || busy) return;
+      if (!text || busy || held) return;
       busy = true;
       sync();
       err.textContent = "";
@@ -394,7 +406,14 @@
       go.title = (mac ? "⌘↩" : "Ctrl+Enter");
     }
     sync();
-    return { node: box, ta: ta, set: function (v) { ta.value = v; ta.dispatchEvent(new Event("input")); }, send: send };
+    return {
+      node: box, ta: ta, set: function (v) { ta.value = v; ta.dispatchEvent(new Event("input")); }, send: send,
+      hold: function () {
+        clearTimeout(held);
+        held = setTimeout(function () { held = 0; sync(); }, ARM);
+        sync();
+      }
+    };
   }
 
   // a new thread at an anchor (null: the whole page)
@@ -421,8 +440,10 @@
     pop = { node: node, composer: true, dirty: function () { return !!c.ta.value.trim(); }, onClose: o.onClose };
     place(node, x, y);
     if (o.text) c.set(o.text);
+    // every composer here is opened by the page's word: the viewer reads
+    // it before anything posts, and a key goes to the text, never to Send
+    c.hold();
     c.ta.focus();
-    if (o.send && c.send) c.send.focus();
     return true;
   }
   // made: called once the thread is, after o.done (a composer closed
@@ -488,7 +509,7 @@
     node.appendChild(el("div", "acts", [no, yes]));
     // a click already on its way when the prompt appears doesn't count
     yes.disabled = no.disabled = true;
-    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, 400);
+    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, ARM);
     var timer = setTimeout(function () { mine.done(false); }, 60000);
     var mine = {};
     var p = new Promise(function (res) {
@@ -593,7 +614,7 @@
     node.appendChild(el("div", "size", [t("It gets the words you say, never the sound.")]));
     node.appendChild(el("div", "acts", [no, yes]));
     yes.disabled = no.disabled = true;
-    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, 400);
+    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, ARM);
     var timer = setTimeout(function () { mine.done("dismissed"); }, 60000);
     var mine = { node: node };
     mine.p = new Promise(function (res) {
@@ -853,7 +874,7 @@
     if (tools.length) node.appendChild(el("div", "size", [t("It can run {tools} as you.", { tools: shown })]));
     node.appendChild(el("div", "acts", [no, yes]));
     yes.disabled = no.disabled = true;
-    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, 400);
+    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, ARM);
     var timer = setTimeout(function () { mine.done("dismissed"); }, 60000);
     var mine = { node: node, names: names };
     mine.p = new Promise(function (res) {
@@ -994,7 +1015,7 @@
       node.appendChild(path);
       node.appendChild(el("div", "acts", [no, yes]));
       yes.disabled = no.disabled = true;
-      var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, 400);
+      var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, ARM);
       var timer = setTimeout(function () { mine.done("dismissed"); }, 60000);
       return new Promise(function (res) {
         mine.done = function (a) {
@@ -1097,7 +1118,7 @@
     node.appendChild(q);
     node.appendChild(el("div", "acts", [no, yes]));
     yes.disabled = no.disabled = true;
-    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, 400);
+    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, ARM);
     var timer = setTimeout(function () { mine.done("dismissed"); }, 60000);
     mine.p = new Promise(function (res) {
       mine.done = function (a) {
@@ -1162,11 +1183,16 @@
     h.id = "perms-h";
     node.setAttribute("aria-labelledby", "perms-h");
     node.appendChild(h);
+    // the page opens the panel: its choices wait, as a question's do
+    var choices = [];
+    var arm = setTimeout(function () { choices.forEach(function (b) { b.disabled = false; }); }, ARM);
     function row(label, get, set) {
       var seg = el("div", "seg");
       [["prompt", t("Ask")], ["granted", t("Allow")], ["denied", t("Don't allow")]].forEach(function (o) {
         var b = el("button", get() === o[0] ? "on" : "", [o[1]]);
         b.type = "button";
+        b.disabled = true;
+        choices.push(b);
         b.setAttribute("aria-pressed", String(get() === o[0]));
         b.addEventListener("click", function () {
           set(o[0]);
@@ -1198,6 +1224,7 @@
     perms.done = function () {
       if (!perms) return;
       perms = null;
+      clearTimeout(arm);
       node.classList.remove("in");
       setTimeout(function () { node.remove(); }, 120);
       answer();
@@ -1312,7 +1339,8 @@
     c.ta.focus();
     if (prefill) {
       c.set(prefill.text);
-      if (c.send) c.send.focus();
+      c.hold();
+      holdClicks(node);
     }
   }
 
