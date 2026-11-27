@@ -77,8 +77,14 @@ type sums struct {
 	unpriced                             int
 }
 
+// add counts r in s. A try that failed and handed the request on
+// (usage.Record.HandedOn) is counted for what it billed, not as a call:
+// the request is the row that ends it, and every such try has a row now,
+// a 429 too (Dazzle_sys on X).
 func (s *sums) add(r usage.Record, cost float64, priced bool) {
-	s.calls++
+	if !r.HandedOn {
+		s.calls++
+	}
 	s.input += int64(r.Input)
 	s.output += int64(r.Output)
 	s.cacheRead += int64(r.CacheRead)

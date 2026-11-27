@@ -580,9 +580,11 @@ func TestOTelWaterfallIncludesUnbilledFallback(t *testing.T) {
 			t.Fatalf("root duplicates usage: %+v", a)
 		}
 	}
-	// Accounting remains one successful call; failed attempts are telemetry only.
-	if records := usage.Load(time.Time{}); len(records) != 1 || records[0].Input != 10 {
-		t.Fatalf("ledger: %+v", records)
+	// Accounting remains one successful call; the failed attempt has its
+	// handed-on row, with nothing billed.
+	if records, handedOn := answersOf(usage.Load(time.Time{})); len(records) != 1 || records[0].Input != 10 ||
+		len(handedOn) != 1 || handedOn[0].Status != 429 || handedOn[0].Input+handedOn[0].Output != 0 {
+		t.Fatalf("ledger: %+v, handed on %+v", records, handedOn)
 	}
 	// Metric histograms count two attempts, not the request parent.
 	if len(metricExports) == 0 {

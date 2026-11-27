@@ -70,9 +70,14 @@ func TestCanceledRouteUsageKeepsAttemptedModel(t *testing.T) {
 			default:
 				t.Fatal("the fallback was not attempted")
 			}
-			records := usage.Load(time.Time{})
+			// the first member's 429 has its handed-on row, the request
+			// its one canceled row
+			records, handedOn := answersOf(usage.Load(time.Time{}))
 			if len(records) != 1 {
 				t.Fatalf("ledger has %d records, want one canceled request", len(records))
+			}
+			if len(handedOn) != 1 || handedOn[0].Provider != "primary" || handedOn[0].Status != 429 || !strings.Contains(handedOn[0].Error, "rate limited") {
+				t.Fatalf("the first try's row: %+v", handedOn)
 			}
 			r := records[0]
 			if r.Provider != "spare" || r.Model != "second" || r.Requested != requested || r.Status != 499 || r.Served != "" || r.Input+r.Output != 0 {

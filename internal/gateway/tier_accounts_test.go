@@ -295,7 +295,8 @@ func TestTierRecordedPerTry(t *testing.T) {
 
 	// the CSV's last columns
 	var b strings.Builder
-	if err := usage.WriteCSV(&b, []usage.Row{{Record: recs[0]}}); err != nil {
+	first, _ := answersOf(recs)
+	if err := usage.WriteCSV(&b, []usage.Row{{Record: first[0]}}); err != nil {
 		t.Fatal(err)
 	}
 	cells, err := csv.NewReader(strings.NewReader(b.String())).ReadAll()

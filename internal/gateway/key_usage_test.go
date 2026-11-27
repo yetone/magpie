@@ -74,7 +74,10 @@ func TestUsageNamesTheKeyThatAnswered(t *testing.T) {
 			if code, _ := sendTo(s, path, body); code != 200 {
 				t.Fatal(code)
 			}
-			recs := usage.Load(time.Time{})
+			recs, handedOn := answersOf(usage.Load(time.Time{}))
+			if len(handedOn) != 1 || handedOn[0].ProviderKeyName != "Personal" || handedOn[0].Status != 429 {
+				t.Fatalf("the limited key's try: %+v", handedOn)
+			}
 			if len(recs) != 2 || recs[0].ProviderKeyID != recs[1].ProviderKeyID || recs[1].ProviderKeyName != "Renamed team" {
 				t.Fatalf("after promotion and rename: %+v", recs)
 			}

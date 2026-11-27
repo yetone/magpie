@@ -18,7 +18,7 @@ import (
 // request's own row. The Usage page counted the second alone, its "2
 // tries" the only sign that the whole conversation went to two accounts
 // (hhxk233 and Kayrainforest on X). A try that failed before anything was
-// billed has no row.
+// billed has its row too, with its status and no tokens (Dazzle_sys on X).
 func TestClaudeSubscriptionFailedTryKeepsItsTokens(t *testing.T) {
 	start := `    echo '{"type":"stream_event","event":{"type":"message_start","message":{"id":"m1","model":"claude-sonnet-5","usage":{"input_tokens":3,"cache_creation_input_tokens":90000}}}}'
 `
@@ -67,8 +67,9 @@ func TestClaudeSubscriptionFailedTryKeepsItsTokens(t *testing.T) {
 					t.Fatalf("the request's row: %+v", answered)
 				}
 				if !billed {
-					if len(handed) != 0 {
-						t.Fatalf("a try that billed nothing has a row: %+v", handed)
+					if len(handed) != 1 || handed[0].ProviderAccount != "me@example.com" || handed[0].Status != 529 ||
+						handed[0].Input+handed[0].Output+handed[0].CacheRead+handed[0].CacheWrite != 0 {
+						t.Fatalf("the try that billed nothing: %+v", handed)
 					}
 					return
 				}

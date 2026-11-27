@@ -4095,8 +4095,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// the plan as it stands for the tries: whether the one that answers
 	// stood in for a member listed ahead of its own (standsInFor)
 	plannedCs, plannedOrder := slices.Clone(cands), pl.order
-	// the row of the try before, when it failed, billed something and
-	// handed the request on, written once the next try begins
+	// the row of the try before, when it failed and handed the request
+	// on, written once the next try begins
 	var failedRow func()
 	walkBegan := time.Now() // the serial walk's start, for groupBudget (#5113)
 	// the turn near its cap the try before took, given back as the next
@@ -5076,15 +5076,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// written the whole conversation to that account's cache, and the
 		// next account wrote it again, while the Usage page counted the
 		// second alone, "2 tries" the only sign of the first (hhxk233 and
-		// Kayrainforest on X). A failure that billed nothing has no row.
+		// Kayrainforest on X). So is one that billed nothing, with its
+		// status and the vendor's words: a member's 429 or 529 the
+		// Routing page showed for a moment was nowhere on the Requests
+		// page, the answer's "2 tries" the only sign of it (Dazzle_sys on
+		// X), while Codex's own sign-in already kept a row for each try
+		// it handed on (codexUpstreamOn's handOn). A try that never went
+		// out (call.To empty) has none.
 		failedRow = func() {
 			if call.To == "" {
 				return
 			}
 			u := call.Usage.billed()
-			if u.Input+u.Output+u.CacheRead+u.CacheWrite == 0 {
-				return
-			}
 			rec := usage.Record{RouteID: tr.ID, Time: began, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Host: where, Model: c.model,
 				ProviderKeyID: providerKeyID, ProviderKeyName: providerKeyName, ProviderAccount: providerAccount,
 				Requested: call.Model, Served: call.Usage.Served, Wire: wentAs, Upstream: call.Usage.Upstream,

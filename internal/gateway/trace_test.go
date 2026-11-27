@@ -62,8 +62,9 @@ func TestTraceTellsTheRoute(t *testing.T) {
 		t.Fatalf("tries %+v", r.Tries)
 	}
 
-	if recs := usage.Load(time.Time{}); len(recs) != 1 || recs[0].RouteID != r.ID || r.ID == 0 {
-		t.Fatalf("usage: %+v, route %d", recs, r.ID)
+	if recs, handedOn := answersOf(usage.Load(time.Time{})); len(recs) != 1 || recs[0].RouteID != r.ID || r.ID == 0 ||
+		len(handedOn) != 1 || handedOn[0].RouteID != r.ID || handedOn[0].Status != 429 {
+		t.Fatalf("usage: %+v, handed on %+v, route %d", recs, handedOn, r.ID)
 	}
 
 	// the next finds the limited key resting, and says why

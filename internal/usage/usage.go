@@ -945,8 +945,11 @@ func FormatCost(amountUSD float64, currency string, rate float64) string {
 
 // countCache counts r's prompt as one whose cache wasn't counted when its
 // vendor said so, or never counts it (a record kept before it said so).
+//
+// A call with no prompt counted at all (a try that failed before its
+// vendor billed it) leaves nothing out, and is not counted.
 func (t *Totals) countCache(r Record) {
-	if r.cacheNotCounted() {
+	if r.cacheNotCounted() && r.cacheUnknownIn() > 0 {
 		t.CacheUnknown += r.cacheUnknownIn()
 		t.CacheUnknownCalls++
 	}
@@ -1070,6 +1073,14 @@ func (t *Totals) count(r Record) {
 	case r.Tries > 1:
 		t.Retried++
 	}
+}
+
+// TriedOnly is whether r is a try that failed and handed its request on
+// with nothing billed: a row of its own on the Requests page, with its
+// status and the vendor's words (Dazzle_sys on X), but no call, no model
+// a session went through and nothing spent.
+func (r Record) TriedOnly() bool {
+	return r.HandedOn && r.Input+r.Output+r.CacheRead+r.CacheWrite == 0
 }
 
 // LostRequest is whether r ends a request the agent got an error for: a
@@ -1297,6 +1308,9 @@ type viaAcc struct {
 func countVias(blocks []*rowChunk, since time.Time, renames provider.Renames, base, own map[string]viaAcc, keep keptStrings) {
 	visitBlocks(blocks, since, func(r Record) {
 		if r.IsRejected() || r.IsReported() || r.Session == "" || r.Model == "" {
+			return
+		}
+		if r.TriedOnly() {
 			return
 		}
 		r.Provider, r.Model, r.Effort = keep.of(renames.Of(r.Provider, r.Time)), keep.of(r.Model), keep.of(r.Effort)
