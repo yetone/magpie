@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/iconproxy"
@@ -438,10 +440,10 @@ var seenServers = struct {
 	m map[string]MarketServer
 }{m: map[string]MarketServer{}}
 
-// MarketServers is what the market shows for a search: the featured servers
-// that match it, then the registry's, then the popular ones that do; with no
-// search, the featured and every popular one. A search that is an address —
-// a repository, a page, an endpoint, a package — finds the ones at it.
+// MarketServers is what the market shows for a search: with no search, the
+// featured and every popular server in their curated order. A word search
+// ranks all matching sources together. A search that is an address — a
+// repository, a page, an endpoint, a package — finds the ones at it.
 func MarketServers(q string) ([]MarketServer, error) {
 	raw := strings.TrimSpace(q)
 	q = strings.ToLower(raw)
@@ -465,29 +467,35 @@ func MarketServers(q string) ([]MarketServer, error) {
 					m.Match = true
 					got = append(got, m)
 				}
-			case q == "" || strings.Contains(strings.ToLower(m.Title+" "+m.ID+" "+m.Publisher+" "+m.Description+" "+packageOf(&m.server)), q):
+			case q == "":
 				got = append(got, m)
 			}
 		}
 		return got
 	}
-	add(pick(featured))
 	var err error
 	switch {
 	case q == "":
+		add(featured)
 		add(popularServers())
 	case addr != "":
+		add(pick(featured))
 		add(pick(popularServers()))
 		var found []MarketServer
 		found, err = searchAt(raw, addr)
 		add(found)
 	default:
-		// the registry's, ranked by name first; then the popular ones
-		// whose words have it
 		found, ferr := searchWords(q)
 		err = ferr
-		add(found)
-		add(pick(popularServers()))
+		var ranked []scored
+		for _, list := range [][]MarketServer{featured, found, popularServers()} {
+			for _, m := range list {
+				if score, ok := marketScore(m, q); ok {
+					ranked = append(ranked, scored{m: m, score: score})
+				}
+			}
+		}
+		out = best(ranked)
 	}
 	if out == nil {
 		out = []MarketServer{}
@@ -498,6 +506,96 @@ func MarketServers(q string) ([]MarketServer, error) {
 		}
 	}
 	return out, err
+}
+
+// marketScore ranks a word search independently of where a server came from.
+// Names and packages are much stronger signals than a description mention.
+func marketScore(m MarketServer, q string) (int, bool) {
+	score := 0
+	for _, field := range []string{m.Name, m.Title, m.ID, packageOf(&m.server), m.Publisher} {
+		score = max(score, marketFieldScore(field, q))
+	}
+	if descriptionScore := marketDescriptionScore(m.Description, q); descriptionScore > score {
+		score = descriptionScore
+	}
+	if score == 0 {
+		return 0, false
+	}
+	if m.Featured {
+		score++
+	}
+	return score, true
+}
+
+func marketFieldScore(field, q string) int {
+	field = strings.ToLower(field)
+	switch {
+	case field == q:
+		return 10000
+	case strings.HasPrefix(field, q):
+		return 8000
+	case marketWordMatch(field, q):
+		return 7000
+	case strings.Contains(field, q):
+		return 6000
+	default:
+		return 0
+	}
+}
+
+func marketDescriptionScore(description, q string) int {
+	if marketWordMatch(description, q) {
+		return 1000
+	}
+	// inside a word: only a query long enough not to be part of many
+	// (rea is in read, real, area); in a script written without spaces
+	// (Chinese) a word has no edges to look for
+	if (len([]rune(q)) > 3 || !ascii(q)) && strings.Contains(strings.ToLower(description), q) {
+		return 500
+	}
+	return 0
+}
+
+func marketWordMatch(text, q string) bool {
+	text = strings.ToLower(text)
+	for start := 0; ; {
+		i := strings.Index(text[start:], q)
+		if i < 0 {
+			return false
+		}
+		i += start
+		before := i == 0 || !marketWordBefore(text, i)
+		after := i+len(q) == len(text) || !marketWordAt(text, i+len(q))
+		if before && after {
+			return true
+		}
+		start = i + len(q)
+	}
+}
+
+func marketWordBefore(text string, byteIndex int) bool {
+	if byteIndex <= 0 || byteIndex > len(text) {
+		return false
+	}
+	r, _ := utf8.DecodeLastRuneInString(text[:byteIndex])
+	return unicode.IsLetter(r) || unicode.IsNumber(r)
+}
+
+func marketWordAt(text string, byteIndex int) bool {
+	if byteIndex < 0 || byteIndex >= len(text) {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(text[byteIndex:])
+	return unicode.IsLetter(r) || unicode.IsNumber(r)
+}
+
+func ascii(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
 
 // serverKey is what a server is, whatever it's called: its URL, or the
@@ -673,6 +771,30 @@ func offer(list []scored) []MarketServer {
 			break
 		}
 		seenServers.m[s.m.ID] = s.m
+		out = append(out, s.m)
+	}
+	return out
+}
+
+// best is a word search's servers from every source, each once at its best
+// score, best first; among equals, in the order the sources gave them
+// (featured, the registry's by its rank, popular). None is dropped: a
+// search for a word lists everything that has it, as before (#7891).
+func best(list []scored) []MarketServer {
+	at := map[string]int{}
+	var unique []scored
+	for _, s := range list {
+		k := serverKey(&s.m.server)
+		if i, ok := at[k]; ok {
+			unique[i].score = max(unique[i].score, s.score)
+			continue
+		}
+		at[k] = len(unique)
+		unique = append(unique, s)
+	}
+	sort.SliceStable(unique, func(i, j int) bool { return unique[i].score > unique[j].score })
+	out := make([]MarketServer, 0, len(unique))
+	for _, s := range unique {
 		out = append(out, s.m)
 	}
 	return out
