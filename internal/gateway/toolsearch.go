@@ -3,6 +3,9 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
+
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // Codex's tool search relayed to a Responses API other than the ChatGPT
@@ -13,6 +16,39 @@ import (
 // as a function's, and the tools found in the tools; and a call the model
 // makes to it comes back to Codex as the tool_search_call Codex runs.
 
+// DeepSeek's own Responses API runs a client's tool search as the client
+// sends it for deepseek-flash (V4.1 Flash): the tool_search tool with
+// execution "client", its tool_search_call and tool_search_output items,
+// and the found tools' defer_loading, which it leaves out of the leading
+// prompt and loads after the history, so the cached prefix is kept
+// (api-docs.deepseek.com, Responses API compatibility and its tool search
+// guide). deepseek-v4-pro ignores the tool and its items, and its Chat
+// API has no deferred loading, so those, and every other host serving
+// DeepSeek's models, get the search as a function. A refusal that names
+// it is asked again so, and remembered under clientSearchRefused.
+
+// clientSearchRefused is a client's tool search as the client sent it,
+// turned away by an upstream it went to as it was (searchesAsSent), as
+// remembered in unfit.
+const clientSearchRefused = "tool_search_call"
+
+// searchesAsSent is whether p's Responses API runs a client's tool search
+// for model as the client sends it: DeepSeek's own API, for
+// deepseek-flash. The ChatGPT backend does too, and is told apart by its
+// account where this is asked.
+func searchesAsSent(p provider.Provider, model string) bool {
+	if provider.HostOf(p.Base(provider.Responses)) != deepseekHost {
+		return false
+	}
+	base := strings.ToLower(model[strings.LastIndexByte(model, '/')+1:])
+	return base == "deepseek-flash" || strings.HasPrefix(base, "deepseek-v4.1-flash")
+}
+
+// searchRefusal is an upstream's 400 or 422 that names the tool search.
+func searchRefusal(status int, errBody []byte) bool {
+	return badRequest(status) && bodyHas(errBody, toolSearch)
+}
+
 // searchAsFunction is a Responses request with Codex's tool search as a
 // plain function, and whether there was one. A request that offers no
 // search still has the earlier searches' calls and results in its
@@ -22,6 +58,17 @@ import (
 // no tool_search_call turns the whole request away (#1171 tcxp001, the
 // compaction on Anyrouter; #1755 FivePink, Xiaomi MiMo).
 func searchAsFunction(body []byte) ([]byte, bool) {
+	return searchAsFunctionIn(body, false)
+}
+
+// searchAsFunctionIn is searchAsFunction, and with inPlace the tools each
+// search found go in an additional_tools item right after its result
+// instead of in the tools: the tools and every earlier item stay as the
+// turn before sent them, so the cached prefix is kept, as the ChatGPT
+// backend keeps it for Codex's own search. Only for an upstream that takes
+// the item (loadsInPlace); one that turns it away is asked again with them
+// in the tools (loadedUp).
+func searchAsFunctionIn(body []byte, inPlace bool) ([]byte, bool) {
 	if !bodyHas(body, `"tool_search`) {
 		return body, false
 	}
@@ -44,20 +91,29 @@ func searchAsFunction(body []byte) ([]byte, bool) {
 	// offered, nothing is added: the request's tools are what Codex offers
 	// now, and a compaction's are none.
 	have := toolsByName(tools)
+	placed := map[string]map[string]bool{} // in an additional_tools item already: a tool's name, a namespace's tools
+	var loaded []any                       // the found tools of the result being read, inPlace
 	add := func(tm map[string]any) {
-		if search {
+		switch {
+		case !search:
+		case inPlace:
+			if fresh := unplaced(tm, have, placed); fresh != nil {
+				loaded = append(loaded, fresh)
+			}
+		default:
 			tools = addTool(tools, have, tm)
 		}
 	}
 	history := false
 	if items, ok := m["input"].([]any); ok {
-		for i, it := range items {
+		out := items[:0:0]
+		for _, it := range items {
 			im, _ := it.(map[string]any)
 			switch im["type"] {
 			case "tool_search_call":
 				history = true
 				args, _ := json.Marshal(im["arguments"])
-				items[i] = map[string]any{"type": "function_call", "call_id": im["call_id"], "name": toolSearch, "arguments": string(args)}
+				it = map[string]any{"type": "function_call", "call_id": im["call_id"], "name": toolSearch, "arguments": string(args)}
 			case "tool_search_output":
 				history = true
 				found, _ := im["tools"].([]any)
@@ -74,9 +130,17 @@ func searchAsFunction(body []byte) ([]byte, bool) {
 					}
 					add(tm)
 				}
-				items[i] = map[string]any{"type": "function_call_output", "call_id": im["call_id"], "output": searchFound(named)}
+				it = map[string]any{"type": "function_call_output", "call_id": im["call_id"], "output": searchFound(named)}
+			}
+			out = append(out, it)
+			if len(loaded) > 0 {
+				// as buildResponses places what a result loaded
+				// (Request.LoadedInPlace)
+				out = append(out, map[string]any{"type": additionalToolsItem, "role": "developer", "tools": loaded})
+				loaded = nil
 			}
 		}
+		m["input"] = out
 	}
 	if !search && !history {
 		return body, false
@@ -89,6 +153,105 @@ func searchAsFunction(body []byte) ([]byte, bool) {
 		return body, false
 	}
 	return out, search
+}
+
+// unplaced is the part of tm, a tool a search found, that neither the
+// request's tools nor an earlier additional_tools item has: tm itself, a
+// namespace with only the tools of it not offered yet, or nil when there
+// is none. placed records what it gives.
+func unplaced(tm map[string]any, have map[string]map[string]any, placed map[string]map[string]bool) map[string]any {
+	k := toolKey(tm)
+	old, done := have[k], placed[k]
+	if tm["type"] != "namespace" {
+		if old != nil || done != nil {
+			return nil
+		}
+		placed[k] = map[string]bool{}
+		return tm
+	}
+	if old != nil && old["type"] != "namespace" {
+		return nil
+	}
+	if done == nil {
+		done = map[string]bool{}
+		placed[k] = done
+	}
+	nested, _ := tm["tools"].([]any)
+	var kept []any
+	for _, nt := range nested {
+		nm, _ := nt.(map[string]any)
+		if nm == nil {
+			continue
+		}
+		name, _ := nm["name"].(string)
+		if done[name] {
+			continue
+		}
+		if old != nil {
+			if was, _ := old["tools"].([]any); containsNamed(was, nm["name"]) {
+				continue
+			}
+		}
+		done[name] = true
+		kept = append(kept, nm)
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	if len(kept) == len(nested) {
+		return tm
+	}
+	ns := make(map[string]any, len(tm))
+	for key, v := range tm {
+		ns[key] = v
+	}
+	ns["tools"] = kept
+	return ns
+}
+
+// loadedUp is a relayed body with the tools searchAsFunctionIn put in
+// additional_tools items moved to its tools, as searchAsFunction puts
+// them, for an upstream that turned the item away; ok is false when it
+// has none. An item with an id is the client's own (Responses Lite's
+// tools), and stays.
+func loadedUp(body []byte) ([]byte, bool) {
+	if !bodyHas(body, `"`+additionalToolsItem+`"`) {
+		return body, false
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var m map[string]any
+	if dec.Decode(&m) != nil || m == nil {
+		return body, false
+	}
+	items, _ := m["input"].([]any)
+	tools, _ := m["tools"].([]any)
+	have := toolsByName(tools)
+	moved := false
+	out := items[:0:0]
+	for _, it := range items {
+		im, _ := it.(map[string]any)
+		if im["type"] != additionalToolsItem || im["id"] != nil {
+			out = append(out, it)
+			continue
+		}
+		moved = true
+		loaded, _ := im["tools"].([]any)
+		for _, t := range loaded {
+			if tm, _ := t.(map[string]any); tm != nil {
+				tools = addTool(tools, have, tm)
+			}
+		}
+	}
+	if !moved {
+		return body, false
+	}
+	m["input"], m["tools"] = out, tools
+	b, err := marshalPlain(m)
+	if err != nil {
+		return body, false
+	}
+	return b, true
 }
 
 // undefer drops defer_loading from a tool a search found, and from a

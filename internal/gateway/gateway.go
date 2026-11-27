@@ -7413,6 +7413,8 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		body = withFields(body, map[string]any{"stream": true})
 	}
 	searchFn := false            // Codex's tool search sent as a function
+	searchAsSent := false        // a client's tool search sent as it came (searchesAsSent)
+	searchInPlace := false       // and as a function, what it found in additional_tools
 	geminiWhole := false         // a Gemini client's generateContent
 	var toolSeen map[string]bool // the call ids the client holds (tool_use_ids.go)
 	advisor := ""                // magpie's id of the advisor model asked for
@@ -7437,9 +7439,19 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		if !liteKept(p, proto, fromCodex(r.Header), modelOf(body)) {
 			body = fromLite(body)
 		}
-		// only the ChatGPT backend runs Codex's tool search as Codex sends it
-		if p.Account == nil || p.Account.Agent != "codex" {
-			body, searchFn = searchAsFunction(body)
+		// only the ChatGPT backend runs Codex's tool search as Codex sends
+		// it, and DeepSeek's own API for deepseek-flash (searchesAsSent).
+		// Anyone else is sent it as a function, and one that takes an
+		// additional_tools item the tools it found there, after its
+		// result, so the tools and the earlier items keep the cached
+		// prefix (tourweint on X)
+		switch {
+		case p.Account != nil && p.Account.Agent == "codex":
+		case searchesAsSent(p, upstream) && s.fits(p.ID, clientSearchRefused, proto):
+			searchAsSent = bodyHas(body, `"`+toolSearch)
+		default:
+			searchInPlace = loadsInPlace(p) && s.fits(p.ID, additionalToolsItem, proto)
+			body, searchFn = searchAsFunctionIn(body, searchInPlace)
 		}
 		body = forVendor(p, body, asksCompaction(r.Context()))
 		// Ark takes web_search in the shape its docs give, and only the include
@@ -7883,6 +7895,34 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
+		if searchAsSent && searchRefusal(res.StatusCode, b) {
+			// a client's tool search turned away where it went as it came
+			// (searchesAsSent): asked once more with it as a function, and
+			// so from then on
+			if nb, fn := searchAsFunctionIn(body, false); !bytes.Equal(nb, body) {
+				searchAsSent, searchFn = false, fn
+				refused = append(refused, clientSearchRefused)
+				body = nb
+				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
+					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+				}
+				continue
+			}
+		}
+		if searchInPlace && refusesField(res.StatusCode, b, additionalToolsItem) {
+			// the tools a search found turned away in an additional_tools
+			// item: asked once more with them in the tools, as before,
+			// and so from then on; the prefix changes from here
+			if nb, moved := loadedUp(body); moved {
+				searchInPlace = false
+				refused = append(refused, additionalToolsItem)
+				body = nb
+				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
+					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+				}
+				continue
+			}
+		}
 		if proto == provider.Responses && customToolRefusal.Match(wordsOf(b)) && hasCustomTool(body) {
 			// a custom tool turned away (DeepSeek's "Unsupported custom
 			// tool: 'exec'", #2656): the request is translated on the same
