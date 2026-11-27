@@ -228,6 +228,22 @@ func bip32Key(v string) bool {
 	return len(base58check(v)) == 78
 }
 
+// tronAddress says v is a TRON account's or contract's address, public
+// on its chain for anyone to read: 34 base58 characters that hold the 0x41
+// version byte and a double sha256 checksum (USDT's own contract,
+// TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t). The checksum is what tells it from
+// a secret: a random run of that length passes it by chance about once in
+// four billion, and a TRON private key is 64 hex digits. A Solana public
+// key has no such check: 32 bytes in base58 is also how a 32-byte seed is
+// written, so neither is let go by its shape.
+func tronAddress(v string) bool {
+	if len(v) != 34 || v[0] != 'T' {
+		return false
+	}
+	p := base58check(v)
+	return len(p) == 21 && p[0] == 0x41
+}
+
 // solanaKey says v is a 64-byte ed25519 secret key in base58: a seed and
 // the public key it derives.
 func solanaKey(v string) bool {

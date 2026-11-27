@@ -59,11 +59,24 @@ func TestShapeKeepsForm(t *testing.T) {
 		t.Fatalf("restored %q", got)
 	}
 	// a hex key stays hex of its case
-	for _, v := range []string{"9f2c4e1a7b3d5c8e9f2c4e1a7b3d5c8e", "ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78", "sk-proj-Xy12_ab-CD34ef56GH78ij90KL12mn34"} {
+	for _, v := range []string{"9f2c4e1a7b3d5c8e9f2c4e1a7b3d5c8e", "ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78", "sk-proj-Xy12_ab-CD34ef56GH78ij90KL12mn34", "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"} {
 		f, ok := shapeOf("API_KEY", v)
 		hex := strings.Trim(v, "0123456789abcdef") == ""
 		if !ok || f == v || hex && (len(f) != len(v) || strings.Trim(f, "0123456789abcdef") != "") || !hex && !sameForm(f, v) {
 			t.Fatalf("%q as %q", v, f)
+		}
+	}
+	// a word the model took for a secret, with no key's head and no digit,
+	// goes as a placeholder: as a made-up word (Illuminate as Zedxkjcbko)
+	// the agent read it as a name, not as something masked (#7973)
+	for _, v := range []string{"Illuminate", "PurpleMonkey", "correct-horse-battery"} {
+		if f, ok := shapeOf("SECRET", v); ok {
+			t.Errorf("%q is a word, yet it went as %q", v, f)
+		}
+		Forget()
+		out, _ := Mask("password: "+v, Options{Secrets: true, Shape: true, Model: (&fakeModel{values: map[string]string{v: "secret"}}).find})
+		if strings.Contains(out, v) || !strings.Contains(out, "{{") {
+			t.Errorf("%q went as %q", v, out)
 		}
 	}
 }

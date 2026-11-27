@@ -1665,7 +1665,13 @@ func apply(s string, found []span, put func(kind, v string) string, o Options) (
 			continue
 		}
 		v := s[f.start:f.end]
-		if f.by != ByWord && o.allows(v) && (!remember || !maskedBefore(textOf(), v)) {
+		kind := f.kind
+		if f.by == ByYours {
+			// a rule of the user's own lets its value go only written out
+			// in full, whatever the user named its kind
+			kind = ""
+		}
+		if f.by != ByWord && o.allows(kind, v) && (!remember || !maskedBefore(textOf(), v)) {
 			kept = max(kept, f.end)
 			continue
 		}
@@ -1702,14 +1708,65 @@ func apply(s string, found []span, put func(kind, v string) string, o Options) (
 	return b.String(), n
 }
 
-// allows says the user lets v go as written (Options.Allow).
-func (o Options) allows(v string) bool {
+// allows says the user lets v, found as kind, go as written
+// (Options.Allow): one value in full, in any case, or a pattern with * in
+// it for a kind of host or route name met as it comes (*-singapore-*,
+// binedge-*; StringKe, #7973). A pattern needs minLiteral characters
+// besides its stars, or it is only the value it is written as: * alone
+// would let everything go. Nor does a pattern let a vendor's key or token
+// go (a rule's kind other than SECRET, a crypto wallet's, the user's own
+// rules'): a pattern meant for host names can match one by chance, so
+// only the key written out in full lets it go.
+func (o Options) allows(kind, v string) bool {
 	for _, a := range o.Allow {
-		if strings.EqualFold(strings.TrimSpace(a), v) {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		if strings.EqualFold(a, v) {
+			return true
+		}
+		if wildcard(a) && wildKind(kind) && wildcardEqual(a, v) {
 			return true
 		}
 	}
 	return false
+}
+
+// minLiteral is how many characters other than * a pattern on the Never
+// mask list has at least.
+const minLiteral = 4
+
+// wildcard says the Never mask value a is a pattern.
+func wildcard(a string) bool {
+	return strings.Contains(a, "*") && len(a)-strings.Count(a, "*") >= minLiteral
+}
+
+// wildKind says a pattern may let a value of kind go: personal data, a
+// network's names (kindCats), or a value the local model or a secret's
+// name found (SECRET).
+func wildKind(kind string) bool {
+	_, ok := kindCats[kind]
+	return ok || kind == "SECRET"
+}
+
+// wildcardEqual matches pattern, in which * stands for any run of
+// characters (none too), against v, ignoring case.
+func wildcardEqual(pattern, v string) bool {
+	parts := strings.Split(strings.ToLower(pattern), "*")
+	v = strings.ToLower(v)
+	if len(v) < len(parts[0])+len(parts[len(parts)-1]) || !strings.HasPrefix(v, parts[0]) || !strings.HasSuffix(v, parts[len(parts)-1]) {
+		return false
+	}
+	v = v[len(parts[0]) : len(v)-len(parts[len(parts)-1])]
+	for _, p := range parts[1 : len(parts)-1] {
+		k := strings.Index(v, p)
+		if k < 0 {
+			return false
+		}
+		v = v[k+len(p):]
+	}
+	return true
 }
 
 func containsAny(s string, subs []string) bool {

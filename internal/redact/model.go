@@ -319,6 +319,11 @@ func modelFits(s string, a, b int, kind string, args bool) bool {
 	if publicID(s, a, b) {
 		return false
 	}
+	if kind == "SECRET" && tronAddress(v) && !secretCued(s, a) {
+		// a TRON address is public as an EVM one is (below): masked, the
+		// agent read a placeholder where USDT's contract was (#7973)
+		return false
+	}
 	if evmRe.MatchString(v) {
 		// a wallet's or a contract's address (0x and 40 hex digits) is
 		// public, on its chain for anyone to read, and the vendor's model
@@ -380,6 +385,9 @@ func modelFits(s string, a, b int, kind string, args bool) bool {
 			return numberNamedSecret(s, a)
 		}
 		if wordsOnly(v) && !assignedSecret(s, a) {
+			return false
+		}
+		if codeName(v) && !credentialAt(s, a) {
 			return false
 		}
 		return !hexRe.MatchString(v) || secretCued(s, a)
@@ -446,6 +454,93 @@ var wordsOnlyRe = lazyre.New(`^_*[a-z]+(?:[-._][a-z]+)*_*/?$`)
 // PASSWORD=opensesame, "password": "letmeinplease", the wifi password is
 // purplemonkey.
 func wordsOnly(v string) bool { return wordsOnlyRe.MatchString(v) }
+
+// codeName says v, which the model took for a secret, is a name in code:
+// a class's or a product's (Speechmatics, JazzCash), an identifier
+// (dev_worker5), a host's or a route's name (edge-san-jose-01), a
+// program's version as a user agent writes it (Mozilla/5.0), or a field
+// read through a class (PaymentClient.merchant_api_key). The agent read a
+// placeholder where each was (StringKe, #7973). A name has its digits, if
+// any, as a short number at a word's end (worker5, x86_64, jose-01), and
+// its capitals at its words' starts; a key scatters both through it
+// (k3Xq9vB2mZ, key-3ax6xnjp29jd6f), so neither shape takes one. A word
+// that is a password still (Sunshine, PurpleMonkey) is masked where it is
+// given a secret's name or put where a password goes (credentialAt).
+func codeName(v string) bool {
+	if len(v) < 8 || scatteredDigits(v) {
+		return false
+	}
+	// JazzCash, PaymentClient; not XkQpLmZnBv, a random run's capitals
+	up := 0
+	for i := 0; i < len(v); i++ {
+		if v[i] >= 'A' && v[i] <= 'Z' {
+			up++
+		}
+	}
+	if 3*up > len(v) {
+		return false
+	}
+	for _, re := range []*lazyre.RE{pascalRe, camelNameRe, snakeIdentRe, hostNameRe, agentVersionRe, classFieldRe} {
+		if re.MatchString(v) {
+			return true
+		}
+	}
+	return false
+}
+
+// scatteredDigits says v has a digit inside a run of letters and digits
+// rather than at its end (k3x9, 3ax6), or a run of more than four digits:
+// what a key, not a name, is written with.
+func scatteredDigits(v string) bool {
+	for _, w := range strings.FieldsFunc(v, func(r rune) bool { return !(r < 0x80 && wordByte(byte(r))) || r == '_' }) {
+		lead := strings.TrimRight(w, digits)
+		if strings.ContainsAny(lead, digits) || len(w)-len(lead) > 4 {
+			return true
+		}
+	}
+	return false
+}
+
+var (
+	// a class's or a product's name: one word, a capital and lower case
+	pascalRe = lazyre.New(`^[A-Z][a-z]{3,23}$`)
+	// a product's name in camel case (JazzCash, PayPal, YouTube)
+	camelNameRe = lazyre.New(`^[A-Z][a-z]+(?:[A-Z][a-z]+){1,4}$`)
+	// an identifier: lower case, digits and underscores, at least one
+	snakeIdentRe = lazyre.New(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$`)
+	// a host's, a route's or a repository's name: lower-case words joined
+	// by dashes (edge-san-jose-01), at least one dash
+	hostNameRe = lazyre.New(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$`)
+	// a program's version as a user agent or a log writes it (Mozilla/5.0,
+	// nginx/1.25.3)
+	agentVersionRe = lazyre.New(`^[A-Za-z][A-Za-z0-9.]*/\d+(?:\.\d+)+$`)
+	// a field read through a class (PaymentClient.merchant_api_key)
+	classFieldRe = lazyre.New(`^[A-Z][A-Za-z0-9]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$`)
+)
+
+// credentialAt says the value at s[a] is where a password or a key goes,
+// whatever it looks like: given a secret's name (assignedSecret) or
+// called one (secretCued, credCues: pw, auth, login), after a user's name
+// and a colon or a % with nothing between (curl -u user:password, a
+// Basic sign-in, smbclient -U user%password), or as a command's flag's
+// value (mysql -p X, redis-cli -a X, --pass X). A name in code goes as a
+// flag's value too (--host edge-1); it is masked there, as it was before
+// #7973, since which flag takes a password is the command's to say.
+func credentialAt(s string, a int) bool {
+	if assignedSecret(s, a) || secretCued(s, a) || cued(s, a, credCues) {
+		return true
+	}
+	if a >= 2 && (s[a-1] == ':' || s[a-1] == '%') && wordByte(s[a-2]) {
+		return true
+	}
+	before := strings.TrimRight(s[max(0, a-32):a], " \t\"'=")
+	return flagRe.MatchString(before[strings.LastIndexAny(before, " \t\"'")+1:])
+}
+
+var (
+	credCues = []string{"pw", "auth", "login", "cred"}
+	flagRe   = lazyre.New(`^--?[A-Za-z][A-Za-z0-9-]*$`)
+)
 
 // assignedSecret says the value at s[a] is given to a secret's name: the
 // name, then =, :, is or 是 (and the quotes around them), right before it.

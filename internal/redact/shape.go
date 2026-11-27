@@ -89,12 +89,19 @@ func shapeOf(kind, v string) (string, bool) {
 	if _, personal := kindCats[kind]; personal || kind == "TERM" || len(v) < minShape {
 		return "", false
 	}
+	head := keyHead(v)
+	if head == "" && !strings.ContainsAny(v, "0123456789") {
+		// a word, not a key: one the model took for a secret went as a
+		// made-up word (Illuminate as Zedxkjcbko), which the agent read as
+		// a name, not as something masked (#7973). A key with no head of a
+		// kind (a hex key, a password with its digits) keeps its form.
+		return "", false
+	}
 	for i := 0; i < len(v); i++ {
 		if !shapeByte(v[i]) {
 			return "", false
 		}
 	}
-	head := keyHead(v)
 	rest := v[len(head):]
 	// a hex key's characters are any hex digit, of the case it has
 	hexLower, hexUpper := true, true
