@@ -291,7 +291,20 @@ func redactErr(s, choice string) string {
 // when the network or a proxy changes, every Every, and when Again asks,
 // until ctx ends. choices is asked each Poll: the distinct proxy choices
 // the Claude accounts' requests take; none, nothing is looked up.
+//
+// One Keep looks up at a time in a process (keeping): the gateway starts
+// one, and so does the window, whose page shows the lookups of its own
+// process; a window that serves no gateway (another magpie does: the
+// service, magpie serve) had none, and its Claude editor read "Not looked
+// up yet" until Check (mamba on Discord). A second waits, and takes over
+// when the first ends.
 func Keep(ctx context.Context, choices func() []string) {
+	select {
+	case keeping <- struct{}{}:
+		defer func() { <-keeping }()
+	case <-ctx.Done():
+		return
+	}
 	var last string
 	var at time.Time
 	t := time.NewTicker(Poll)
@@ -317,6 +330,9 @@ func Keep(ctx context.Context, choices func() []string) {
 		}
 	}
 }
+
+// keeping is held by the Keep that looks up (Keep).
+var keeping = make(chan struct{}, 1)
 
 // fingerprint is what a change of network or proxy changes: this
 // computer's addresses, the global proxy in force and each choice's.

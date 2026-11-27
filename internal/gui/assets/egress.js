@@ -41,12 +41,13 @@ window.egressLine = function () {
 // wayOutRow: where Claude's requests go out to the internet, as the last
 // lookup found it (internal/egress): the address and its region, and
 // Check, which looks again through each proxy now (mamba on Discord: a
-// node switched inside a proxy app).
+// node switched inside a proxy app). A lookup that failed says so, not
+// "Not looked up yet".
 let wayOutBusy = false;
 function wayOutRow() {
   const p = providers?.providers?.find((p) => p.id === "claude");
   const e = p?.egress;
-  let where = t("Not looked up yet");
+  let where = e?.error ? t("Couldn't look it up") : t("Not looked up yet");
   if (e?.loc || e?.ip) {
     let region = e.loc || "";
     try { if (/^[A-Z]{2}$/.test(region)) region = new Intl.DisplayNames([locale], { type: "region" }).of(region) || region; } catch {}
@@ -61,6 +62,20 @@ function wayOutRow() {
   check.onclick = checkWayOut;
   return row;
 }
+// wayOutShown: the editor shows the way out without a Check (mamba on
+// Discord, again: the address showed only after one). The Providers list
+// may have been read before the gateway's first lookup ended, and an open
+// editor isn't read again, so with no address in it the editor looks it
+// up once as it opens: Cloudflare's trace, through each proxy, never
+// Anthropic. At most every 30 s, so a lookup that fails isn't asked again
+// on each draw.
+let wayOutAuto = 0;
+window.wayOutShown = function () {
+  const e = providers?.providers?.find((p) => p.id === "claude")?.egress;
+  if (e?.loc || e?.ip || wayOutBusy || Date.now() - wayOutAuto < 30e3) return;
+  wayOutAuto = Date.now();
+  checkWayOut();
+};
 // checkWayOut: Check, and a changed list of allowed ways out, which the
 // way out is judged against again
 async function checkWayOut() {
@@ -120,4 +135,5 @@ function holdRow(s, keep) {
 window.egressRows = (list, s, keep) => {
   list.querySelectorAll("#claudeWayOutRow, #claudeRegionRow, #claudeWaysOutRow").forEach((e) => e.remove());
   list.append(wayOutRow(), holdRow(s, keep), waysOutRow(s, keep));
+  if (list.closest(".prov-prefs")) wayOutShown();
 };

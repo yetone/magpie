@@ -240,6 +240,48 @@ func TestKeepLooksUpOnChange(t *testing.T) {
 	waitFor(t, func() bool { return asked.Load() == 6 })
 }
 
+// The gateway's Keep and the window's run one at a time: one lookup per
+// change, not two, and the second takes over when the first ends.
+func TestKeepOneAtATime(t *testing.T) {
+	sandbox(t)
+	var loc atomic.Value
+	var status atomic.Int32
+	loc.Store("US")
+	asked := fakeTrace(t, &loc, &status)
+	wasPoll, wasFP := Poll, fingerprint
+	t.Cleanup(func() { Poll, fingerprint = wasPoll, wasFP })
+	Poll = 5 * time.Millisecond
+	fingerprint = func(cs []string) string { return strings.Join(cs, ",") }
+	var polled [2]atomic.Int32
+	ctx := [2]context.Context{}
+	cancel := [2]context.CancelFunc{}
+	done := [2]chan struct{}{}
+	for i := range 2 {
+		ctx[i], cancel[i] = context.WithCancel(context.Background())
+		done[i] = make(chan struct{})
+		go func() {
+			defer close(done[i])
+			Keep(ctx[i], func() []string { polled[i].Add(1); return []string{"direct"} })
+		}()
+		t.Cleanup(func() { cancel[i](); <-done[i] })
+	}
+	waitFor(t, func() bool { return polled[0].Load()+polled[1].Load() >= 10 })
+	if n := asked.Load(); n != 1 {
+		t.Fatalf("two Keeps looked up %d times, want 1", n)
+	}
+	first := 0
+	if polled[1].Load() > 0 {
+		first = 1
+	}
+	if polled[1-first].Load() != 0 {
+		t.Fatal("both Keeps polled at once")
+	}
+	// the first ends: the other looks up from its own start
+	cancel[first]()
+	<-done[first]
+	waitFor(t, func() bool { return asked.Load() == 2 && polled[1-first].Load() > 0 })
+}
+
 // No Claude account, no lookup.
 func TestKeepAsksNothingWithoutChoices(t *testing.T) {
 	sandbox(t)

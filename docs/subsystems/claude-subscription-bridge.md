@@ -2380,7 +2380,9 @@ Regions Policy, before Claude subscription requests go out from there.
   malformed code, a non-200 or a failed request are **Unknown**, which is
   neither fine nor unsupported: it draws nothing and holds nothing.
 - **When.** `egress.Keep` (started by the gateway's
-  `ListenAndServe`) looks up at the start, again when the network or the
+  `ListenAndServe`, and by the window's `startBackend`, one at a time in a
+  process: a window whose gateway another magpie serves looks up for its
+  own page and tray too) looks up at the start, again when the network or the
   set of proxy choices changes (a fingerprint of the interfaces' addresses
   and the choices, polled every 20s), every 15 minutes otherwise, and
   when the GUI's Check again or a never-looked-up choice asks
@@ -2396,7 +2398,10 @@ Regions Policy, before Claude subscription requests go out from there.
   Anthropic's, when `mine`), with Check again (`POST /api/egress/check`),
   and the tray's tooltip begins with a warning (`trayEgressTip`). The
   Claude editor's Advanced shows the way out itself, address · region,
-  with Check (`wayOutRow`). Neither says anything
+  with Check (`wayOutRow`). With none in the list it read (one read
+  before the first lookup ended), the editor looks it up once as it
+  opens (`wayOutShown`, at most every 30s); a lookup that failed reads
+  "Couldn't look it up", not "Not looked up yet". Neither says anything
   of bans or of keeping an account safe: the policy is Anthropic's, and
   magpie can only say where the way out is.
 - **The hold** (Claude editor → Advanced → Hold requests outside supported

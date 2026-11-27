@@ -20113,6 +20113,9 @@ function mountProvPrefs(slots, agent) {
   }
   // a label shown widens the labels' column, which the folds' sizes don't say
   document.querySelectorAll(".editor details.more").forEach(edAlignAt);
+  // Claude's way out, looked up as its editor opens when none is known
+  // (egress.js; loaded with the rows it draws)
+  if (agent === "claude") window.wayOutShown?.();
 }
 function remountProvPrefs() {
   const m = provPrefMount;

@@ -15,11 +15,11 @@ const { provPrefsProviders, openProvPrefs, inEditor } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const L = {
-  en: { way: "Way out", allowed: "Allowed ways out", check: "Check", region: "Japan", mine: "isn't one of the ways out you allowed for Claude" },
-  zh: { way: "网络出口", allowed: "允许的出口", check: "检查", region: "日本", mine: "不在你为 Claude 允许的出口内" },
-  "zh-TW": { way: "網路出口", allowed: "允許的出口", check: "檢查", region: "日本", mine: "不在你為 Claude 允許的出口內" },
-  ja: { way: "ネットワーク出口", allowed: "許可する出口", check: "確認", region: "日本", mine: "Claude に許可した出口に含まれていません" },
-  de: { way: "Ausgang ins Internet", allowed: "Erlaubte Ausgänge", check: "Prüfen", region: "Japan", mine: "keiner der Ausgänge, die du für Claude erlaubt hast" },
+  en: { way: "Way out", allowed: "Allowed ways out", check: "Check", failed: "Couldn't look it up", region: "Japan", mine: "isn't one of the ways out you allowed for Claude" },
+  zh: { way: "网络出口", allowed: "允许的出口", check: "检查", failed: "检测失败", region: "日本", mine: "不在你为 Claude 允许的出口内" },
+  "zh-TW": { way: "網路出口", allowed: "允許的出口", check: "檢查", failed: "檢測失敗", region: "日本", mine: "不在你為 Claude 允許的出口內" },
+  ja: { way: "ネットワーク出口", allowed: "許可する出口", check: "確認", failed: "確認できませんでした", region: "日本", mine: "Claude に許可した出口に含まれていません" },
+  de: { way: "Ausgang ins Internet", allowed: "Erlaubte Ausgänge", check: "Prüfen", failed: "Prüfung fehlgeschlagen", region: "Japan", mine: "keiner der Ausgänge, die du für Claude erlaubt hast" },
 };
 
 function serve(lang, egress, settings, saved, checks) {
@@ -39,13 +39,14 @@ function serve(lang, egress, settings, saved, checks) {
     }
     if (url.pathname === "/api/providers") {
       const p = provPrefsProviders(["claude"], { claude: "Claude Code" });
-      p.providers[0].egress = egress.now;
+      if (egress.now) p.providers[0].egress = egress.now;
       return json(p);
     }
     if (url.pathname === "/api/egress/check") {
       checks.push(r.request().method());
       // judged against the list saved, as egress.Of does
       const ways = settings.claudeWaysOut || [];
+      if (egress.fails) return json(egress.now = { state: "unknown", error: "context deadline exceeded", via: "direct" });
       egress.now = ways.length && !ways.some((w) => w.toUpperCase() === "JP" || w === "203.0.113.9")
         ? { state: "unsupported", loc: "JP", ip: "203.0.113.9", mine: true, via: "direct" }
         : { state: "ok", loc: "JP", ip: "203.0.113.9", mine: ways.length > 0, via: "direct" };
@@ -123,6 +124,44 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(!text.includes("Anthropic"), "names Anthropic's list: " + text);
       assert(await fits(line, width), `the line fits at ${width}`);
       if (process.env.ARTIFACT_DIR) await line.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `ways-out-${engine}-${lang}-${width}.png`) });
+      assert.deepEqual(errors, []);
+    });
+  }
+}
+
+// mamba on Discord, again: the address showed only after Check. The
+// Providers list read before the gateway's first lookup ended has no
+// egress, and an open editor isn't read again, so the editor looks it up
+// as it opens; a lookup that fails says so, and isn't asked again on the
+// next draw.
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of Object.keys(L)) for (const fails of [false, true]) {
+    const w = L[lang];
+    test(`${engine} ${lang}: with no lookup in the list, the editor looks the way out up as it opens${fails ? ", and a failed one says so" : ""}`, async (t) => {
+      const browser = await launch(engine);
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width: 1100, height: 900 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      const errors = [], saved = [], checks = [];
+      page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); });
+      const egress = { now: null, fails };
+      const settings = { lang, theme: "light", redact: true };
+      await page.route("**/*", serve(lang, egress, settings, saved, checks));
+
+      await openProvPrefs(page, "claude");
+      const way = page.locator(".editor .prov-prefs #claudeRunList > #claudeWayOutRow");
+      await inEditor(page, way);
+      for (let i = 0; i < 100 && !checks.length; i++) await page.waitForTimeout(50);
+      assert.deepEqual(checks, ["POST"], "looked up once, with no click");
+      if (fails) await page.waitForFunction((s) => document.querySelector("#claudeWayOutRow .sub")?.textContent === s, w.failed);
+      else await page.waitForFunction(() => document.querySelector("#claudeWayOutRow .sub")?.textContent.includes("203.0.113.9"));
+      const where = await way.locator(".sub").textContent();
+      if (!fails) assert(where.includes(w.region), where);
+      // a draw of the lists again (a setting saved) asks nothing more
+      await page.evaluate(() => savePrefs({ ...prefs }));
+      await page.waitForTimeout(300);
+      assert.deepEqual(checks, ["POST"], "not asked again on the next draw");
       assert.deepEqual(errors, []);
     });
   }

@@ -10,6 +10,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexrelay"
+	"github.com/yetone/magpie/internal/egress"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
@@ -49,6 +50,10 @@ func startBackend() (gw *gateway.Server) {
 	gateway.Window = true // the routing this process serves is shown on its page
 	gw = serveGateway()
 	go watchGateway(backendCtx, gatewayWatch)
+	// Claude's way out looked up in this process, for its editor, the
+	// line over Providers and the tray, when another magpie serves the
+	// gateway too (egress.Keep: one at a time with the gateway's)
+	go egress.Keep(backendCtx, provider.ClaudeProxies)
 	// the usage log parsed now, not when the tray panel first asks for
 	// today's calls (CyberCaius)
 	go func() {
