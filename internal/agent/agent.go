@@ -413,6 +413,16 @@ type Agent struct {
 	// #7872). A folder holding only these (and skills) is no sign the
 	// agent is here.
 	readHere []string
+	// synced are the names in Dir magpie's Library writes for the agent
+	// (a folder's with a trailing "/"), and syncedKeys the files it
+	// writes some of the keys of, with those top-level keys: Codex's
+	// AGENTS.md, hooks.json and agents/, and a config.toml of only
+	// mcp_servers and shell_environment_policy. None is a sign the agent
+	// is here: the Library gave them to it while it was a target for
+	// something else (Cindy's copy, a sign-in's auth.json before #7994),
+	// and they would keep it one, and list it, after that was gone.
+	synced     []string
+	syncedKeys map[string][]string
 	// otherCopy, when set, says whether what is at Dir and Path is only
 	// what another app's own copy of the agent made, nothing else of the
 	// agent's being here: Cindy's bundled Claude Code makes ~/.claude and
@@ -475,8 +485,13 @@ func (a *Agent) SharedName() string {
 // whether the agent is or not. The agent isn't Detected for it (dirShared),
 // but what the other app reads there too, the Library's MCP servers and
 // skills, is still given.
+// What the agent's sign-in, another app or magpie's Library wrote there
+// (notSign) is no sign of that app either: a ~/.codex holding only the
+// auth.json a sign-in in magpie wrote, and the skills the Library then
+// linked there, made Codex a target with no Codex, Codex app or Cindy
+// here (TomXPRIME, #7994).
 func (a *Agent) SharedHere() bool {
-	return a.shared != "" && a.WSL == "" && a.Dir != "" && !Taken(a.Dir) && (agentDir(a.Dir) || a.SharedRead())
+	return a.shared != "" && a.WSL == "" && a.Dir != "" && !Taken(a.Dir) && (agentDirBut(a.Dir, a.notSign) || a.SharedRead())
 }
 
 // SharedRead reports whether an app of the agent's vendor that reads its
@@ -517,10 +532,21 @@ func (a *Agent) Detected() bool {
 // configHere reports whether the agent's config file, or a folder it made
 // itself, is here.
 func (a *Agent) configHere() bool {
-	if _, ok := statKind(a.Path); ok && (a.pathOwn == nil || a.pathOwn()) {
+	if _, ok := statKind(a.Path); ok && (a.pathOwn == nil || a.pathOwn()) && !a.syncedOnly(a.Path) {
 		return true
 	}
-	return a.Dir != "" && !a.dirShared && agentDir(a.Dir, append([]string{a.signIn}, a.readHere...)...)
+	return a.Dir != "" && !a.dirShared && agentDirBut(a.Dir, a.notSign)
+}
+
+// notSign reports whether e, an entry in Dir, says nothing of the agent:
+// the sign-in magpie wrote (signIn), a file another app reads there
+// (readHere), or what magpie's Library wrote there (synced, syncedKeys).
+func (a *Agent) notSign(e os.DirEntry) bool {
+	n := e.Name()
+	if e.IsDir() {
+		return slices.Contains(a.synced, n+"/")
+	}
+	return n == a.signIn || slices.Contains(a.readHere, n) || slices.Contains(a.synced, n) || a.syncedOnly(filepath.Join(a.Dir, n))
 }
 
 // binAt is where the agent's command name is, as magpie runs it: on
@@ -549,6 +575,11 @@ func binAt(name string) string {
 // own names a file magpie may have written there itself (Agent.signIn),
 // or one another app reads there (Agent.readHere), no sign either.
 func agentDir(p string, own ...string) bool {
+	return agentDirBut(p, func(e os.DirEntry) bool { return !e.IsDir() && slices.Contains(own, e.Name()) })
+}
+
+// agentDirBut is agentDir with not saying which entries are no sign.
+func agentDirBut(p string, not func(os.DirEntry) bool) bool {
 	es, err := os.ReadDir(p)
 	if err != nil {
 		return isDir(p)
@@ -557,7 +588,7 @@ func agentDir(p string, own ...string) bool {
 		return true
 	}
 	for _, e := range es {
-		if n := e.Name(); n != "skills" && n != ".DS_Store" && !(e.IsDir() && leftover[strings.ToLower(n)]) && !(!e.IsDir() && slices.Contains(own, n)) {
+		if n := e.Name(); n != "skills" && n != ".DS_Store" && !(e.IsDir() && leftover[strings.ToLower(n)]) && !not(e) {
 			return true
 		}
 	}

@@ -2050,6 +2050,7 @@ func codexIn(at place) *Agent {
 
 	a := atomic(&Agent{
 		ID: "codex", Name: "Codex", Icon: "codex-color", Bin: "codex", Dir: dir, Path: path, signIn: "auth.json",
+		synced: codexSynced, syncedKeys: codexSyncedKeys,
 		Telemetry: codexTelemetry(at, path),
 		UA:        []string{"codex", "acp-extension-codex"}, // The ACP adapter's default client name becomes Codex's originator.
 		// Codex as it was before magpie: its default puts it back as

@@ -2698,6 +2698,7 @@ func claudeIn(at place) *Agent {
 		ID: "claude", Name: "Claude Code", Icon: "claudecode-color", Aliases: []string{"cc", "claude-code"},
 		UA:  []string{"claude-cli", "claude-code"},
 		Bin: "claude", Dir: filepath.Dir(path), Path: path, signIn: ".credentials.json",
+		synced: claudeSynced, syncedKeys: claudeSyncedKeys,
 		claudeSettings: &ClaudeSettings{path: path, distro: at.wsl},
 		Fields:         fields,
 		ModelAliases:   claudeAliases,

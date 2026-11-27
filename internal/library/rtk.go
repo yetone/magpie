@@ -803,12 +803,22 @@ func rtkAgents(agents []*agent.Agent) []*agent.Agent {
 		agents = detected()
 	}
 	var out []*agent.Agent
+	in := map[string]bool{}
 	for _, a := range agents {
 		sp, ok := rtkSpecs[rtkKind(a.ID)]
 		// an uninstall that left the folder behind (#2254) isn't given rtk,
 		// as the library gives it nothing (Targets); one with rtk's hook
 		// still shows, so the hook can be taken out
 		if ok && (!a.CLIMissing() || sp.has(a)) {
+			out = append(out, a)
+		}
+		in[a.ID] = true
+	}
+	// one whose folder holds only what magpie wrote there, rtk's hook
+	// among it, isn't detected at all (#7994): it shows while it has the
+	// hook, as above
+	for _, a := range agent.All() {
+		if sp, ok := rtkSpecs[rtkKind(a.ID)]; ok && !in[a.ID] && a.WSL == "" && sp.has(a) {
 			out = append(out, a)
 		}
 	}

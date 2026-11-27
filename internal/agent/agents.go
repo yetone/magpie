@@ -1964,6 +1964,7 @@ func cursor(home string) *Agent {
 		// of the CLI: cli-config.json or the cursor-agent command does
 		// (@G_Z_Y on X saw a Cursor row that wasn't the CLI)
 		dirShared: true,
+		synced:    cursorSynced,
 		Fields: []Field{{
 			Key: "model", Label: "model",
 			Get: jsonGet(path, "model.modelId"),
@@ -2027,6 +2028,7 @@ func copilot(home, cfg string) *Agent {
 		// plugin's getCopilotCliHomePath): the Library's row is GitHub
 		// Copilot's, kept with VS Code or the plugin alone here
 		shared: "GitHub Copilot",
+		synced: copilotSynced,
 		sharedApp: func() bool {
 			return copilotJBInstalled(home) || vscode(home, cfg).Detected() || vscodeInsidersAgent(home, cfg).Detected()
 		},

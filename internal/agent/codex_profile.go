@@ -150,6 +150,7 @@ func codexProfileIn(at place) *Agent {
 	}
 	return atomic(&Agent{
 		ID: "codex", Name: "Codex", Icon: "codex-color", Bin: "codex", Dir: dir, Path: path, signIn: "auth.json",
+		synced: codexSynced, syncedKeys: codexSyncedKeys,
 		UA:     []string{"codex", "acp-extension-codex"},
 		Unwire: drop,
 		Routed: wired,
