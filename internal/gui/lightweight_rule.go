@@ -38,3 +38,85 @@ func panelOnFirstOpen(goos string) bool { return goos == "darwin" }
 // shown rather than as magpie starts: on the Mac, when it starts without the
 // window (showMain false: at login, for the panel or a link).
 func mainOnFirstOpen(goos string, showMain bool) bool { return goos == "darwin" && !showMain }
+
+// pendingMain merges re-entrant openMain calls that arrive while makeMain is
+// still running. On Windows, Wails' NewWithOptions pumps Win32 messages inside
+// WebView2's Embed before returning, so a double-click or repeated tray click
+// re-enters openMain while h.main is still nil.
+type pendingMain struct {
+	making    bool
+	url       string
+	quiet     bool
+	minimised bool
+}
+
+// begin starts a main-window creation if none is in flight. When one already
+// is, it merges the latest non-empty url and upgrades quiet/minimised reveal
+// flags toward a visible focused open, then returns false.
+func (p *pendingMain) begin(url string, quiet, minimised bool) bool {
+	if p.making {
+		if url != "" {
+			p.url = url
+		}
+		if !quiet {
+			p.quiet = false
+			p.minimised = false
+		} else if !minimised {
+			p.minimised = false
+		}
+		return false
+	}
+	p.making = true
+	p.url = ""
+	p.quiet = quiet
+	p.minimised = minimised
+	return true
+}
+
+// finish ends an in-flight main-window creation and returns any url requested
+// during it along with the merged reveal flags.
+func (p *pendingMain) finish() (url string, quiet, minimised bool) {
+	url, quiet, minimised = p.url, p.quiet, p.minimised
+	*p = pendingMain{}
+	return url, quiet, minimised
+}
+
+// cancel resets an in-flight creation if it returns early or panics.
+func (p *pendingMain) cancel() { *p = pendingMain{} }
+
+// pendingRemote merges re-entrant OpenRemote calls while NewWithOptions is
+// still creating the remote window.
+type pendingRemote struct {
+	making bool
+	link   string
+	title  string
+}
+
+func (p *pendingRemote) begin(link, title string) bool {
+	if p.making {
+		p.link, p.title = link, title
+		return false
+	}
+	p.making = true
+	p.link, p.title = "", ""
+	return true
+}
+
+func (p *pendingRemote) finish() (link, title string) {
+	link, title = p.link, p.title
+	*p = pendingRemote{}
+	return link, title
+}
+
+func (p *pendingRemote) cancel() { *p = pendingRemote{} }
+
+// mainClosingHides says whether a main window's WindowClosing hook should
+// cancel the close and hide it instead of letting Wails destroy it. A window
+// already marked gone or no longer held as h.main closes for good; isMain is
+// skipped when gone is already true.
+func mainClosingHides(gone bool, isMain func() bool) bool {
+	if gone {
+		return false
+	}
+	return isMain()
+}

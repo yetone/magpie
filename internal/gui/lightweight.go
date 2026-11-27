@@ -117,9 +117,13 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 		moved = time.AfterFunc(500*time.Millisecond, func() { h.keepAt(w) })
 	})
 	// Closing the window keeps the tray alive; quitting is a menu action.
-	// One lightweight mode lets go is closed for good.
+	// Any window no longer held as h.main (let go by lightweight mode,
+	// remade after a WebView2 failure, or otherwise superseded) is closed
+	// for good rather than cancelling and hiding the current h.main.
 	w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		if h.gone.Load() == w {
+		if !mainClosingHides(h.gone.Load() == w, func() bool {
+			return application.InvokeSyncWithResult(func() bool { return h.main == w })
+		}) {
 			return
 		}
 		e.Cancel()
@@ -273,12 +277,19 @@ func (h *host) lighten() {
 }
 
 // panelWin is the panel, made again if lightweight mode let it go; on the
-// main thread. again says it was.
+// main thread. again says it was. Returns nil while another creation is
+// already in flight inside WebView2's nested message pump.
 func (h *host) panelWin() (w *application.WebviewWindow, again bool) {
 	if h.panel == nil {
-		h.panel = h.makePanel()
-		h.madeAgain(h.panel)
-		return h.panel, true
+		if h.makingPanel {
+			return nil, false
+		}
+		h.makingPanel = true
+		defer func() { h.makingPanel = false }()
+		w := h.makePanel()
+		h.panel = w
+		h.madeAgain(w)
+		return w, true
 	}
 	return h.panel, false
 }
@@ -306,7 +317,13 @@ func (h *host) openMain(url string) {
 	minimised := quietMinimised.Swap(false) && quiet
 	h.dockFront(settings.Load(), true, !quiet)
 	if h.main == nil {
-		w := h.makeMain(cmp.Or(url, "/?"+h.query))
+		if !h.mainMake.begin(url, quiet, minimised) {
+			return
+		}
+		defer h.mainMake.cancel()
+		initialURL := cmp.Or(url, "/?"+h.query)
+		w := h.makeMain(initialURL)
+		nextURL, quiet, minimised := h.mainMake.finish()
 		h.main = w
 		h.madeAgain(w)
 		h.whenLoaded(w, func() {
@@ -314,6 +331,9 @@ func (h *host) openMain(url string) {
 				h.reveal(w, quiet, minimised)
 			}
 		})
+		if nextURL != "" && nextURL != initialURL {
+			w.SetURL(nextURL)
+		}
 		return
 	}
 	if url != "" {

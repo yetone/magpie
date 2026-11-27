@@ -120,6 +120,12 @@ type host struct {
 	// windows made again whose page hasn't come yet, shown by whenLoaded's
 	// fn; on the main thread
 	loading map[*application.WebviewWindow]bool
+	// in-flight window creation guards against Windows WebView2 Embed's
+	// nested message pump re-entering openMain / panelWin / OpenRemote; on
+	// the main thread
+	mainMake    pendingMain
+	makingPanel bool
+	remoteMake  pendingRemote
 	// the main window placed as it was last left (placeMain), and so shown
 	placed atomic.Pointer[application.WebviewWindow]
 
@@ -1024,12 +1030,15 @@ func (h *host) setTrayInBar(inBar bool) {
 func (h *host) togglePanel() { application.InvokeSync(h.togglePanelNow) }
 
 func (h *host) togglePanelNow() {
-	if h.loading[h.panel] {
-		return // made again, it is shown once its page has come
+	if h.makingPanel || h.loading[h.panel] {
+		return // being made or loaded, it is shown once its page has come
 	}
 	if _, again := h.panelWin(); again {
 		// made again, with its page to come: shown once it can be
 		h.whenLoaded(h.panel, h.togglePanel)
+		return
+	}
+	if h.panel == nil {
 		return
 	}
 	if omarchy.Hyprland() {

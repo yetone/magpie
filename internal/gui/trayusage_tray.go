@@ -169,6 +169,9 @@ func (h *host) trayCellClick(id string) {
 		return
 	}
 	w, _ := h.panelWin()
+	if w == nil {
+		return
+	}
 	if !windowOpen(w) {
 		w.ExecJS(panelQuotaJS(id))
 	}

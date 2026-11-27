@@ -22,6 +22,10 @@ func (h *host) OpenRemote(link, title string) {
 			showHere(w, true)
 			return
 		}
+		if !h.remoteMake.begin(link, title) {
+			return
+		}
+		defer h.remoteMake.cancel()
 		minW, minH := windowMin(h.zoom(), 0, 0)
 		w := h.app.Window.NewWithOptions(application.WebviewWindowOptions{
 			Name:      "remote",
@@ -33,6 +37,7 @@ func (h *host) OpenRemote(link, title string) {
 			MinHeight: minH,
 			Zoom:      h.zoom(),
 		})
+		nextLink, nextTitle := h.remoteMake.finish()
 		h.remote = w
 		// closed, it is gone; the next Open makes it again
 		w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
@@ -43,6 +48,10 @@ func (h *host) OpenRemote(link, title string) {
 				h.dock(settings.Load(), h.mainShown())
 			})
 		})
+		if nextLink != "" && (nextLink != link || nextTitle != title) {
+			w.SetTitle(nextTitle)
+			w.SetURL(nextLink)
+		}
 		w.Center()
 		showHere(w, true)
 	})
