@@ -641,7 +641,21 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 		if r.URL.Query().Get("again") != "" {
 			plugin.TaggedAskAgain()
 		}
-		got, err := plugin.TaggedRepos(r.Context())
+		// what was had before, at once, when it is older than its ten
+		// minutes: the page then asks again with wait, and redraws with
+		// what GitHub says (a first ask goes through the 7.7MB list and
+		// every repository's icon)
+		var got []plugin.Tagged
+		var err error
+		stale := false
+		if r.URL.Query().Get("again") == "" && r.URL.Query().Get("wait") == "" {
+			if l, fresh, why := plugin.TaggedStanding(); l != nil && !fresh {
+				got, err, stale = l, why, true
+			}
+		}
+		if !stale {
+			got, err = plugin.TaggedRepos(r.Context())
+		}
 		// each one's own picture as the page can show it, kept here as an
 		// installed plugin's is (a data URI isn't sent on to the page)
 		repos := append([]plugin.Tagged(nil), got...)
@@ -649,10 +663,19 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 		for i := range repos {
 			said[i] = repos[i].Icon
 		}
-		for i, ic := range provider.RepoIcons(said, 3*time.Second) {
+		// a list given at once doesn't wait for pictures either: the ask
+		// with wait that follows has them
+		wait := 3 * time.Second
+		if stale {
+			wait = 0
+		}
+		for i, ic := range provider.RepoIcons(said, wait) {
 			repos[i].Icon = ic
 		}
 		out := map[string]any{"repos": repos, "topic": plugin.Topic}
+		if stale {
+			out["stale"] = true
+		}
 		// why the list isn't GitHub's whole answer: the page says so with
 		// Try again, rather than the section reading as there being none
 		if err != nil {

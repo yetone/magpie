@@ -222,6 +222,27 @@ func TaggedAskAgain() {
 	}
 }
 
+// TaggedStanding is the list TaggedRepos would give from what it has,
+// without asking: what it last had (in memory, else on disk), however
+// old, and why that isn't GitHub's whole answer. fresh is whether
+// TaggedRepos would give it as it is, within taggedTTL; nil when there
+// is none. An ask under way holds taggedMu, so what is on disk stands
+// then: the Plugins page draws what it had rather than wait for GitHub
+// (the owner, 11-27: Discover's week waited on the whole list).
+func TaggedStanding() (l []Tagged, fresh bool, err error) {
+	if os.Getenv("MAGPIE_PLUGIN_MARKET") == "off" {
+		return nil, false, nil
+	}
+	if !taggedMu.TryLock() {
+		return taggedOnDisk(), false, nil
+	}
+	defer taggedMu.Unlock()
+	if taggedL != nil {
+		return taggedL, time.Since(taggedAt) < taggedTTL, taggedWhy
+	}
+	return taggedOnDisk(), false, nil
+}
+
 // askTagged asks GitHub's search, and reads each repository it names
 // that wasn't read at its last push, or was read less than rawFresh after
 // it. whole is false when a repository was left out for want of an answer

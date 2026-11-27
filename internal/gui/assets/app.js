@@ -8817,7 +8817,9 @@ const BIRD = `<svg viewBox="0 0 44 44"><use href="#bird" clip-path="url(#bird-bo
 // what is loading, with magpie's bird on it (the owner, after the plugin
 // page's README): skeletons still up after a moment, as on a slow page, get
 // the bird. It drops onto one, hops from bar to bar, each bar giving under
-const SKEL = ".skeleton, .pm-card.ghost .sk";
+// Discover's week too, which waits on npm and magpie's counts (the owner,
+// 11-27: 「加载的过程中也没有小喜鹊的动画」)
+const SKEL = ".skeleton, .pm-card.ghost .sk, .pm-rec.ghost .sk";
 // the skeletons a reader sees now: on screen, big enough to stand on, and
 // not under a dialog or out of their scroller
 function skelSeen() {

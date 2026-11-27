@@ -165,10 +165,13 @@
     npm: { version: r.version || "", publisher: r.owner, repository: r.url, license: r.license, weekly: 0 },
   });
   // A failed ask is said, with why, list or not (till on Discord); a list
-  // had before stands. again: Try again, which asks GitHub at once.
+  // had before stands. again: Try again, which asks GitHub at once. A list
+  // older than its ten minutes comes at once, marked stale, and is asked
+  // again with wait, drawn when GitHub's answer is in (the owner, 11-27).
   async function loadTagged(again) {
     try {
-      const r = await api("plugins/github" + (again ? "?again=1" : ""));
+      const r = await api("plugins/github" + (again === "wait" ? "?wait=1" : again ? "?again=1" : ""));
+      if (r.stale && !again) loadTagged("wait").then(drawBody);
       const got = (r.repos || []).map(ghListing);
       if (!(r.error && !got.length && tagged?.length)) tagged = got;
       taggedErr = r.error || "";
@@ -231,9 +234,15 @@
     backAt = performance.now();
     window.pmPartners?.again();
     if (!mine && !listings) draw();
+    const mineIn = loadMine().then(() => { draw(); window.renderPluginDot?.(); });
+    const listed = loadListings().then(draw);
+    // npm is asked of the listings and what is installed, never of
+    // GitHub's list: it doesn't wait for it (the week did, ~20s on a
+    // first look: the owner, 11-27)
+    Promise.all([mineIn, listed]).then(() => askNPM());
     const parts = [
-      loadMine().then(() => { draw(); window.renderPluginDot?.(); }),
-      loadListings().then(draw),
+      mineIn,
+      listed,
       loadTagged().then(drawBody),
       loadBuiltins(),
       providers ? null : loadProviders().then(drawBody, () => {}),
@@ -251,7 +260,6 @@
     import("./pluginpartners.js").then(drawBody, () => {});
     import("./pluginglide.js").catch(() => {});
     await Promise.all(parts);
-    askNPM();
     askGit();
     awaitNamed();
   }
@@ -847,7 +855,9 @@
     return box;
   }
   function recSection(all) {
-    const p = npmAnswered && (countsGone || window.pmCounts?.answered)
+    // GitHub's list too: a repository there can lead Most used or Most
+    // liked, so the ranks don't move once drawn
+    const p = npmAnswered && tagged && (countsGone || window.pmCounts?.answered)
       ? weekPicks?.(all, { usersOf, likesOf, hotOf, byHot, entryOf }) : undefined;
     if (p === null) return null;
     const sec = el("section", "pm-sec pm-recs");

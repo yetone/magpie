@@ -345,10 +345,11 @@ func (e *statusError) Error() string { return e.URL + ": " + e.Status }
 func npmPath(name string) string { return strings.Replace(url.PathEscape(name), "%40", "@", 1) }
 
 // Info is what npm says of each package, asked at most hourly: a few at a
-// time, and for no longer than npmAll in all (or ctx). A package npm didn't
-// answer for in time is what it said last, or missing when it never has;
-// its answer, when it comes, is kept for the next time. A package npm
-// doesn't have has no Version.
+// time, and for no longer than npmAll in all (or ctx). A package npm
+// answered for before is what it said last, at once, while it is asked
+// again; one it never answered for is waited on, and missing when it
+// doesn't answer in time. An answer, when it comes, is kept for the next
+// time. A package npm doesn't have has no Version.
 func Info(ctx context.Context, names []string) map[string]NPM {
 	return infoWithin(ctx, names, time.Hour)
 }
@@ -374,18 +375,28 @@ func infoWithin(ctx context.Context, names []string, age time.Duration) map[stri
 		}
 		asked[n] = true
 		e, hit := cache[n]
+		said := false
 		if hit {
 			// what it said last, until it says otherwise
 			if !e.missingStale(time.Hour) {
-				out[n] = e.Info
+				out[n], said = e.Info, true
 			}
 			if time.Since(e.At) < age {
 				continue
 			}
 		}
-		wg.Add(1)
-		go func(n string) {
-			defer wg.Done()
+		// what it said last is the answer now, and npm's newer one is
+		// kept for the next ask: Discover's week waited up to npmAll on
+		// packages it already had an answer for (the owner, 11-27: 「这个
+		// 加载特别慢」). The update check (age 0) still waits for npm.
+		hold := !said || age == 0
+		if hold {
+			wg.Add(1)
+		}
+		go func(n string, hold bool) {
+			if hold {
+				defer wg.Done()
+			}
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			c, cancel := context.WithTimeout(bg, npmEach)
@@ -403,7 +414,7 @@ func infoWithin(ctx context.Context, names []string, age time.Duration) map[stri
 				out[n] = info
 			}
 			mu.Unlock()
-		}(n)
+		}(n, hold)
 	}
 	npmMu.Unlock()
 	done := make(chan struct{})

@@ -816,3 +816,51 @@ func TestTaggedLateReadSoonAfterAPushIsShown(t *testing.T) {
 		t.Fatalf("someone/old's package.json read %d times in five asks, want once", n)
 	}
 }
+
+// The owner, 11-27: Discover's week waited on GitHub's whole list, ~20s on
+// a first look. TaggedStanding is what TaggedRepos had, however old, at
+// once and without asking, and while an ask holds taggedMu what is on
+// disk; nothing when it never had one.
+func TestTaggedStandingAtOnce(t *testing.T) {
+	var up atomic.Bool
+	var asked atomic.Int32
+	up.Store(true)
+	fakeGitHub(t, &up, &asked)
+	if l, fresh, _ := TaggedStanding(); l != nil || fresh {
+		t.Fatalf("never asked: %d, fresh %v", len(l), fresh)
+	}
+	want := len(taggedList(context.Background()))
+	if l, fresh, err := TaggedStanding(); len(l) != want || !fresh || err != nil {
+		t.Fatalf("just asked: %d of %d, fresh %v, %v", len(l), want, fresh, err)
+	}
+	taggedMu.Lock()
+	taggedAt = time.Now().Add(-taggedTTL - time.Second)
+	taggedMu.Unlock()
+	if l, fresh, _ := TaggedStanding(); len(l) != want || fresh {
+		t.Fatalf("ten minutes on: %d of %d, fresh %v", len(l), want, fresh)
+	}
+	// an ask under way: what is on disk, not a wait for it
+	taggedMu.Lock()
+	got := make(chan int, 1)
+	go func() { l, _, _ := TaggedStanding(); got <- len(l) }()
+	select {
+	case n := <-got:
+		taggedMu.Unlock()
+		if n != want {
+			t.Fatalf("during an ask: %d of %d", n, want)
+		}
+	case <-time.After(time.Minute):
+		taggedMu.Unlock()
+		t.Fatal("TaggedStanding waited for an ask under way")
+	}
+	// magpie started again: the disk's copy
+	taggedMu.Lock()
+	taggedL = nil
+	taggedMu.Unlock()
+	if l, fresh, _ := TaggedStanding(); len(l) != want || fresh {
+		t.Fatalf("started again: %d of %d, fresh %v", len(l), want, fresh)
+	}
+	if n := asked.Load(); n != 1 {
+		t.Fatalf("GitHub asked %d times, want once", n)
+	}
+}

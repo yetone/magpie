@@ -210,3 +210,57 @@ func TestUpdateCheckAsksNPMNow(t *testing.T) {
 		t.Fatalf("the update check: %q, want npm's version now", got)
 	}
 }
+
+// The owner, 11-27 (「这个加载特别慢」): a package npm answered for over an
+// hour ago is what it said then, at once, while npm is asked again; its
+// newer answer is kept for the next ask. Waiting on npm for it held
+// Discover's week up to npmAll. The update check still waits for npm
+// (TestUpdateCheckAsksNPMNow).
+func TestNPMInfoOldAnswerAtOnce(t *testing.T) {
+	release := make(chan struct{})
+	var version atomic.Value
+	version.Store("1.2.3")
+	fakeNPM(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/downloads/") {
+			w.Write([]byte(`{"downloads":1}`))
+			return
+		}
+		if version.Load() != "1.2.3" {
+			<-release
+		}
+		w.Write([]byte(`{"version":"` + version.Load().(string) + `"}`))
+	})
+	let := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(let)
+	const pkg = "opencode-x-auth"
+	if got := Info(context.Background(), []string{pkg})[pkg].Version; got != "1.2.3" {
+		t.Fatalf("first ask: %q", got)
+	}
+	npmMu.Lock()
+	e := npmCached()[pkg]
+	e.At = time.Now().Add(-2 * time.Hour)
+	npmCache[pkg] = e
+	npmMu.Unlock()
+	// npm is held until let, and each ask may take an hour: Info coming
+	// back at all is it not waiting on npm
+	version.Store("1.2.4")
+	npmEach, npmAll = time.Hour, time.Hour
+	answered := make(chan map[string]NPM, 1)
+	go func() { answered <- Info(context.Background(), []string{pkg}) }()
+	select {
+	case got := <-answered:
+		if got[pkg].Version != "1.2.3" {
+			t.Fatalf("an hour on: %+v, want what npm said last", got[pkg])
+		}
+	case <-time.After(time.Minute):
+		t.Fatal("Info waited on npm for a package it had an answer for")
+	}
+	let()
+	deadline := time.Now().Add(30 * time.Second)
+	for InfoCached([]string{pkg})[pkg].Version != "1.2.4" {
+		if time.Now().After(deadline) {
+			t.Fatal("npm's newer answer wasn't kept")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
