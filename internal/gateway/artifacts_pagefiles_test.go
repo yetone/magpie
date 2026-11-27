@@ -227,6 +227,50 @@ func TestArtifactFilesStaysInTheFolder(t *testing.T) {
 	}
 }
 
+// .git is never read or listed however its name is spelled: in another
+// case, which macOS's and Windows' folders open as .git, with the dots
+// and spaces Windows drops from a name, by its short name, or through a
+// link in the folder that leads into it.
+func TestArtifactFilesNoGitAnySpelling(t *testing.T) {
+	h, id, tok, dir := filesPage(t)
+	for _, p := range []string{".GIT", ".Git/config", ".git./config", ".git /config", "GIT~1/config", "src/.GIT"} {
+		for _, op := range []string{"read", "list", "stat"} {
+			w := pageFilesCall(h, id, map[string]any{"t": tok, "op": op, "path": p})
+			if w.Code == 200 || strings.Contains(w.Body.String(), "[core]") || strings.Contains(w.Body.String(), "config") {
+				t.Errorf("%s %s: %d %q", op, p, w.Code, w.Body.String())
+			}
+		}
+	}
+	if err := os.Symlink(filepath.Join(dir, ".git"), filepath.Join(dir, "meta")); err != nil {
+		t.Skip("no symlinks here:", err)
+	}
+	os.Symlink(filepath.Join(dir, ".git", "config"), filepath.Join(dir, "src", "conf"))
+	for _, c := range []struct{ op, p string }{{"read", "meta/config"}, {"list", "meta"}, {"read", "src/conf"}, {"stat", "src/conf"}} {
+		w := pageFilesCall(h, id, map[string]any{"t": tok, "op": c.op, "path": c.p})
+		if w.Code == 200 || strings.Contains(w.Body.String(), "[core]") {
+			t.Errorf("%s %s through a link: %d %q", c.op, c.p, w.Code, w.Body.String())
+		}
+	}
+	// the folder itself still lists, and a file beside the link still reads
+	if w := pageFilesCall(h, id, map[string]any{"t": tok, "op": "read", "path": "README.md"}); w.Code != 200 {
+		t.Errorf("README.md: %d %q", w.Code, w.Body.String())
+	}
+	if w := pageFilesCall(h, id, map[string]any{"t": tok, "op": "list", "path": "", "recursive": true}); w.Code != 200 || strings.Contains(w.Body.String(), "config") {
+		t.Errorf("list: %d %q", w.Code, w.Body.String())
+	}
+}
+
+// A script is never saved by a name Windows would open as the script.
+func TestArtifactFilesNoScriptByTrailingDot(t *testing.T) {
+	h, id, tok, _ := filesPage(t)
+	for _, p := range []string{"run.sh.", "run.sh ", "run.sh. ."} {
+		w := pageFilesCall(h, id, map[string]any{"t": tok, "op": "stat", "path": p})
+		if _, e := filesOut(t, w); w.Code != 400 || e == nil || e["code"] != "bad_request" {
+			t.Errorf("stat %q: %d %q", p, w.Code, w.Body.String())
+		}
+	}
+}
+
 // Nothing is read but by the shell on this computer, for a version that
 // declares files, and no more often than a page needs.
 func TestArtifactFilesRefuses(t *testing.T) {

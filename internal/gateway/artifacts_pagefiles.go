@@ -13,6 +13,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -64,11 +66,43 @@ func filesPath(p string) (string, bool) {
 		return "", false
 	}
 	for _, part := range strings.Split(p, "/") {
-		if part == ".git" {
+		if gitPart(part) {
 			return "", false
 		}
 	}
 	return p, true
+}
+
+// gitShort is the short (8.3) name Windows may give .git: GIT~1.
+var gitShort = regexp.MustCompile(`(?i)^git~[0-9]+$`)
+
+// gitPart is whether a path part names .git as a file system may open
+// it: in any case (macOS's and Windows' folders don't tell .GIT from
+// .git), with the dots and spaces Windows drops from a name's end, or
+// by its short name.
+func gitPart(part string) bool {
+	n := strings.TrimRight(part, ". ")
+	return strings.EqualFold(n, ".git") || gitShort.MatchString(n)
+}
+
+// filesInGit is whether p, in the folder at dir, is .git or in it once
+// its links are followed: a link inside the folder may lead into .git,
+// which os.Root lets it, as it stays in the folder. A path that can't be
+// resolved isn't: opening it fails on its own.
+func filesInGit(dir, p string) bool {
+	base, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false
+	}
+	real, err := filepath.EvalSymlinks(filepath.Join(dir, filepath.FromSlash(p)))
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(base, real)
+	if err != nil {
+		return true
+	}
+	return slices.ContainsFunc(strings.Split(filepath.ToSlash(rel), "/"), gitPart)
 }
 
 // filesRevision is what tells one state of a file from the next: its
@@ -117,7 +151,7 @@ func filesList(fsys fs.FS, dir string, recursive bool, cursor string) ([]filesEn
 			// gone into
 			return nil
 		}
-		if d.Name() == ".git" {
+		if gitPart(d.Name()) {
 			if d.IsDir() {
 				return fs.SkipDir
 			}
@@ -230,6 +264,10 @@ func (s *Server) artifactFiles(w http.ResponseWriter, r *http.Request) {
 		artifactFilesError(w, http.StatusBadRequest, "bad_request", "a path is relative to the project's folder, with /, and no . or .. parts", nil)
 		return
 	}
+	if p != "." && filesInGit(v.FilesDir, p) {
+		artifactFilesError(w, http.StatusBadRequest, "bad_request", "a path is relative to the project's folder, with /, and no . or .. parts", nil)
+		return
+	}
 	root, err := os.OpenRoot(v.FilesDir)
 	if err != nil {
 		artifactFilesError(w, http.StatusNotFound, "not_found", "the project's folder isn't there", nil)
@@ -295,7 +333,8 @@ func (s *Server) artifactFiles(w http.ResponseWriter, r *http.Request) {
 			artifactFilesError(w, http.StatusBadRequest, "bad_request", "a download is of a file, not a folder", nil)
 			return
 		}
-		if ext := strings.ToLower(path.Ext(p)); artifactFilesRefused[ext] {
+		// as a name's last dots and spaces, which Windows drops, are not
+		if ext := strings.ToLower(path.Ext(strings.TrimRight(p, ". "))); artifactFilesRefused[ext] {
 			artifactFilesError(w, http.StatusBadRequest, "bad_request", "an artifact doesn't save programs or scripts ("+ext+")", nil)
 			return
 		}
