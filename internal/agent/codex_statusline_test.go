@@ -195,3 +195,38 @@ func TestWSLCodexNoStatusLine(t *testing.T) {
 		t.Error("on taken in a distro")
 	}
 }
+
+// The status line's keys are decoded once per change of config.toml, not
+// on every look: a real Codex config (~11k [projects] tables, 1.5 MB) was
+// decoded whole on each window poll that asked for Codex's values (#2278).
+// A change made outside magpie is still seen.
+func TestCodexStatusLineReadOncePerChange(t *testing.T) {
+	codexReadersAre(t, "0.171.0-alpha.13")
+	home, _ := codexHome(t, "", "model = \"gpt-5.5\"\n")
+	claudeStatusAt(t, "/Applications/Magpie.app/Contents/MacOS/magpie")
+	n := 0
+	codexStatusParsed = func() { n++ }
+	t.Cleanup(func() { codexStatusParsed = nil })
+	f := codex(home).Field("statusline")
+	for range 5 {
+		if f.Get() != "" {
+			t.Fatalf("on: %q", f.Get())
+		}
+	}
+	if n != 1 {
+		t.Fatalf("decoded %d times for five looks at one file", n)
+	}
+	if err := f.Set("on"); err != nil {
+		t.Fatal(err)
+	}
+	if f.Get() != "on" {
+		t.Fatalf("Get after on: %q", f.Get())
+	}
+	path := filepath.Join(home, ".codex", "config.toml")
+	if err := os.WriteFile(path, []byte("model = \"gpt-5.5\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if f.Get() != "" {
+		t.Fatalf("an edit outside magpie wasn't seen: %q", f.Get())
+	}
+}

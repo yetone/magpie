@@ -21,7 +21,9 @@ package agent
 // Only on this computer, as Claude Code's switch.
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -29,6 +31,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/filememo"
 )
 
 const (
@@ -68,10 +71,30 @@ func (s codexStatusState) free() bool {
 	return s.readable && !s.mine && (!s.server || s.serverOurs) && s.flag != "false"
 }
 
+// codexStatusRead is config.toml's status line keys, read again only when
+// the file changed. Each look decoded the whole file and kept its text: on
+// a real Codex history (~11k [projects] tables, 1.5 MB) that was ~10 MB of
+// garbage on every window poll that asked for Codex's values, and the
+// file's 1.5 MB held for good, for a few keys (#2278).
 func codexStatusRead(path string) codexStatusState {
-	raw, err := edit.Read(path)
+	s, err := filememo.ReadNow("codex status line", path, func(b []byte) (codexStatusState, error) {
+		return codexStatusParse(edit.TrimBOM(b)), nil
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return codexStatusParse(nil) // no file: nothing of the user's in the way
+	}
 	if err != nil {
 		return codexStatusState{}
+	}
+	return s
+}
+
+// codexStatusParsed, when set (tests), is told of each decode.
+var codexStatusParsed func()
+
+func codexStatusParse(raw []byte) codexStatusState {
+	if codexStatusParsed != nil {
+		codexStatusParsed()
 	}
 	var doc struct {
 		Features   map[string]any `toml:"features"`
