@@ -23,7 +23,11 @@ func pageHome(t *testing.T) {
 	sessionHome(t)
 	sessions.Reset()
 	catalog.Reset()
-	t.Cleanup(func() { sessions.Reset(); catalog.Reset() })
+	// a page's last read can start a write of its chunks into the HOME's
+	// .cache/magpie; it ends before TempDir's cleanup removes the folder
+	// (registered after it, so run before it), or the removal finds the
+	// folder not empty (#4390)
+	t.Cleanup(func() { requestDiskSaves.Wait(); sessions.Reset(); catalog.Reset() })
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0700)
 	os.WriteFile(catalog.CachePath(), []byte(`{"openai":{"id":"openai","models":{"m":{"id":"m","cost":{"input":2,"output":8,"cache_read":0.5,"cache_write":2.5}}}}}`), 0600)
 }

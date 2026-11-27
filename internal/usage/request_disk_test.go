@@ -202,3 +202,27 @@ func TestRequestDiskRowsWrittenOnce(t *testing.T) {
 		t.Fatalf("the file was written again for 4 rows")
 	}
 }
+
+// TestPageHomeWaitsForItsSaves: a page's last read can start a write of
+// its chunks that is still under way when the test returns. The write
+// reads HOME when it runs, so pageHome waits for it before t.Setenv gives
+// HOME back: else it lands in the HOME outside the test, or in the test's
+// TempDir as that is removed ("directory not empty", #4390).
+func TestPageHomeWaitsForItsSaves(t *testing.T) {
+	outer := requestDiskPath()
+	before, _ := os.Stat(outer)
+	t.Run("a save under way", func(t *testing.T) {
+		pageHome(t)
+		savingDisk = func() { time.Sleep(200 * time.Millisecond) }
+		var idx requestIndex
+		idx.Lock()
+		idx.save(nil)
+		idx.Unlock()
+	})
+	requestDiskSaves.Wait()
+	savingDisk = nil
+	after, err := os.Stat(outer)
+	if err == nil && (before == nil || !after.ModTime().Equal(before.ModTime())) {
+		t.Fatalf("a save under way when its test ended wrote %s, outside the test's HOME", outer)
+	}
+}
