@@ -32,7 +32,9 @@ type gatewayFixJSON struct {
 	// "denied" (a magpie this user may not end), "stuck" (it didn't end),
 	// "respawned" (something started a magpie on the port again at once:
 	// a LaunchAgent, a systemd unit, a scheduled task), "taken" (the
-	// gateway couldn't listen: another program has the port), "other"
+	// gateway couldn't listen: another program has the port), "reserved"
+	// (it couldn't, and no program has it: Windows keeps the port for
+	// Hyper-V, WSL or Docker, gateway.PortHeld.Reserved), "other"
 	// (a magpie not older than this one serves; quit it there), "error"
 	Reason  string `json:"reason,omitempty"`
 	PID     int    `json:"pid,omitempty"`
@@ -158,6 +160,9 @@ func startHere() gatewayFixJSON {
 				out.Name, out.Tailscale, out.Alt = h.Name, h.Tailscale, h.Alt
 				if out.PID == 0 {
 					out.PID, out.Path = h.PID, h.Path
+				}
+				if h.Reserved && out.PID == 0 {
+					out.Reason = "reserved"
 				}
 			}
 		}

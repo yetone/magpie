@@ -895,15 +895,15 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	ln, err := s.listen(listenAddr())
 	if err != nil {
-		if addrInUse(err) {
-			// say who has it, when that can be read (portbusy.go)
-			if b, ok := NoteHeld(); ok {
-				return fmt.Errorf("%w (%s)", err, b.Sentence())
-			}
+		// say who has it, when that can be read, or that Windows keeps
+		// it (portbusy.go)
+		if b, ok := listenHeld(err); ok {
+			return fmt.Errorf("%w (%s)", err, b.Sentence())
 		}
 		return err
 	}
 	ClearHeld()
+	reservedPort.Store("")
 	s.lnMu.Lock()
 	s.ln = ln
 	s.lnMu.Unlock()

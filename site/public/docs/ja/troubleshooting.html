@@ -274,6 +274,7 @@
       <tr><td>ポート … は他のプログラムが使用中です。別のポートを選んでください</td><td>空いているポートを選びます。</td></tr>
       <tr><td>別の magpie が … でゲートウェイを提供しています。そちらでポートを設定するか、先に終了してください</td><td>magpie が 2 つ動いています。1 つを終了します。</td></tr>
       <tr><td>ポート … は別のプログラム（magpie web かもしれません）が使用中です：magpie が数秒ごとに再試行します</td><td>ポートを使っているものを探すか、ゲートウェイを別のポートに移します。</td></tr>
+      <tr><td>ポート … は Windows が Hyper-V、WSL または Docker 用に予約しています</td><td>どのプログラムも使っていないので、netstat には出ません。ゲートウェイを別のポートに移すか、管理者として <code>net stop winnat</code> を実行してから <code>net start winnat</code> を実行します。予約範囲は <code>netsh interface ipv4 show excludedportrange protocol=tcp</code> で確認できます。</td></tr>
       <tr><td>MAGPIE_ADDR=… がゲートウェイのアドレス全体を設定しています</td><td><code>MAGPIE_ADDR</code> を外すか変更します。</td></tr>
     </table></div>
 

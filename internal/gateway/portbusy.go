@@ -37,6 +37,10 @@ type PortHeld struct {
 	Own bool `json:"own,omitempty"`
 	// Alt: a port to give Tailscale's HTTPS proxy in its place
 	Alt string `json:"alt,omitempty"`
+	// Reserved: no program holds it; Windows keeps the port in a range
+	// excluded for Hyper-V, WSL or Docker (proc.PortReserved), which only
+	// another port or winnat restarted gets past
+	Reserved bool `json:"reserved,omitempty"`
 }
 
 // readHolder and readServes are the system readers, vars for the tests.
@@ -134,6 +138,9 @@ func whoHolds(ctx context.Context, port string,
 // Sentence is who holds the port, and for Tailscale what to do, in a
 // line for a log or a terminal.
 func (b PortHeld) Sentence() string {
+	if b.Reserved {
+		return fmt.Sprintf("Windows reserves port %s for Hyper-V, WSL or Docker, so no program can listen there: move the gateway to another port (Settings' Gateway port, or MAGPIE_ADDR=127.0.0.1:<port>), %s", b.Port, proc.ReservedFix)
+	}
 	who := "another program"
 	switch {
 	case b.Tailscale && b.Name != "":
@@ -152,6 +159,38 @@ func (b PortHeld) Sentence() string {
 	}
 	return s
 }
+
+// listenHeld is what the error of a listen on the gateway's port says of who
+// has the port, kept for LastHeld: the program, when it can be read, or
+// Windows keeping the port for itself (proc.PortReserved). WSAEACCES is
+// also what a program bound with SO_EXCLUSIVEADDRUSE gives, so a holder
+// read is named first.
+func listenHeld(err error) (PortHeld, bool) {
+	inUse, reserved := addrInUse(err), proc.PortReserved(err)
+	if !inUse && !reserved {
+		return PortHeld{}, false
+	}
+	port := Port()
+	// the app tries the port again every 15s (gui.watchGateway): a port
+	// found reserved with nobody on it isn't read again, which on Windows
+	// is a PowerShell each time
+	if !reserved || reservedPort.Load() != port {
+		if b, ok := NoteHeld(); ok {
+			return b, true
+		}
+	}
+	if !reserved {
+		return PortHeld{}, false
+	}
+	reservedPort.Store(port)
+	b := PortHeld{Port: port, Reserved: true}
+	lastHeld.Store(&b)
+	return b, true
+}
+
+// reservedPort is the port listenHeld last found reserved with no program on
+// it, "" once the gateway listened.
+var reservedPort atomic.Value
 
 // addrInUse says whether err is a listen that failed because another
 // program has the address.

@@ -274,6 +274,7 @@
       <tr><td>端口 … 已被其他程序占用，请换一个</td><td>换一个空闲端口。</td></tr>
       <tr><td>另一个 magpie 正在 … 提供网关：请在那边设端口，或先退出它</td><td>运行了两个 magpie，退出一个。</td></tr>
       <tr><td>端口 … 被其他程序占用（可能是 magpie web）：magpie 每隔几秒会再试一次</td><td>找到占用端口的程序，或把网关换到别的端口。</td></tr>
+      <tr><td>Windows 为 Hyper-V、WSL 或 Docker 保留了端口 …</td><td>没有程序占用它，所以 netstat 里看不到。把网关换到别的端口，或以管理员身份运行 <code>net stop winnat</code>，再运行 <code>net start winnat</code>。<code>netsh interface ipv4 show excludedportrange protocol=tcp</code> 可以列出保留的端口范围。</td></tr>
       <tr><td>MAGPIE_ADDR=… 设置了网关的完整地址</td><td>取消或修改 <code>MAGPIE_ADDR</code>。</td></tr>
     </table></div>
 

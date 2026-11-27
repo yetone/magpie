@@ -5,6 +5,9 @@
 // Tailscale gets the way out (serve it from another port that forwards to
 // magpie), another program is named, and with nothing read the card keeps
 // its old line. The Start button's answer says the same. In every language.
+// Shen Bao on Discord: a port Windows reserves (Hyper-V, WSL, Docker) has no
+// program for netstat to show; the card says Windows keeps it, with the way
+// out, and never "another program".
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -39,11 +42,11 @@ function fixture(lang, world) {
 
 const ts = { port: "8848", tailscale: true, alt: "8443" };
 const words = {
-  en: { starting: /Starting the gateway/, tail: /Tailscale's serve or funnel has port 8848\. .*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*another port in Settings/, named: /Port 8848 is in use by nginx \(pid 77\): quit it/, old: /start it with magpie serve/ },
-  zh: { starting: /正在启动网关/, tail: /Tailscale 的 serve 或 funnel 占用了端口 8848。.*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*其他端口/, named: /端口 8848 被 nginx（pid 77）占用：请退出它/, old: /magpie serve/ },
-  "zh-TW": { starting: /正在啟動閘道/, tail: /Tailscale 的 serve 或 funnel 佔用了連接埠 8848。.*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*其他連接埠/, named: /連接埠 8848 被 nginx（pid 77）佔用：請退出它/, old: /magpie serve/ },
-  ja: { starting: /ゲートウェイを起動しています/, tail: /Tailscale の serve または funnel がポート 8848 を使っています。.*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*別のポート/, named: /ポート 8848 は nginx（pid 77）が使用中です/, old: /magpie serve/ },
-  de: { starting: /Zugangspunkt wird gestartet/, tail: /Tailscales serve oder funnel belegt Port 8848\. .*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*anderen Port/, named: /Port 8848 wird von nginx \(PID 77\) verwendet/, old: /magpie serve/ },
+  en: { starting: /Starting the gateway/, tail: /Tailscale's serve or funnel has port 8848\. .*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*another port in Settings/, named: /Port 8848 is in use by nginx \(pid 77\): quit it/, old: /start it with magpie serve/, reserved: /Windows reserves port 8848 for Hyper-V, WSL or Docker\. Move the gateway to another port in Settings, or as administrator run net stop winnat, then net start winnat\. To check: netsh interface ipv4 show excludedportrange protocol=tcp/ },
+  zh: { starting: /正在启动网关/, tail: /Tailscale 的 serve 或 funnel 占用了端口 8848。.*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*其他端口/, named: /端口 8848 被 nginx（pid 77）占用：请退出它/, old: /magpie serve/, reserved: /Windows 为 Hyper-V、WSL 或 Docker 保留了端口 8848。.*设置.*net stop winnat.*net start winnat.*netsh interface ipv4 show excludedportrange protocol=tcp/ },
+  "zh-TW": { starting: /正在啟動閘道/, tail: /Tailscale 的 serve 或 funnel 佔用了連接埠 8848。.*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*其他連接埠/, named: /連接埠 8848 被 nginx（pid 77）佔用：請退出它/, old: /magpie serve/, reserved: /Windows 為 Hyper-V、WSL 或 Docker 保留了連接埠 8848。.*設定.*net stop winnat.*net start winnat.*netsh interface ipv4 show excludedportrange protocol=tcp/ },
+  ja: { starting: /ゲートウェイを起動しています/, tail: /Tailscale の serve または funnel がポート 8848 を使っています。.*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*別のポート/, named: /ポート 8848 は nginx（pid 77）が使用中です/, old: /magpie serve/, reserved: /ポート 8848 は Windows が Hyper-V、WSL または Docker 用に予約しています。.*設定.*net stop winnat.*net start winnat.*netsh interface ipv4 show excludedportrange protocol=tcp/ },
+  de: { starting: /Zugangspunkt wird gestartet/, tail: /Tailscales serve oder funnel belegt Port 8848\. .*tailscale serve --https=8443 http:\/\/127\.0\.0\.1:8848.*anderen Port/, named: /Port 8848 wird von nginx \(PID 77\) verwendet/, old: /magpie serve/, reserved: /Windows reserviert Port 8848 für Hyper-V, WSL oder Docker\. .*Einstellungen.*net stop winnat.*net start winnat.*netsh interface ipv4 show excludedportrange protocol=tcp/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -85,6 +88,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const { context, page } = await open({ held: { port: "8848", name: "magpie", pid: 47634, path: "/home/u/.local/bin/magpie", own: true }, answer: {} });
         assert.match(await sub(page).textContent(), w.starting);
         assert.equal(await page.locator("#gateway .sub.err").count(), 0);
+        await context.close();
+      }
+      // a port Windows reserves, no program on it
+      {
+        const { context, page } = await open({ held: { port: "8848", reserved: true }, answer: {} });
+        const said = await page.locator("#gateway .sub.err").textContent();
+        assert.match(said, w.reserved);
+        assert.doesNotMatch(said, w.named);
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "the page scrolls sideways");
+        await context.close();
+      }
+      {
+        const { context, page } = await open({ held: undefined, answer: { ok: false, reason: "reserved", port: "8848" } });
+        await page.locator("#gateway .gw-fix").click();
+        await page.locator("#gateway .sub.err").waitFor();
+        assert.match(await page.locator("#gateway .sub.err").textContent(), w.reserved);
         await context.close();
       }
       // the holder not read: the card's old line, nothing made up

@@ -71,17 +71,15 @@ func TestCallbackBlockedTellsReservedFromBusy(t *testing.T) {
 	}
 	for _, c := range []struct {
 		err  error
-		goos string
 		want string
 	}{
-		{listenErr(10013), "windows", "reserved"},
-		{listenErr(10048), "windows", "busy"}, // WSAEADDRINUSE
-		{listenErr(syscall.EADDRINUSE), "darwin", "busy"},
-		{listenErr(10013), "linux", "busy"},
-		{errors.New("something else"), "windows", "busy"},
+		{listenErr(10013), "reserved"}, // WSAEACCES
+		{listenErr(10048), "busy"},     // WSAEADDRINUSE
+		{listenErr(syscall.EADDRINUSE), "busy"},
+		{errors.New("something else"), "busy"},
 	} {
-		if got := callbackBlocked(c.err, c.goos); got != c.want {
-			t.Errorf("%v on %s: %q, want %q", c.err, c.goos, got, c.want)
+		if got := callbackBlocked(c.err); got != c.want {
+			t.Errorf("%v: %q, want %q", c.err, got, c.want)
 		}
 	}
 }

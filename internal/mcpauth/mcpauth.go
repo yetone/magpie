@@ -42,6 +42,7 @@ import (
 	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
@@ -1290,6 +1291,9 @@ func start(ctx context.Context, name, serverURL string, app *App, add *string) (
 	}
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
+		if port != 0 && proc.PortReserved(err) {
+			return State{}, fmt.Errorf("the OAuth app's callback port %d is reserved by Windows for Hyper-V, WSL or Docker: register the app with another callback port, %s: %w", port, proc.ReservedFix, err)
+		}
 		if port != 0 {
 			return State{}, fmt.Errorf("the OAuth app's callback port %d is in use by another program: %w", port, err)
 		}

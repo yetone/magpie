@@ -3,7 +3,8 @@
 // program, and a port of one's own is easier to tell apart): any port from
 // 1024 to 65535 can be typed and applied. One out of range is refused in the
 // page; one another program has is refused with the gateway's reason, in the
-// page's language, what was typed kept; a free one moves the gateway and
+// page's language, what was typed kept, and one Windows reserves (Shen Bao
+// on Discord) is said as that, not as another program; a free one moves the gateway and
 // says how many agents moved with it, and the row then says the new URL,
 // as does the sidebar's gateway line (noahhrreion on Discord).
 // With MAGPIE_ADDR set the field is off, shows its host:port and says why;
@@ -49,6 +50,7 @@ function server(lang, over, posts) {
       const { port } = JSON.parse(req.postData());
       posts.push(port);
       if (port === 3500) return json({ error: "port 3500 is in use by another program: pick another one" }, 400);
+      if (port === 3501) return json({ error: "port 3501 is reserved by Windows for Hyper-V, WSL or Docker: pick another one" }, 400);
       s = { ...s, port, gateway: "http://127.0.0.1:" + port };
       return json({ settings: s, port: { port, moved: ["Claude Code", "Codex"] } });
     }
@@ -69,6 +71,7 @@ const words = {
     now: (u) => "Only the port is set here, 1024 to 65535; MAGPIE_ADDR=host:port sets the whole address instead. Agents magpie connected move with it. Now " + u,
     range: "A port is a number from 1024 to 65535",
     taken: "Port 3500 is in use by another program: pick another one",
+    reserved: "Windows reserves port 3501 for Hyper-V, WSL or Docker: pick another one",
     moved: "Gateway on port 3591; 2 agents moved with it",
     env: "MAGPIE_ADDR=127.0.0.1:3426 sets the gateway’s whole address, host:port: unset it to set the port here",
   },
@@ -77,6 +80,7 @@ const words = {
     now: (u) => "这里只设端口（1024 到 65535）；MAGPIE_ADDR=主机:端口 可指定完整地址。改了之后，已接入 magpie 的 Agent 会一起换过去。当前 " + u,
     range: "端口是 1024 到 65535 之间的数字",
     taken: "端口 3500 已被其他程序占用，请换一个",
+    reserved: "Windows 为 Hyper-V、WSL 或 Docker 保留了端口 3501，请换一个",
     moved: "网关已换到端口 3591，2 个 Agent 已跟着换过去",
     env: "MAGPIE_ADDR=127.0.0.1:3426 已指定网关的完整地址（主机:端口）：去掉这个环境变量后才能在这里设端口",
   },
@@ -167,13 +171,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.deepEqual(posts, [3500]);
           assert.equal(await scroll(), before, "a taken port moved the page");
 
+          // reserved by Windows: said as that, no program named
+          await field.fill("3501");
+          await apply.click();
+          await page.waitForFunction((want) => document.querySelector("#portList .sub")?.textContent.trim() === want, w.reserved);
+          assert.deepEqual(posts, [3500, 3501]);
+
           // a free one, by Enter: moved, and the agents with it
           await field.fill("3591");
           await field.press("Enter");
           await page.waitForFunction((want) => document.querySelector("#status")?.textContent.trim() === want, w.moved);
           await page.waitForFunction((want) => document.querySelector("#portList .sub")?.textContent.trim() === want, w.now("http://127.0.0.1:3591"));
           assert.equal(await field.inputValue(), "3591");
-          assert.deepEqual(posts, [3500, 3591]);
+          assert.deepEqual(posts, [3500, 3501, 3591]);
           // the sidebar's gateway line says the new address too, not the
           // port before until Providers is opened (noahhrreion on Discord)
           // (the window made wide enough for the sidebar, as the

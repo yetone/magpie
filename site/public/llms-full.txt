@@ -8789,6 +8789,7 @@ The gateway listens on `127.0.0.1:3425`. To move it, open Settings › Network a
 | Port … is in use by another program: pick another one | Pick a free port. |
 | Another magpie serves the gateway at …: set its port there, or quit it first | Two copies of magpie are running. Quit one. |
 | Port … is taken by another program, magpie web perhaps: magpie tries again every few seconds | Find what holds the port, or move the gateway to another. |
+| Windows reserves port … for Hyper-V, WSL or Docker | No program holds it, so netstat shows nothing. Move the gateway to another port, or run `net stop winnat` then `net start winnat` as administrator. `netsh interface ipv4 show excludedportrange protocol=tcp` lists the reserved ranges. |
 | MAGPIE_ADDR=… sets the gateway’s whole address, host:port: unset it to set the port here | Unset `MAGPIE_ADDR`, or change it. |
 
 ## Agents in WSL

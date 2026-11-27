@@ -62,6 +62,16 @@ func errPortTaken(p int) error {
 	return fmt.Errorf("port %d is in use by another program: pick another one", p)
 }
 
+// errPortBlocked is why port p couldn't be listened on: Windows keeps it
+// for Hyper-V, WSL or Docker (proc.PortReserved), or another program has
+// it.
+func errPortBlocked(p int, err error) error {
+	if proc.PortReserved(err) {
+		return fmt.Errorf("port %d is reserved by Windows for Hyper-V, WSL or Docker: pick another one", p)
+	}
+	return errPortTaken(p)
+}
+
 // setPort moves the gateway to port p (0 for the default) — the port in
 // Settings' Gateway address (Magic_zero on Discord: 3425 was taken, and a port of one's
 // own is easier to tell apart): it checks nothing listens there, saves it,
@@ -103,7 +113,7 @@ func setPort(p int) (portJSON, error) {
 		host = "0.0.0.0"
 	}
 	if err := portFree(net.JoinHostPort(host, strconv.Itoa(want))); err != nil {
-		return portJSON{}, errPortTaken(want)
+		return portJSON{}, errPortBlocked(want, err)
 	}
 	// the agents reaching the gateway where it is now, to move with it
 	on := agent.OnGateway()
@@ -116,7 +126,7 @@ func setPort(p int) (portJSON, error) {
 			back := settings.Load()
 			back.Port = was
 			_ = settings.Save(back)
-			return portJSON{}, errPortTaken(want)
+			return portJSON{}, errPortBlocked(want, err)
 		}
 	} else {
 		// the port it was on was taken by something else: it serves now

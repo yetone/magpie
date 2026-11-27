@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/yetone/magpie/internal/proc"
@@ -113,6 +114,64 @@ func TestListenErrorNamesTheHolder(t *testing.T) {
 	}
 	if h := LastHeld(); h != nil {
 		t.Fatalf("LastHeld kept %+v", h)
+	}
+}
+
+// Shen Bao on Discord: Windows kept 3425 in a range excluded for Hyper-V,
+// WSL or Docker, bind said WSAEACCES, and the app said another program
+// had the port though netstat showed none. With nobody on the port the
+// error says Windows reserves it and what to do, and LastHeld marks it
+// reserved for the page; the holder is read once, not on each retry. A
+// program read on the port (one bound with SO_EXCLUSIVEADDRUSE gets the
+// same error) is named instead.
+func TestListenErrorSaysWindowsReservesThePort(t *testing.T) {
+	t.Setenv("MAGPIE_ADDR", "127.0.0.1:3425")
+	wasHolder, wasServes, wasListen := readHolder, readServes, ListenTCP
+	defer func() {
+		readHolder, readServes, ListenTCP = wasHolder, wasServes, wasListen
+		ClearHeld()
+		reservedPort.Store("")
+	}()
+	ListenTCP = func(network, addr string) (net.Listener, error) {
+		return nil, &net.OpError{Op: "listen", Net: network, Err: os.NewSyscallError("bind", syscall.Errno(10013))}
+	}
+	reads := 0
+	readHolder = func(context.Context, int) (proc.Holder, bool) { reads++; return proc.Holder{}, false }
+	readServes = noServe
+
+	for try := 1; try <= 2; try++ {
+		ClearHeld() // as the app does before each try (gui.serveGatewayLocked)
+		err := New().ListenAndServe(t.Context())
+		if err == nil {
+			t.Fatal("listened on a reserved port")
+		}
+		for _, want := range []string{"Windows reserves port 3425", "another port", "net stop winnat then net start winnat", "netsh interface ipv4 show excludedportrange protocol=tcp"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("try %d: %q lacks %q", try, err, want)
+			}
+		}
+		if strings.Contains(err.Error(), "held by") || strings.Contains(err.Error(), "another program") {
+			t.Errorf("try %d: a reserved port is said to be held: %v", try, err)
+		}
+		if h := LastHeld(); h == nil || !h.Reserved || h.Port != "3425" || h.PID != 0 {
+			t.Fatalf("try %d: LastHeld %+v", try, h)
+		}
+	}
+	if reads != 1 {
+		t.Errorf("the holder was read %d times over two tries", reads)
+	}
+
+	// a program read on the port: named, not called Windows' reservation
+	reservedPort.Store("")
+	readHolder = func(context.Context, int) (proc.Holder, bool) {
+		return proc.Holder{PID: 77, Name: "nginx", Path: `C:\nginx\nginx.exe`}, true
+	}
+	err := New().ListenAndServe(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "port 3425 is held by nginx (pid 77)") || strings.Contains(err.Error(), "reserves") {
+		t.Fatalf("an exclusive holder: %v", err)
+	}
+	if h := LastHeld(); h == nil || h.Reserved || h.Name != "nginx" {
+		t.Fatalf("LastHeld %+v", h)
 	}
 }
 

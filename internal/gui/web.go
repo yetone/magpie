@@ -110,6 +110,10 @@ func StartWeb(addr, version string) (*Web, error) {
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		if proc.PortReserved(err) {
+			_, port, _ := net.SplitHostPort(addr)
+			return nil, fmt.Errorf("%w (Windows reserves port %s for Hyper-V, WSL or Docker, so no program can listen there: use another port, %s)", err, port, proc.ReservedFix)
+		}
 		return nil, err
 	}
 	// with --tls-cert, the page is HTTPS to other computers, as the

@@ -18,6 +18,7 @@ let portDraft = { value: null, err: "" };
 function portSays(m) {
   let x;
   if ((x = /^port (\d+) is in use by another program/.exec(m))) return t("Port {p} is in use by another program: pick another one", { p: x[1] });
+  if ((x = /^port (\d+) is reserved by Windows/.exec(m))) return t("Windows reserves port {p} for Hyper-V, WSL or Docker: pick another one", { p: x[1] });
   if ((x = /^another magpie serves the gateway at (\S+):/.exec(m))) return t("Another magpie serves the gateway at {url}: set its port there, or quit it first", { url: x[1] });
   if (/from 1024 to 65535/.test(m)) return t("A port is a number from 1024 to 65535");
   return t(m);
@@ -798,7 +799,8 @@ function renderWebPage(asked) {
     t("The app serves this window’s page with a key in its link, as magpie web does, while it runs. For a tunnel such as Cloudflare Tunnel, point it at http://127.0.0.1:{port}", { port: s.port }),
     segs([["", t("Off")], ["local", t("This computer")], ["lan", t("Local network")]], s.mode || "", (mode) => set({ mode }))).classList.add("web-page-mode");
   if (s.mode) {
-    const why = s.error ? el("div", "sub err", s.error.startsWith("port ") ? t("Port {p} is taken by another program, magpie web perhaps: magpie tries again every few seconds", { p: s.port }) : t(s.error))
+    const why = s.error ? el("div", "sub err", /^port \d+ is reserved by Windows/.test(s.error) ? portSays(s.error)
+      : s.error.startsWith("port ") ? t("Port {p} is taken by another program, magpie web perhaps: magpie tries again every few seconds", { p: s.port }) : t(s.error))
       : el("div", "sub say", s.serving ? t("Served; anyone with this link can change every setting") : t("Starting…"));
     const links = [s.link, ...(s.mode === "lan" ? s.network || [] : [])].filter(Boolean);
     const box2 = el("div", "web-page-links");

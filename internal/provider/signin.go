@@ -23,14 +23,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -357,7 +356,7 @@ func (s *signInFlow) begin() error {
 		// doesn't stop the sign-in: the page the browser ends on has the
 		// code in its address, and that address pasted finishes it (#1782)
 		if ln, err = listenCodexCallback(); err != nil {
-			blocked = callbackBlocked(err, runtime.GOOS)
+			blocked = callbackBlocked(err)
 		}
 		_, port, _ := net.SplitHostPort(codexCallbackAddr)
 		s.redirect = "http://localhost:" + port + "/auth/callback"
@@ -432,13 +431,10 @@ func (s *signInFlow) begin() error {
 }
 
 // callbackBlocked names why a callback port couldn't be listened on, as
-// SignInState.CallbackBlocked says it. Windows refuses a port in a range it
-// has excluded for Hyper-V, WSL or Docker with WSAEACCES (10013), though no
-// program has it ("netsh interface ipv4 show excludedportrange
-// protocol=tcp" lists the ranges).
-func callbackBlocked(err error, goos string) string {
-	var errno syscall.Errno
-	if goos == "windows" && errors.As(err, &errno) && errno == 10013 {
+// SignInState.CallbackBlocked says it: a port Windows reserves for
+// Hyper-V, WSL or Docker (proc.PortReserved), or one another program has.
+func callbackBlocked(err error) string {
+	if proc.PortReserved(err) {
 		return "reserved"
 	}
 	return "busy"

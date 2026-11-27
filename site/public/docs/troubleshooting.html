@@ -274,6 +274,7 @@
       <tr><td>Port … is in use by another program: pick another one</td><td>Pick a free port.</td></tr>
       <tr><td>Another magpie serves the gateway at …: set its port there, or quit it first</td><td>Two copies of magpie are running. Quit one.</td></tr>
       <tr><td>Port … is taken by another program, magpie web perhaps: magpie tries again every few seconds</td><td>Find what holds the port, or move the gateway to another.</td></tr>
+      <tr><td>Windows reserves port … for Hyper-V, WSL or Docker</td><td>No program holds it, so netstat shows nothing. Move the gateway to another port, or run <code>net stop winnat</code> then <code>net start winnat</code> as administrator. <code>netsh interface ipv4 show excludedportrange protocol=tcp</code> lists the reserved ranges.</td></tr>
       <tr><td>MAGPIE_ADDR=… sets the gateway’s whole address, host:port: unset it to set the port here</td><td>Unset <code>MAGPIE_ADDR</code>, or change it.</td></tr>
     </table></div>
 

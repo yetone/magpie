@@ -185,9 +185,14 @@ function gatewayFixSays(o) {
     case "denied": return t("magpie {v} (pid {pid}, {path}) runs as another user or as administrator, so this magpie can't quit it. Quit it there.", p);
     case "stuck": return t("magpie {v} (pid {pid}) didn't quit. End it in your system's process list (Activity Monitor, Task Manager).", p);
     case "respawned": return t("Something started magpie on port {port} again at once ({path}, pid {pid}): a login item or a service keeps it running (a LaunchAgent, a systemd unit, a scheduled task). Remove that, then try again.", p);
+    // Shen Bao on Discord: Windows keeps the port for Hyper-V, WSL or
+    // Docker, and no program has it for netstat to show
+    case "reserved": return t("Windows reserves port {port} for Hyper-V, WSL or Docker. Move the gateway to another port in Settings, or as administrator run net stop winnat, then net start winnat. To check: netsh interface ipv4 show excludedportrange protocol=tcp", p);
     // pluoki on X: Tailscale's serve on the gateway's port number, found
     // only by trial and error; the program is named when it can be read
-    case "taken": return o.tailscale
+    case "taken": return o.reserved
+      ? gatewayFixSays({ ...o, reason: "reserved" })
+      : o.tailscale
       ? t("Tailscale's serve or funnel has port {port}. Point it at magpie from another port: tailscale serve --https={alt} http://127.0.0.1:{port} (or move the gateway to another port in Settings).", p)
       : p.name && !p.path
       ? t("Port {port} is in use by {name} (pid {pid}): quit it, or move the gateway to another port in Settings.", p)

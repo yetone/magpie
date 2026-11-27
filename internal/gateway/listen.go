@@ -12,6 +12,10 @@ import (
 // magpie can't bind the port, which is how it learns one already serves.
 var Handover bool
 
+// ListenTCP is net.Listen; tests, here and in internal/gui, have it fail
+// as Windows does for a port it reserves.
+var ListenTCP = net.Listen
+
 // Listen listens on addr, beside another process when Handover is on;
 // or takes the socket the magpie before this one handed over (Inherit)
 // when it listens there.
@@ -21,7 +25,7 @@ func Listen(addr string) (net.Listener, error) {
 		return ln, nil
 	}
 	if !Handover {
-		return net.Listen("tcp", addr)
+		return ListenTCP("tcp", addr)
 	}
 	lc := net.ListenConfig{Control: reusePort}
 	return lc.Listen(context.Background(), "tcp", addr)
