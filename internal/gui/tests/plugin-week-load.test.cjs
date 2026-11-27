@@ -141,4 +141,36 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
     await ctx.close();
   });
+
+  // #7810: the view keeps its scroll through a draw, so the week's skeleton
+  // giving way to its picks moved every shelf under it; the one the reader
+  // is on stays where it was
+  test(engine + ": the shelf in sight stays where it is as the week comes in above it", async (t) => {
+    const browser = await launch();
+    t.after(() => browser.close());
+    for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) for (const width of [1180, 420]) {
+      await t.test(`${lang} ${width}`, async () => {
+        const [npmIn, letNPM] = held();
+        const { ctx, page, errors } = await open(browser, lang, { github: Promise.resolve(), npm: npmIn }, true, width);
+        await page.setViewportSize({ width, height: 420 });
+        const view = page.locator("#view-plugins");
+        await view.locator(".pm-recs .pm-rec.ghost").waitFor();
+        const shelf = view.locator(".pm-body > .pm-sec[data-kind]").first();
+        await shelf.waitFor();
+        const top = () => shelf.evaluate((s) => s.getBoundingClientRect().top - document.querySelector("#view-plugins").getBoundingClientRect().top);
+        // the shelf brought near the top by a wheel, as a reader would
+        await view.hover();
+        for (let i = 0; i < 30 && (await top()) > 90; i++) { await page.mouse.wheel(0, Math.min(200, (await top()) - 60)); await page.waitForTimeout(60); }
+        await page.waitForTimeout(400);
+        const before = await top();
+        assert(before < 120 && before > -40, `the shelf near the top: ${before}`);
+        letNPM();
+        await view.locator(".pm-recs .pm-hero[data-pkg]").waitFor();
+        await page.waitForTimeout(400);
+        assert(Math.abs((await top()) - before) <= 1, `the shelf moved: ${before} → ${await top()}`);
+        assert.deepEqual(errors, []);
+        await ctx.close();
+      });
+    }
+  });
 }

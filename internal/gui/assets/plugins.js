@@ -1111,9 +1111,33 @@
     // the body is made once, so the GitHub section's field stays in the page
     body = body || el("div", "lib-body pm-body");
     replaceKeeping(page, [head(), body]);
+    shelfKept = false;
     drawBody();
-    page.scrollTop = scroll;
+    if (!shelfKept) page.scrollTop = scroll;
     vg?.now();
+  }
+
+  // A draw keeps the shelf the reader is on where it was. The view keeps its
+  // scroll, so a section above that changes height (the week's skeleton
+  // giving way to its picks, or to nothing) moved every shelf under it: the
+  // Agents a click had brought to the top went 300 to 700px up (#7810).
+  let shelfKept = false;
+  function shelfInSight() {
+    if (!body || page.scrollTop <= 0) return null;
+    const top = page.getBoundingClientRect().top;
+    const s = [...body.querySelectorAll(":scope > .pm-sec[data-kind]")].find((x) => x.getBoundingClientRect().bottom > top + 1);
+    return s && { kind: s.dataset.kind, at: s.getBoundingClientRect().top, scroll: page.scrollTop };
+  }
+  // Chromium's own scroll anchoring may have kept it already, by moving the
+  // scroll: either way the scroll guard is told where the reader is now, or
+  // it puts the old number back (Agents at -308)
+  function keepShelf(was) {
+    const s = was && body.querySelector(`:scope > .pm-sec[data-kind="${was.kind}"]`);
+    if (!s) return;
+    const by = s.getBoundingClientRect().top - was.at;
+    if (Math.abs(by) >= 1) page.scrollTop += by;
+    shelfKept = true;
+    if (Math.abs(page.scrollTop - was.scroll) >= 1) window.arrived?.(page);
   }
 
   function drawBody() {
@@ -1151,7 +1175,9 @@
         out.push(regBox = regBox || el("div", "pm-registry"));
         import("./registry.js").then(() => pmRegistry(regBox, mine, askNPM), statusTErr);
       }
+      const at = shelfInSight();
       replaceKeeping(body, out);
+      keepShelf(at);
       vg?.now();
       if (agentsFor && body.querySelector(".pm-agents")) {
         // after the view is put back where the reader was, as showing it
