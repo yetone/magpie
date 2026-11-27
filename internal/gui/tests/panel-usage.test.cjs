@@ -373,7 +373,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // the picker lists the providers, and all of them again
       await p.locator("#panelUsage .sess-pick").click();
-      await p.locator(".sess-menu button, .sess-menu [role=option], .sess-menu .opt").filter({ hasText: w.all }).first().click();
+      await p.locator(".pc-pop [role=option]").filter({ hasText: w.all }).first().click();
       await settled(asked, (q) => !q.get("provider"));
       await p.locator("#panelUsage .sess-pick", { hasText: w.all }).waitFor();
       await p.locator("#panelUsage:not(.pu-loading)").waitFor();

@@ -334,7 +334,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium"]
     await p.locator("#panelUsage .pu-bar .segs .opt").nth(1).click(); // 7 days
     await p.waitForTimeout(100);
     await p.locator("#panelUsage .sess-pick").click({ force: true });
-    await p.locator(".proto-menu .pm-item", { hasText: "Relay" }).click({ force: true });
+    await p.locator(".pc-pop [role=option]", { hasText: "Relay" }).click({ force: true });
     await p.waitForTimeout(200);
     assert.equal(gate.count("requests"), before, "a pick while one is open doesn't start another");
     gate.release("requests", "all"); // the open one is done: the pick is served, once

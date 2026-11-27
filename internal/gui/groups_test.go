@@ -140,7 +140,7 @@ func TestGroupsSkip(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	for _, id := range []string{"a", "b", "c"} {
-		if err := provider.Save(provider.Provider{ID: id, Name: "P " + id, Key: "k" + id, Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}}); err != nil {
+		if err := provider.Save(provider.Provider{ID: id, Name: "P " + id, Icon: "openai", Key: "k" + id, Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -161,6 +161,10 @@ func TestGroupsSkip(t *testing.T) {
 	}
 	if st := groupsState(); len(st.Skip) != 0 || len(st.Skippable) != 3 || len(st.Groups) != 1 || len(st.Groups[0].Members) != 3 {
 		t.Fatalf("before: %+v %+v %+v", st.Skip, st.Skippable, st.Groups)
+	}
+	// the provider field draws each one's logo (the owner, 11-27)
+	if st := groupsState(); st.Skippable[0].Icon != "openai" {
+		t.Fatalf("no logo: %+v", st.Skippable)
 	}
 	st := skip(`{"skip":["b","gone"]}`)
 	if !slices.Equal(st.Skip, []string{"b", "gone"}) || len(st.Groups) != 1 || !slices.Equal(st.Groups[0].Members, []string{"a/m", "c/m"}) {

@@ -119,6 +119,7 @@ type groupDefaultsJSON struct {
 type skippableJSON struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Icon string `json:"icon,omitempty"` // the provider's logo, for its row and chip
 }
 
 type groupJSON struct {
@@ -543,7 +544,7 @@ func groupsState() groupsJSON {
 	out.Skippable = []skippableJSON{}
 	for _, p := range provider.All() {
 		if p.Ready() || slices.Contains(out.Skip, p.ID) {
-			out.Skippable = append(out.Skippable, skippableJSON{ID: p.ID, Name: p.Name})
+			out.Skippable = append(out.Skippable, skippableJSON{ID: p.ID, Name: p.Name, Icon: p.Icon})
 		}
 	}
 	for _, id := range out.Skip {

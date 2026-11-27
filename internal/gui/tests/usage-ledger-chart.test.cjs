@@ -272,7 +272,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await p.locator("#ledProvider", { hasText: w.all }).waitFor();
         // the picker beside the agent's does the same
         await p.locator("#ledProvider").click();
-        await p.locator(".sess-menu button, .sess-menu [role=option], .sess-menu .opt").filter({ hasText: "Codex" }).first().click();
+        await p.locator(".pc-pop [role=option]").filter({ hasText: "Codex" }).first().click();
         await lastAsked(asked, (q) => q.get("provider") === "codex");
         assert.equal(await p.locator("#view-usage").evaluate((v) => v.scrollTop), before, "a click moved the page");
 

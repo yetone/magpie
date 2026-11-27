@@ -73,11 +73,14 @@ async function open(browser, lang, width, installed, view) {
   return { page, errors, asked };
 }
 
-// the menu a Sign in opened: its heading and its items' names
+// the list a Sign in opened (the provider combobox): what it is called,
+// its rows' names, and a logo on each row
 async function menuOf(page) {
-  const m = page.locator(".proto-menu");
+  const m = page.locator(".pc-pop");
   await m.waitFor();
-  return { head: await m.locator(".pm-head").textContent(), names: await m.locator(".pm-item .pm-name").allTextContents(), m };
+  const rows = m.locator("[role=option]");
+  assert.equal(await rows.locator(".ic").count(), await rows.count(), "a logo on every row");
+  return { head: await m.locator("[role=listbox]").getAttribute("aria-label"), names: await rows.locator(".v").allTextContents(), m };
 }
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -102,7 +105,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const box = await menu.m.boundingBox();
           assert.ok(box.x >= 0 && box.x + box.width <= width, `the menu fits the window: ${JSON.stringify(box)}`);
           assert.deepEqual(asked, [], "nothing asked before one is picked");
-          await menu.m.locator(".pm-item", { hasText: w.cn }).click();
+          await menu.m.locator("[role=option]", { hasText: w.cn }).click();
           const signing = page.locator("#addSheet .signing").first();
           await signing.waitFor();
           assert.ok((await signing.innerText()).includes(w.cn), "the sign-in is Qoder CN's");
@@ -125,7 +128,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await b.click();
           menu = await menuOf(page);
           assert.deepEqual(menu.names, want);
-          await menu.m.locator(".pm-item", { hasText: "QwenWork 企业版" }).click();
+          await menu.m.locator("[role=option]", { hasText: "QwenWork 企业版" }).click();
           await page.locator("#addSheet .signing").first().waitFor();
           for (let i = 0; i < 100 && !asked.length; i++) await page.waitForTimeout(50);
           assert.ok(asked.length && asked.every((x) => x.provider === "qwenwork-enterprise"), JSON.stringify(asked));

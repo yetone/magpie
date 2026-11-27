@@ -536,7 +536,12 @@ function drawMaskList() {
     // and is in the list too
     const agents = [...new Set([...(sum?.agents || []), ...(sum?.checked || [])].map((a) => a.name))].filter((n) => n && n !== "other");
     pick("agent", "Every agent", "Agent", agents.map((n) => ({ v: n, name: maskWho(n, "agent").name })));
-    pick("provider", "Every provider", "Provider", (sum?.providers || []).map((p) => ({ v: p.name, name: maskWho(p.name, "provider").name })));
+    const pv = el("button", "sess-pick");
+    pv.type = "button";
+    const items = (sum?.providers || []).map((p) => ({ id: p.name, ...maskWho(p.name, "provider") }));
+    if (maskL.provider && !items.some((x) => x.id === maskL.provider)) items.unshift({ id: maskL.provider, ...maskWho(maskL.provider, "provider") });
+    provCombo("provPick", pv, { items, value: maskL.provider, all: "Every provider", head: "Provider", pick: (v) => maskNarrow({ provider: v || "" }) });
+    bar.append(pv);
     bar.append(maskQBox());
   }
   box.append(bar);

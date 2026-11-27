@@ -1,10 +1,11 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // A provider can be kept out of the groups magpie finds (chenxiang0010 on
 // Discord: "自动创建路由组的这里能否设置跳过某个供应商"). Under the found
-// groups' switch, a text button says which are left out; it opens the app's
-// menu of providers, each ticked or not, and as the menu closes the page
-// posts groups/skip with those ticked, draws the groups it gets back and
-// names the providers on the button. Unticked again, none is left out.
+// groups' switch, the provider combobox (provcombo.js) holds a chip for
+// each left out; its list has every provider with its logo, ticked or
+// not, and as the list closes the page posts groups/skip with those
+// ticked and draws the groups it gets back. Typed into and picked with
+// Enter, one is let back in, and none is left out.
 // Nothing moves the page, nothing runs past a phone's width, and every
 // string has its words, in each language, Chromium and WebKit.
 const assert = require("node:assert/strict");
@@ -27,14 +28,14 @@ const groups = (skip) => {
     groups: [{ id: "auto-m", name: "Model M", members, auto: true, ready: true, memberInfo: info(members) }] };
 };
 
-const keys = ["Their models join no found group; the groups you made or changed keep them", "Left out: {names}",
-  "Leave out a provider…", "Leave out of found groups", "Found groups changed"];
+const keys = ["Their models join no found group; the groups you made or changed keep them",
+  "Leave out a provider…", "Leave out of found groups", "Found groups changed", "Remove {name}"];
 const words = {
-  en: { none: "Leave out a provider…", head: "Leave out of found groups", left: "Left out: Trae CN", said: "Found groups changed" },
-  zh: { none: "排除供应商…", head: "不参与自动成组", left: "不参与自动成组：Trae CN", said: "自动路由组已更新" },
-  "zh-TW": { none: "排除供應商…", head: "不參與自動成組", left: "不參與自動成組：Trae CN", said: "自動路由組已更新" },
-  ja: { none: "プロバイダを除外…", head: "自動グループから除外", left: "自動グループから除外：Trae CN", said: "自動グループを更新しました" },
-  de: { none: "Anbieter ausnehmen…", head: "Aus automatischen Gruppen ausnehmen", left: "Ausgenommen: Trae CN", said: "Automatische Gruppen geändert" },
+  en: { none: "Leave out a provider…", head: "Leave out of found groups", said: "Found groups changed" },
+  zh: { none: "排除供应商…", head: "不参与自动成组", said: "自动路由组已更新" },
+  "zh-TW": { none: "排除供應商…", head: "不參與自動成組", said: "自動路由組已更新" },
+  ja: { none: "プロバイダを除外…", head: "自動グループから除外", said: "自動グループを更新しました" },
+  de: { none: "Anbieter ausnehmen…", head: "Aus automatischen Gruppen ausnehmen", said: "Automatische Gruppen geändert" },
 };
 
 function serve(lang, posts) {
@@ -90,8 +91,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const card = page.locator(".rt-group", { hasText: "Model M" });
         await card.waitFor();
         const pick = page.locator(".rt-gsec .rt-gfound .rt-skip-pick");
-        assert.equal((await pick.textContent()).trim(), w.none);
-        assert.equal(await pick.getAttribute("aria-haspopup"), "menu");
+        const input = pick.locator("input[role=combobox]");
+        const chips = () => pick.locator(".pc-chip").allTextContents();
+        assert.deepEqual(await chips(), []);
+        assert.equal(await input.getAttribute("placeholder"), w.none);
+        assert.equal(await input.getAttribute("aria-expanded"), "false");
 
         await pick.evaluate((x) => x.scrollIntoView({ block: "center" })); // as the reader would
         await page.waitForTimeout(200);
@@ -99,34 +103,42 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const before = await at();
 
         await pick.click();
-        const menu = page.locator(".pop.proto-menu.rt-skip-menu");
+        const menu = page.locator(".pop.pc-pop");
         await menu.waitFor();
-        assert.equal((await menu.locator(".pm-head").textContent()).trim(), w.head);
-        assert.deepEqual(await menu.locator(".pm-item .pm-name").allTextContents(), ["Alpha", "Trae CN", "Gamma"]);
+        assert.equal(await input.getAttribute("aria-expanded"), "true");
+        assert.equal(await menu.locator("[role=listbox]").getAttribute("aria-label"), w.head);
+        assert.deepEqual(await menu.locator("[role=option] .v").allTextContents(), ["Alpha", "Trae CN", "Gamma"]);
+        assert.equal(await menu.locator("[role=option] .ic").count(), 3, "a logo on every row");
         // in sight, within the window
         const box = await menu.boundingBox();
-        assert(box.x >= 0 && box.x + box.width <= width, `the menu runs past the window: ${JSON.stringify(box)}`);
-        await menu.locator(".pm-item", { hasText: "Trae CN" }).click();
-        assert.equal(await menu.locator(".pm-item", { hasText: "Trae CN" }).getAttribute("aria-checked"), "true");
-        assert.deepEqual(posts, [], "nothing is saved while the menu is open");
+        assert(box.x >= 0 && box.x + box.width <= width, `the list runs past the window: ${JSON.stringify(box)}`);
+        await menu.locator("[role=option]", { hasText: "Trae CN" }).click();
+        assert.equal(await menu.locator("[role=option]", { hasText: "Trae CN" }).getAttribute("aria-selected"), "true");
+        assert.deepEqual(await chips(), ["Trae CN"]);
+        assert.deepEqual(posts, [], "nothing is saved while the list is open");
         await page.keyboard.press("Escape");
         await menu.waitFor({ state: "detached" });
-        await page.waitForFunction(() => document.querySelector(".rt-skip-pick")?.textContent.includes("Trae CN"));
+        for (let i = 0; i < 100 && !posts.length; i++) await page.waitForTimeout(20);
         assert.deepEqual(posts, [{ skip: ["b"] }]);
-        assert.equal((await page.locator(".rt-skip-pick").textContent()).trim(), w.left);
         await page.waitForFunction(() => !document.querySelector(".rt-group .mem")?.textContent.includes("Trae CN"));
         await page.waitForFunction((m) => document.querySelector("#status").textContent.includes(m), w.said);
+        assert.deepEqual(await chips(), ["Trae CN"], "the chip stays as the page is drawn again");
+        assert.equal(await pick.locator(".pc-chip .ic").count(), 1, "the chip has its logo");
         const over = await page.locator(".rt-gfound").evaluate((e) => e.scrollWidth > e.clientWidth + 1);
         assert.equal(over, false, "the found groups' row runs past its width");
-        const border = await page.locator(".rt-skip-pick").evaluate((e) => { const c = getComputedStyle(e); return c.borderLeftWidth !== c.borderRightWidth || c.borderLeftColor !== c.borderRightColor; });
+        const border = await pick.evaluate((e) => { const c = getComputedStyle(e); return c.borderLeftWidth !== c.borderRightWidth || c.borderLeftColor !== c.borderRightColor; });
         assert.equal(border, false, "no left-border accent");
 
-        // let back in
-        await page.locator(".rt-skip-pick").click();
+        // let back in: typed, and picked with Enter
+        await input.focus();
+        await page.keyboard.type("trae");
         await menu.waitFor();
-        await menu.locator(".pm-item", { hasText: "Trae CN" }).click();
-        await page.locator(".rt-skip-pick").click(); // closes it
-        await page.waitForFunction((m) => document.querySelector(".rt-skip-pick")?.textContent.trim() === m, w.none);
+        assert.deepEqual(await menu.locator("[role=option] .v").allTextContents(), ["Trae CN"], "typing narrows the list");
+        await page.keyboard.press("Enter");
+        assert.deepEqual(await chips(), []);
+        await page.keyboard.press("Escape");
+        await menu.waitFor({ state: "detached" });
+        for (let i = 0; i < 100 && posts.length < 2; i++) await page.waitForTimeout(20);
         assert.deepEqual(posts, [{ skip: ["b"] }, { skip: [] }]);
         await page.waitForFunction(() => document.querySelector(".rt-group .mem")?.textContent.includes("Trae CN"));
         assert.equal(await at(), before, "the clicks moved nothing");

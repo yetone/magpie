@@ -87,8 +87,7 @@
   // with several, the reader picks one by name
   const signInTo = (b, outs, ev) => {
     if (outs.length === 1) return pluginSignIn(outs[0].id, ev);
-    openProtoMenu(b, outs.map((x) => ({ v: x.id, name: subName(x), literalName: true, note: "" })), "",
-      (id, e) => pluginSignIn(id, e), "Sign in to which subscription", "", "right");
+    provCombo("provPop", b, { items: outs.map((x) => ({ id: x.id, name: subName(x), icon: x.icon })), head: "Sign in to which subscription", align: "right", pick: (id, e) => pluginSignIn(id, e) });
   };
   // whether version a comes after b in semver's order, as update.Newer
   const newer = (a, b) => {

@@ -7958,29 +7958,26 @@ function routingPage(part) {
     }
   }
   // skipPick: the providers kept out of found groups (chenxiang0010 on
-  // Discord), picked in the app's menu and saved as it closes: their
-  // models join none, and the groups the user made or changed keep them
-  // (provider.SetAutoGroupSkip)
+  // Discord), picked in the provider field and saved as its list closes:
+  // their models join none, and the groups the user made or changed keep
+  // them (provider.SetAutoGroupSkip). The field stays across draws, so
+  // what is typed in it does too.
+  let skipBox;
   function skipPick() {
-    const skip = Array.isArray(groups.skip) ? groups.skip : [];
-    const opts = (Array.isArray(groups.skippable) ? groups.skippable : []).filter((p) => p && typeof p.id === "string");
-    const nameOf = (id) => opts.find((p) => p.id === id)?.name || id;
-    const b = el("button", "text rt-skip-pick"), label = el("span");
-    b.type = "button";
-    b.setAttribute("aria-haspopup", "menu");
-    b.setAttribute("aria-expanded", "false");
-    b.dataset.tt = "Their models join no found group; the groups you made or changed keep them";
-    label.textContent = skip.length ? t("Left out: {names}", { names: skip.map(nameOf).join(", ") }) : t("Leave out a provider…");
-    b.append(label, svg(CHEV, 10, 1.6));
-    b.onclick = (e) => {
-      e.stopPropagation();
-      if (b.classList.contains("open")) return closeProtoMenu();
-      openProtoMenu(b, opts.map((p) => ({ v: p.id, name: p.name, literalName: true, note: "" })), skip, (ids) => setSkip(ids), "Leave out of found groups", "rt-skip-menu");
-    };
-    return b;
+    const row = el("label", "rt-skip");
+    skipBox ||= el("div", "rt-skip-pick");
+    provCombo("provField", skipBox, {
+      items: (Array.isArray(groups.skippable) ? groups.skippable : []).filter((p) => p && typeof p.id === "string"),
+      value: Array.isArray(groups.skip) ? groups.skip : [],
+      label: "Leave out of found groups", placeholder: "Leave out a provider…", pick: setSkip,
+    });
+    const say = el("span", "", t("Leave out of found groups"));
+    say.dataset.tt = "Their models join no found group; the groups you made or changed keep them";
+    row.append(say, skipBox);
+    return row;
   }
   async function setSkip(ids) {
-    if (groupDirty() && !(await confirmDiscard())) return;
+    if (groupDirty() && !(await confirmDiscard())) return drawFound();
     try {
       groups = groupsFrom(await api("groups/skip", { skip: ids }));
       gEdit = null;
@@ -7989,6 +7986,7 @@ function routingPage(part) {
       load(); // the gateway's model list, the agents' pickers
     } catch (e) {
       status(e.message, "err");
+      drawFound();
     }
   }
   function drawNames() {

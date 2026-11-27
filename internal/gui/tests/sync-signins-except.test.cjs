@@ -4,8 +4,9 @@
 // Sign-ins tick in Sync's form, Not synced shows only while the tick is
 // on, None until picked:
 // - a setup from before the choice posts no signInsExcept at all;
-// - its menu lists the subscriptions with accounts, not a key provider;
-//   picking Claude shows it there and Save posts ["claude"];
+// - its field (the provider combobox) lists the subscriptions with
+//   accounts, not a key provider, each with its logo; picking Claude
+//   shows its chip there and Save posts ["claude"];
 // - opened again, Advanced is open with Claude shown, and unticking the
 //   sign-ins hides the row.
 // In all five languages, at 1100 and 420px, Chromium and WebKit, nothing
@@ -70,7 +71,7 @@ async function noneWider(page) {
   const wide = await page.evaluate(() => {
     const out = [];
     if (document.scrollingElement.scrollWidth > innerWidth) out.push("page " + document.scrollingElement.scrollWidth);
-    for (const r of document.querySelectorAll("#syncList .sync-form, #syncList .sync-except, .proto-menu")) {
+    for (const r of document.querySelectorAll("#syncList .sync-form, #syncList .sync-except, #syncList .sync-except-pick, .pc-pop")) {
       const b = r.getBoundingClientRect();
       if (b.right > innerWidth + 0.5) out.push(r.className + " " + b.right);
     }
@@ -121,10 +122,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         let form = await edit();
         assert.equal(await form.locator("details.sync-advanced").evaluate((d) => d.open), true, "Advanced folded with sign-ins on");
         const row = form.locator(".sync-except");
-        const pick = row.locator("button.pick");
+        const pick = row.locator(".sync-except-pick");
+        const chips = () => page.locator(".sync-except .pc-chip").allTextContents();
         await row.waitFor({ state: "visible" });
         assert.equal(await row.locator("> span").textContent(), w("Not synced"));
-        assert.equal(await pick.textContent(), w("None"));
+        assert.deepEqual(await chips(), []);
+        assert.equal(await pick.locator("input").getAttribute("placeholder"), w("None"));
         await noneWider(page);
         await click(form.locator("button.primary"));
         assert.ok(!("signInsExcept" in await waitPost(1)), "an old setup posted signInsExcept");
@@ -133,14 +136,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // Claude left out
         form = await edit();
         await click(pick);
-        const menu = page.locator(".proto-menu");
+        const menu = page.locator(".pc-pop");
         await menu.waitFor();
-        assert.equal(await menu.locator(".pm-head").textContent(), w("Not synced"));
-        assert.deepEqual(await menu.locator(".pm-name").allTextContents(), ["Claude", "Codex"], "the menu lists the subscriptions with accounts");
+        assert.equal(await menu.locator("[role=listbox]").getAttribute("aria-label"), w("Not synced"));
+        assert.deepEqual(await menu.locator("[role=option] .v").allTextContents(), ["Claude", "Codex"], "the list has the subscriptions with accounts");
+        assert.equal(await menu.locator("[role=option] .ic").count(), 2, "a logo on each");
         await noneWider(page);
-        await click(menu.locator(".pm-item", { hasText: "Claude" }));
-        await page.waitForFunction(() => document.querySelector(".sync-except button.pick")?.textContent === "Claude");
-        await click(pick);
+        await click(menu.locator("[role=option]", { hasText: "Claude" }));
+        await page.waitForFunction(() => [...document.querySelectorAll(".sync-except .pc-chip")].map((c) => c.textContent).join() === "Claude");
+        await page.keyboard.press("Escape");
         await menu.waitFor({ state: "detached" });
         await click(form.locator("button.primary"));
         const saved = await waitPost(2);
@@ -150,7 +154,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // opened again: shown; the sign-ins unticked hide it
         form = await edit();
-        await page.waitForFunction(() => document.querySelector(".sync-except button.pick")?.textContent === "Claude");
+        await page.waitForFunction(() => [...document.querySelectorAll(".sync-except .pc-chip")].map((c) => c.textContent).join() === "Claude");
+        assert.equal(await page.locator(".sync-except .pc-chip .ic").count(), 1, "the chip has its logo");
         const siTick = form.locator("label.tick", { hasText: w("Sign-ins: subscription accounts and plugin sign-ins") }).locator("input");
         await click(siTick);
         await row.waitFor({ state: "hidden" });

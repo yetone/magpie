@@ -17777,9 +17777,9 @@ function renderPanelUse() {
   }
   const pick = el("button", "sess-pick");
   pick.type = "button";
-  const opts = (l?.providers || []).map((p) => ({ v: p.id, name: t(p.name), note: "" }));
-  if (panelUseProvider && l && !opts.some((o) => o.v === panelUseProvider)) panelUseProvider = "";
-  sessPick(pick, "All providers", panelUseProvider, opts, "Provider", (id) => { panelUseProvider = id; renderPanelUse(); loadPanelUse().catch(() => {}); });
+  const items = (l?.providers || []).map((p) => ({ id: p.id, name: t(p.name), icon: p.icon }));
+  if (panelUseProvider && l && !items.some((x) => x.id === panelUseProvider)) panelUseProvider = "";
+  provCombo("provPick", pick, { items, value: panelUseProvider, all: "All providers", head: "Provider", pick: (id) => { panelUseProvider = id; renderPanelUse(); loadPanelUse().catch(() => {}); } });
   // the computers whose usage sync shares (#542): none, and it isn't there
   const comp = el("button", "sess-pick");
   comp.type = "button";
@@ -19587,6 +19587,13 @@ function stamp(when) {
 const baseName = (p) => (p || "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
 
 // sessPick is a filter button that drops a menu of what there is to pick
+// provCombo draws the one provider picker (provcombo.js: provField,
+// provPick, provPop), imported with the first one drawn
+function provCombo(f, ...a) {
+  if (window[f]) return window[f](...a);
+  if (f === "provPick") a[0].hidden = true; // till it is drawn
+  return import("./provcombo.js").then(() => window[f](...a), statusErr);
+}
 function sessPick(btn, all, value, opts, head, choose) {
   btn.hidden = opts.length < 2 && !value;
   const cur = opts.find((o) => o.v === value);

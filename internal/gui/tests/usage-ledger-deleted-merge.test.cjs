@@ -99,7 +99,7 @@ async function open(browser, lang, width) {
 
 const pickProvider = async (p, name) => {
   await reader.click(p, p.locator("#ledProvider"));
-  await reader.click(p, p.locator(".sess-menu .pm-item").filter({ hasText: name }).first());
+  await reader.click(p, p.locator(".pc-pop [role=option]").filter({ hasText: name }).first());
 };
 const rows = (p, n) => p.waitForFunction((n) => document.querySelectorAll("#ledWrap .led tbody tr.led-row").length === n, n);
 
@@ -146,7 +146,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await p.waitForFunction(() => !document.querySelector("#ledProviderMore").hidden);
           await reader.click(p, more);
           await reader.click(p, p.locator(".sess-menu .pm-item").filter({ hasText: w.merge }));
-          await reader.click(p, p.locator(".sess-menu .pm-item").filter({ hasText: "Main" }));
+          // the providers to merge into: the provider combobox, a logo on each
+          const into = p.locator(".pc-pop [role=option]");
+          await into.first().waitFor();
+          assert.equal(await into.locator(".ic").count(), await into.count());
+          await reader.click(p, into.filter({ hasText: "Main" }));
           await p.waitForFunction(() => document.querySelector("#ledProvider").textContent.includes("Main"));
           assert.deepEqual(s.posted.at(-1), { id: "relay", into: "main" });
           assert.equal(s.asked.at(-1).get("provider"), "main", "the page moves to the provider merged into");
@@ -156,7 +160,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           // the merged provider's … parts them again
           await p.waitForFunction(() => !document.querySelector("#ledProviderMore").hidden);
           await reader.click(p, more);
-          await reader.click(p, p.locator(".sess-menu .pm-item").filter({ hasText: w.separate }));
+          await reader.click(p, p.locator(".pc-pop [role=option]").filter({ hasText: w.separate }));
           await p.waitForFunction(() => document.querySelector("#ledProvider").textContent.includes("Old relay"));
           assert.deepEqual(s.posted.at(-1), { id: "relay", into: "" });
           assert.equal(s.asked.at(-1).get("provider"), "relay");

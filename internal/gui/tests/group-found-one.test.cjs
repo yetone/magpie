@@ -108,6 +108,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await sum.click();
         const sw = more.locator(".rt-gone .lib-switch");
         await sw.waitFor();
+        assert.equal(await at(), before, "opening the fold moved nothing");
+        // the switch in sight first, as the reader would: at 390px the
+        // found row's provider field takes a second line, and Playwright's
+        // own scroll to the switch is not the page moving
+        await sw.evaluate((x) => x.scrollIntoView({ block: "center" }));
+        await page.waitForTimeout(200);
+        const seen = await at();
         assert.equal((await more.locator(".rt-gone b").textContent()).trim(), w.label);
         assert.equal(await sw.getAttribute("aria-checked"), "false");
         assert.equal(await sw.getAttribute("aria-label"), w.label);
@@ -124,11 +131,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const box = await page.locator(".rt-gone .lib-switch").boundingBox();
         assert(box.x >= 0 && box.x + box.width <= width, `the switch runs past the window: ${JSON.stringify(box)}`);
 
-        await page.locator(".rt-gmore .rt-gone .lib-switch").click();
+        // turned off, the group above it goes and the page gets shorter:
+        // the switch stays where the reader has it (Chromium's scroll
+        // anchoring), or the page stays where it was, as far as its new
+        // height lets it (WebKit has none; at 390px the found row's
+        // provider field takes a second line, so the page may not fit)
+        const sw2 = page.locator(".rt-gmore .rt-gone .lib-switch");
+        const place = () => page.evaluate(() => { const v = document.querySelector("#view-groups"), s = document.querySelector(".rt-gmore .rt-gone .lib-switch"); return { st: v.scrollTop, max: v.scrollHeight - v.clientHeight, y: s.getBoundingClientRect().top }; });
+        await sw2.scrollIntoViewIfNeeded();
+        const p0 = await place();
+        await sw2.click();
         await page.locator(".rt-group", { hasText: "Solo Model" }).waitFor({ state: "detached" });
         assert.deepEqual(posts, [{ on: true }, { on: false }]);
-        assert.equal(await page.locator(".rt-gmore .rt-gone .lib-switch").getAttribute("aria-checked"), "false");
-        assert.equal(await at(), before, "the clicks moved nothing");
+        assert.equal(await sw2.getAttribute("aria-checked"), "false");
+        const p1 = await place();
+        assert(Math.abs(p1.y - p0.y) <= 2 || Math.abs(p1.st - Math.max(0, Math.min(p0.st, p1.max))) <= 2, `the clicks moved the page: ${JSON.stringify([p0, p1])}`);
+        if (p1.max <= 0) assert.equal(await at(), seen, "the clicks moved nothing");
 
         if (lang !== "en") {
           const missing = await page.evaluate(([l, ks]) => ks.filter((k) => !I18N[l][k]), [lang, keys]);

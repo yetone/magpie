@@ -186,7 +186,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await tab.locator("#period .opt").nth(3).click();
           await lastAsked(tab, asked, q => q.get("period") === "30d");
           await tab.locator(key === "agent" ? "#ledAgent" : "#ledProvider").click();
-          await tab.locator(".sess-menu .pm-item", { hasText: name }).click();
+          await tab.locator(key === "agent" ? ".sess-menu .pm-item" : ".pc-pop [role=option]", { hasText: name }).click(); // providers: the provider combobox
           await lastAsked(tab, asked, q => q.get(key) === removed);
           await tab.locator("#period .opt").nth(2).click();
           await lastAsked(tab, asked, q => q.get("period") === "7d" && !q.has(key) && q.get("offset") === "0");
