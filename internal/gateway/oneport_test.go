@@ -16,10 +16,12 @@ import (
 // port hands to the gateway (ClientPath), or one named here that stays on
 // the gateway's port alone: its info page at /, the /api/* routes (the
 // page's own namespace there), the Claude helper's callbacks under
-// /_magpie/, and the artifacts' pages under /a/ and their assets under
-// /_blob/, which are this computer's alone (artifactPage, artifactBlob)
-// while the page's port is the one put behind a proxy. A route added to Handler and to neither fails this, so the
-// one-port page doesn't miss it, or take it, by accident.
+// /_magpie/, and the artifacts' assets under /_blob/ and each page's
+// _api, which are this computer's alone (artifactBlob, the runtime)
+// while the page's port is the one put behind a proxy. An artifact's page
+// itself is handed over: another computer reads it there as a shared
+// copy (artifactPageAsked). A route added to Handler and to neither fails
+// this, so the one-port page doesn't miss it, or take it, by accident.
 func TestClientPathCoversHandler(t *testing.T) {
 	// the patterns as routes() registers them, not as its source reads
 	n := 0
@@ -27,9 +29,10 @@ func TestClientPathCoversHandler(t *testing.T) {
 		if i := strings.IndexByte(pat, ' '); i >= 0 {
 			pat = pat[i+1:]
 		}
-		p := strings.NewReplacer("{$}", "", "{id...}", "x", "{call...}", "x", "{id}", "x", "{token}", "x", "{name}", "x", "{agent}", "x").Replace(pat)
+		p := strings.NewReplacer("{$}", "", "{id...}", "x", "{call...}", "x", "{id}", "x", "{token}", "x", "{name}", "x", "{agent}", "x", "{ref}", "x", "{path...}", "x").Replace(pat)
 		n++
-		stays := p == "/" || strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/_magpie/") || strings.HasPrefix(p, ArtifactPagePath) || strings.HasPrefix(p, artifactBlobPath)
+		stays := p == "/" || strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/_magpie/") || strings.HasPrefix(p, artifactBlobPath) ||
+			strings.HasPrefix(p, ArtifactPagePath) && strings.Contains(p, "/"+artifactAPIDir)
 		if ClientPath(p) == stays {
 			t.Errorf("%s (%s): ClientPath %v", pat, p, ClientPath(p))
 		}
@@ -42,12 +45,12 @@ func TestClientPathCoversHandler(t *testing.T) {
 // A path that isn't clean stays behind the page's key: the gateway's mux
 // would redirect it elsewhere, and "/v1/../api/state" is the page's API.
 func TestClientPathOnlyClean(t *testing.T) {
-	for _, p := range []string{"", "/", "/api/state", "/api/v1/models", "/v1/../api/state", "/v1//models", "/v1/./models", "/v1x", "/v1betax/models", "/boot.js", "/_magpie/sign-in", "/mcpx", "/v1/models/../../api/settings"} {
+	for _, p := range []string{"", "/", "/api/state", "/api/v1/models", "/v1/../api/state", "/v1//models", "/v1/./models", "/v1x", "/v1betax/models", "/boot.js", "/_magpie/sign-in", "/mcpx", "/v1/models/../../api/settings", "/a/x/_api/db", "/a/x/_api/live", "/ax", "/_blob/x"} {
 		if ClientPath(p) {
 			t.Errorf("%q is a client path", p)
 		}
 	}
-	for _, p := range []string{"/v1", "/v1/", "/v1/models", "/v1/chat/completions", "/v1beta/models/gemini:generateContent", "/mcp/magpie/tools", "/backend-api/codex/responses", "/messages"} {
+	for _, p := range []string{"/v1", "/v1/", "/v1/models", "/v1/chat/completions", "/v1beta/models/gemini:generateContent", "/mcp/magpie/tools", "/backend-api/codex/responses", "/messages", "/a/x", "/a/x/", "/a/x@2/data.json"} {
 		if !ClientPath(p) {
 			t.Errorf("%q is not a client path", p)
 		}
@@ -80,7 +83,9 @@ func TestLazyCatManifestListsTheClientRoutes(t *testing.T) {
 		}
 		public = append(public, strings.TrimSuffix(p, "/"))
 	}
-	want := slices.Clone(clientPrefixes)
+	// an artifact's page stays behind the box's sign-in, which the
+	// browser that opens it there has: no agent fetches one
+	want := slices.DeleteFunc(slices.Clone(clientPrefixes), func(p string) bool { return p+"/" == ArtifactPagePath })
 	slices.Sort(public)
 	slices.Sort(want)
 	if !slices.Equal(public, want) {

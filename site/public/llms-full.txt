@@ -10815,7 +10815,7 @@ Run magpie on a server or a NAS that has no desktop: its gateway serves your mod
 | **Image** | `ghcr.io/yetone/magpie`, for `linux/amd64` and `linux/arm64` |
 | --- | --- |
 | **Tags** | `latest` (the newest release), `daily` (the desktop app's Daily channel: once a day at 20:00 UTC, the newest release whose CI run passed, or an urgent one at once), `stable` (the desktop app's Stable channel: a release a week, out three days first, or an urgent one at once), `0.1.1150` (one release), `0.1`, `edge` (every change on `main`) |
-| **Ports** | `3425` the gateway agents call; `3430` the browser UI, when the container runs `magpie web`; it answers the gateway’s `/v1` routes too, so a reverse proxy needs only this port |
+| **Ports** | `3425` the gateway agents call; `3430` the browser UI, when the container runs `magpie web`; it answers the gateway’s `/v1` routes and opens artifacts too, so a reverse proxy needs only this port |
 | **Volume** | `/config`: providers, keys, sign-ins, plugins and usage |
 | **User** | nonroot (uid 65532) |
 

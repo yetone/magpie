@@ -4,7 +4,9 @@
 // Library is off; in the header's row Library's head leads to it, and
 // Settings' search finds it. A row says who made it (an agent, or the page
 // saving itself), when, and how many versions it
-// has, and a click opens it at the gateway's address; its menu copies the
+// has, and a click opens it at the gateway's address (in a browser on
+// another computer, at the page's own, which hands /a/ to the gateway:
+// Crazybiaobiao on X); its menu copies the
 // link, opens an earlier version, shares it on usemagpie.ai and stops
 // sharing it, and deletes it after asking. With none
 // there it says what one is, offers asks to copy, and which agents can
@@ -18,7 +20,8 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 const A = "a".repeat(26), B = "b".repeat(26);
-const at = (id, n) => `http://127.0.0.1:3425/a/${id}${n ? "@" + n : ""}/`;
+const atGateway = (id, n) => `http://127.0.0.1:3425/a/${id}${n ? "@" + n : ""}/`;
+const at = atGateway;
 const now = Date.now();
 const artifacts = [
   { id: A, title: "Quarterly report", created: new Date(now - 3 * 864e5).toISOString(), updated: new Date(now - 2 * 36e5).toISOString(), url: at(A),
@@ -75,7 +78,7 @@ async function until(fn) {
   for (let i = 0; i < 250 && !(await fn()); i++) await new Promise((r) => setTimeout(r, 20));
 }
 
-async function openPage(browser, { lang, web, width, items, off = [], agents }) {
+async function openPage(browser, { lang, web, width, items, off = [], agents, host = "magpie.test" }) {
   const context = await browser.newContext({ viewport: { width, height: 700 }, reducedMotion: "reduce" });
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
@@ -89,7 +92,7 @@ async function openPage(browser, { lang, web, width, items, off = [], agents }) 
   await page.exposeFunction("__opened", (u) => { got.opened.push(u); });
   await page.addInitScript(() => { window.open = (u) => { window.__opened(String(u)); return null; }; });
   await page.route("**/*", serve(lang, web, got, list, off));
-  await page.goto("http://magpie.test/?view=artifacts");
+  await page.goto(`http://${host}/?view=artifacts`);
   return { context, page, errors, got };
 }
 
@@ -100,9 +103,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     test(`${engine} ${lang}: Artifacts lists, opens, copies, opens a version and deletes`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
-      for (const [web, width] of [[false, 1000], [false, 560], [true, 420]]) {
-        const where = `${web ? "browser" : "window"} ${width}px`;
-        const { context, page, errors, got } = await openPage(browser, { lang, web, width, items: artifacts });
+      // a browser on another computer (magpie.test), and one on this
+      // computer, which keeps the gateway's address and its full runtime
+      for (const [web, width, host] of [[false, 1000], [false, 560], [true, 420], [true, 1000, "127.0.0.1:3430"]]) {
+        const where = `${web ? "browser" : "window"} ${width}px${host ? " at " + host : ""}`;
+        const { context, page, errors, got } = await openPage(browser, { lang, web, width, items: artifacts, host });
+        const away = web && !host;
+        const at = (id, n) => away ? atGateway(id, n).replace("http://127.0.0.1:3425/", "http://magpie.test/") : atGateway(id, n);
         const nav = page.locator('#nav button[data-view="artifacts"]');
         if (!web || width > 600) {
           assert.equal((await nav.textContent()).trim(), w.nav, where);

@@ -162,7 +162,11 @@ address, so:
   `_api/`. Its page gets the runtime a shared copy gets
   (`artifact.SharedRuntime`): no token, each capability null. Its store
   (`_api/*`) and assets (`/_blob/`) stay this computer's, so a page that
-  keeps data or assets shows what it shows without them there.
+  keeps data or assets shows what it shows without them there. `magpie
+  web`'s port hands `/a/` to the gateway too (`clientPrefixes` in
+  [oneport.go](../../internal/gateway/oneport.go), `_api/` left out), so
+  the browser UI behind a proxy or in a container opens one at its own
+  address, judged there as from another computer.
 - `nosniff`, `Referrer-Policy: no-referrer`. A numbered version is
   immutable and cached for a year; the newest is `no-cache` with an ETag
   of its version.
@@ -802,9 +806,12 @@ the list (`--json` with every version's address, and `shared`),
 takes every version; share, unshare and delete refuse an `@<n>`. Each takes
 an id or an address.
 
-The addresses are this computer's (127.0.0.1): a viewer of `magpie web`
-from another computer can list them but not open them from the list (an
-agent away is given its own, above).
+The addresses are this computer's (127.0.0.1). A viewer of `magpie web`
+from another computer (`remotePage` in app.js) opens, copies and installs
+them at the page's own address instead (`at` in artifacts.js), which its
+port hands to the gateway: the page reads there as a shared copy, while
+magpie is on the network (above). An agent away is given its own address,
+above.
 
 ## Sharing
 

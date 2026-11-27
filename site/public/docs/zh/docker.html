@@ -153,7 +153,7 @@
     <div class="table-wrap"><table>
       <tr><td><b>镜像</b></td><td><code>ghcr.io/yetone/magpie</code>，支持 <code>linux/amd64</code> 和 <code>linux/arm64</code></td></tr>
       <tr><td><b>标签</b></td><td><code>latest</code>（最新正式版）、<code>daily</code>（与桌面版的每日版通道一致：每天北京时间 04:00 指向当时 CI 已通过的最新正式版，一天只变一次，紧急修复版立即跟上）、<code>stable</code>（与桌面版的稳定版通道一致：每周一个已发布满三天的版本，紧急修复版立即跟上）、<code>0.1.1150</code>（某个版本）、<code>0.1</code>、<code>edge</code>（<code>main</code> 上的每次改动）</td></tr>
-      <tr><td><b>端口</b></td><td><code>3425</code> 是 Agent 调用的网关；<code>3430</code> 是容器运行 <code>magpie web</code> 时的 Web 界面；它也响应网关的 <code>/v1</code> 路由，所以反向代理只需转发这一个端口</td></tr>
+      <tr><td><b>端口</b></td><td><code>3425</code> 是 Agent 调用的网关；<code>3430</code> 是容器运行 <code>magpie web</code> 时的 Web 界面；它也响应网关的 <code>/v1</code> 路由、打开 Artifact，所以反向代理只需转发这一个端口</td></tr>
       <tr><td><b>数据卷</b></td><td><code>/config</code>：供应商、密钥、登录、插件和用量</td></tr>
       <tr><td><b>用户</b></td><td>nonroot（uid 65532）</td></tr>
     </table></div>

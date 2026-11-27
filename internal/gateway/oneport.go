@@ -38,6 +38,15 @@ var clientPrefixes = []string{
 	// and magpie's CA (CAPath), which the other computer fetches from the
 	// address it gives its agents
 	CAPath,
+	// and an artifact's page (ArtifactPagePath), which the browser UI on
+	// another computer opens at its own address: the gateway's, inside a
+	// container, is 127.0.0.1 (Crazybiaobiao on X, after #7890). Handed
+	// over, it is from another machine, so it reads as a shared copy
+	// does, with no token and every capability null, and only while
+	// magpie is on the network (artifactPageAsked, artifactPage). Its
+	// _api (ClientPath) and the assets under /_blob/ stay the gateway
+	// port's.
+	strings.TrimSuffix(ArtifactPagePath, "/"),
 }
 
 // ClientPath: p is one of the gateway's client routes, which `magpie web`
@@ -49,6 +58,11 @@ var clientPrefixes = []string{
 // isn't clean (a "..", a "//") is none, and stays behind the page's key.
 func ClientPath(p string) bool {
 	if p == "" || path.Clean(p) != strings.TrimSuffix(p, "/") && p != "/" {
+		return false
+	}
+	// an artifact page's _api is the runtime of the browser on this
+	// computer: it stays behind the page's key, where nothing answers it
+	if strings.HasPrefix(p, ArtifactPagePath) && strings.Contains(p, "/"+artifactAPIDir) {
 		return false
 	}
 	for _, pre := range clientPrefixes {

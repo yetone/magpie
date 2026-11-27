@@ -1,6 +1,7 @@
 // Work › Artifacts (docs/subsystems/artifacts.md): the pages agents made
 // with Magpie Artifacts (`magpie mcp artifacts`), newest first. A row
-// opens the page in the browser, at the gateway's address for it; its
+// opens the page in the browser, at the gateway's address for it (or,
+// in a browser on another computer, at the page's own); its
 // menu opens an earlier version, copies the link, installs it as an app
 // (the page opens with #install, which asks the browser), shares it on
 // usemagpie.ai (or stops sharing it), or deletes it with every version. The library plugin adds the page (client.js), since the
@@ -13,6 +14,15 @@ function artifactsPage() {
   const UNLINK = LINK + "M3 3l10 10";
   const APP = "M4.5 2.5h7a2 2 0 012 2v7a2 2 0 01-2 2h-7a2 2 0 01-2-2v-7a2 2 0 012-2zM8 5.5v5M6 8.5l2 2 2-2";
   const open = (url) => api("open", { url }).catch(statusErr);
+  // The browser UI on another computer (`magpie web` behind a proxy, in a
+  // container) opens a page at its own address: the gateway's is
+  // 127.0.0.1 there, and the page's port hands /a/ to the gateway
+  // (clientPrefixes in oneport.go), which serves it as a shared copy.
+  const at = (u) => {
+    if (!remotePage || !u) return u;
+    try { const x = new URL(u); return location.origin + x.pathname + x.search + x.hash; } catch { return u; }
+  };
+  const here = (a) => ({ ...a, url: at(a.url), versions: (a.versions || []).map((v) => ({ ...v, url: at(v.url) })) });
 
   // who made a version: its agent, or the page itself (artifact.publish)
   const by = (v) => (v.agent === "page" ? t("Saved from the page") : v.agentName || v.agent);
@@ -176,7 +186,7 @@ function artifactsPage() {
   async function load() {
     try {
       const r = await api("artifacts");
-      list = r?.artifacts || [];
+      list = (r?.artifacts || []).map(here);
       makers = Array.isArray(r?.agents) ? r.agents : null;
       loaded = true;
       draw();
