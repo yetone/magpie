@@ -47,6 +47,14 @@ const (
 	agyCLIMin = "0.1.145"
 )
 
+// AgyCLIID and AgyCLIPackage are the plugin Antigravity is signed in to
+// through: `magpie accounts add antigravity` adds it when it isn't here
+// (#7828).
+const (
+	AgyCLIID      = agyCLIID
+	AgyCLIPackage = agyCLIPackage
+)
+
 // agyMoving are the Antigravity accounts agy-cli doesn't have yet, as the
 // withdrawn plugin keeps them: its own sign-ins, then the built-in's that
 // never moved onto it. One agy-cli has (by email) is left out.

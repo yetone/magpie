@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -481,11 +482,56 @@ func askRisk(id string) error {
 	return nil
 }
 
+// agyCLI adds agy-cli's plugin and signs in to it; tests stand in for it.
+var agyCLI = struct {
+	installed func() bool
+	add       func(ctx context.Context) error
+	login     func(ctx context.Context, id, method string) error
+}{
+	installed: func() bool {
+		for _, e := range plugin.Load().Plugins {
+			if plugin.Name(e.Spec) == provider.AgyCLIPackage {
+				return true
+			}
+		}
+		return false
+	},
+	add: func(ctx context.Context) error {
+		if !plugin.HasBun() {
+			fmt.Println(muted.Render("Downloading Bun " + plugin.BunInUse() + ", which plugins run on…"))
+		}
+		if _, err := provider.AddPlugin(ctx, provider.AgyCLIPackage); err != nil {
+			return err
+		}
+		provider.HandOver(ctx, false)
+		return nil
+	},
+	login: pluginLogin,
+}
+
+// addAntigravity signs in to Antigravity through agy-cli's plugin, the one
+// that serves it now that the built-in and the plugin before agy-cli are
+// withdrawn, adding the plugin first when it isn't here (#7828: the
+// account card sent a personal Google account here, and the sign-in looked
+// for a plugin of the old id).
+func addAntigravity(ctx context.Context) error {
+	if !agyCLI.installed() {
+		fmt.Println(muted.Render("Adding " + provider.AgyCLIPackage + ", which Antigravity is signed in to through…"))
+		if err := agyCLI.add(ctx); err != nil {
+			return fmt.Errorf("adding %s: %w", provider.AgyCLIPackage, err)
+		}
+	}
+	return agyCLI.login(ctx, provider.AgyCLIID, "")
+}
+
 // addAccount signs in to one more subscription in the browser, the way the
 // window's "Add account" does.
 func addAccount(agentID string) error {
 	if err := askRisk(agentID); err != nil {
 		return err
+	}
+	if agentID == "antigravity" {
+		return addAntigravity(context.Background())
 	}
 	if _, plug := provider.PluginOf(agentID); plug || provider.PluginServes(agentID) {
 		return pluginLogin(context.Background(), agentID, "")
