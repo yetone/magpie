@@ -1,6 +1,6 @@
 ---
 name: magpie-api
-description: Read magpie's (usemagpie.ai) own HTTP API from an agent — what is left of every subscription, coding plan and key balance (GET /v1/magpie/quotas), the models available now (GET /v1/models), and which model a routing group picked for a session and what it fell back from (GET /v1/magpie/route). Use when orchestrating work across models or agents through magpie: choosing a model whose provider still has allowance, listing what can be asked for, or following where a turn went.
+description: "Read magpie's (usemagpie.ai) own HTTP API from an agent — what is left of every subscription, coding plan and key balance (GET /v1/magpie/quotas), the models available now (GET /v1/models), and which model a routing group picked for a session and what it fell back from (GET /v1/magpie/route). Use when orchestrating work across models or agents through magpie: choosing a model whose provider still has allowance, listing what can be asked for, or following where a turn went."
 ---
 
 # magpie API

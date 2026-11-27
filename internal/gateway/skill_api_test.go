@@ -21,6 +21,7 @@ import (
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"gopkg.in/yaml.v3"
 )
 
 // skillAPIPath is the magpie-api skill (thedavidweng on X): the one an
@@ -184,6 +185,30 @@ func replyOfType(t *testing.T, where string, v any, typ reflect.Type) {
 			}
 			replyOfType(t, where+"."+k, c, ft)
 		}
+	}
+}
+
+// The skill's front matter is read by strict YAML loaders too, magpie's
+// own Library (yaml.v3, in library.parseMeta) among them: a plain
+// description with "magpie: choosing" in it was a nested mapping to them,
+// so pi refused the skill and the Library read no name or description
+// (iAInNet, plugins#1621).
+func TestMagpieAPISkillFrontMatterIsYAML(t *testing.T) {
+	b, err := os.ReadFile(skillAPIPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rest, ok := strings.CutPrefix(string(b), "---\n")
+	front, _, ok2 := strings.Cut(rest, "\n---\n")
+	if !ok || !ok2 {
+		t.Fatal("the skill has no front matter")
+	}
+	var m struct{ Name, Description string }
+	if err := yaml.Unmarshal([]byte(front), &m); err != nil {
+		t.Fatalf("the front matter isn't YAML: %v", err)
+	}
+	if m.Name != "magpie-api" || !strings.Contains(m.Description, "Use when orchestrating work across models or agents through magpie: choosing") {
+		t.Fatalf("the front matter reads as %+v", m)
 	}
 }
 
