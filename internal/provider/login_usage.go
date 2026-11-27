@@ -494,6 +494,10 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 				if q.Error == "" {
 					copilotUnlapse(orig)
 					refreshCopilotEntitlement(c.app, q.Plan, q.AccessSKU)
+				} else if strings.HasSuffix(q.Error, CopilotToSHint) {
+					// turned away under GitHub's terms: signed in
+					// still (copilot_tos.go)
+					copilotUnlapse(orig)
 				}
 				return q
 			}

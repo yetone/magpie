@@ -133,7 +133,10 @@ func copilotUnlapse(app copilotApp) {
 // copilotSessionDone notes what GitHub said of app's sign-in at a trade:
 // served, its mark goes; refused with nothing in its place, it is marked.
 func copilotSessionDone(app copilotApp, err error) {
-	if err == nil {
+	if err == nil || copilotToSSaid(err) {
+		// served, or turned away under GitHub's terms, which is no
+		// refusal of the sign-in: a mark an earlier such refusal left,
+		// read as one, goes (copilot_tos.go)
 		copilotUnlapse(app)
 		return
 	}

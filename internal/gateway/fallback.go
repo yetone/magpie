@@ -2157,13 +2157,16 @@ func elsewhere(left []candidate, c candidate) []candidate {
 // says the service was disabled in this account before the request came,
 // a ruling on the account, not on what was sent, so the provider's other
 // accounts are asked (bestony on Discord). Nor does Anthropic's disabling
-// of a Claude account or organization (claudeAccountOff): the same.
+// of a Claude account or organization (claudeAccountOff): the same. Nor
+// GitHub's turning a Copilot account away under its terms
+// (provider.CopilotToSHint): it refuses the account's GitHub token before
+// the request is sent, so nothing of the request was read.
 func riskRefused(c candidate, status int, header http.Header, body []byte) bool {
 	if failureOf(c, status, body) != failRestricted || remoteModelRest(c, failRestricted, header) {
 		return false
 	}
 	status = carriedStatus(status, body)
-	return !googleSuspended(c.p, status, body) && !claudeAccountOff(c.p, status, body)
+	return !googleSuspended(c.p, status, body) && !claudeAccountOff(c.p, status, body) && !bodyHas(wordsOf(body), provider.CopilotToSHint)
 }
 
 // elsewhereWeighed is elsewhere on a list of candidates beside their
@@ -2540,6 +2543,14 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 	case wait > longestPause:
 		return 0, false
 	case busyStatus(status):
+		if restrictedSaid(status, body) {
+			// an account its vendor restricted is out till the vendor
+			// lifts it: GitHub's refusal of a Copilot account under its
+			// terms comes as the sign-in's 502, and was asked again as a
+			// busy one, 15 trades a request from an account GitHub had
+			// just turned away for its use (yidasanqian on X)
+			return 0, false
+		}
 		if bodyHas(body, didNotStream) || bodyHas(body, cutVoidWords) {
 			// a void cut at its length fails the same every ask: the
 			// budget went to reasoning, and mostly would again — the same

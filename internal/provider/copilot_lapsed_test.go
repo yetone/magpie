@@ -48,8 +48,11 @@ func resetCopilotState() {
 	copilotSessions = map[string]copilotSession{}
 	copilotMu.Unlock()
 	copilotRefusals.Lock()
-	copilotRefusals.at, copilotRefusals.status = map[string]time.Time{}, map[string]int{}
+	copilotRefusals.at, copilotRefusals.status, copilotRefusals.said = map[string]time.Time{}, map[string]int{}, map[string]error{}
 	copilotRefusals.Unlock()
+	copilotToSHolds.Lock()
+	copilotToSHolds.m = map[string]copilotHold{}
+	copilotToSHolds.Unlock()
 	copilotLapsedMu.Lock()
 	copilotLapsedSeen = map[string]bool{}
 	copilotLapsedMu.Unlock()

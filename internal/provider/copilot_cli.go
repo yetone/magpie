@@ -259,6 +259,9 @@ func copilotDirect(ctx context.Context, app copilotApp) (copilotSession, error) 
 	if s, ok := copilotSessions[github]; ok && time.Until(time.Unix(s.ExpiresAt, 0)) > 2*time.Minute {
 		return s, nil
 	}
+	if err := copilotHeld(github); err != nil {
+		return copilotSession{}, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, copilotUserURL(app.Host), nil)
 	if err != nil {
 		return copilotSession{}, err
@@ -277,6 +280,10 @@ func copilotDirect(ctx context.Context, app copilotApp) (copilotSession, error) 
 		} `json:"endpoints"`
 	}
 	if res.StatusCode != 200 || json.Unmarshal(b, &u) != nil {
+		if copilotToSRefused(res.StatusCode, b) {
+			// the account's use, not its token (copilot_tos.go)
+			return copilotSession{}, copilotToSHeld(github, res.Header, res.Status, b)
+		}
 		// 401 is GitHub refusing the token itself; a 403 here can be an
 		// account without Copilot, and a 5xx is GitHub's own trouble
 		if res.StatusCode == http.StatusUnauthorized {

@@ -1437,6 +1437,12 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken, host string) Sub
 		Reset     string                      `json:"quota_reset_date_utc"`
 		ResetDay  string                      `json:"quota_reset_date"`
 	}
+	if err := copilotHeld(githubToken); err != nil {
+		// GitHub turned the account away under its terms: not asked
+		// again till the hold ends (copilot_tos.go)
+		q.Error = err.Error()
+		return q
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, copilotUserURL(host), nil)
 	if err == nil {
 		req.Header.Set("Authorization", "token "+githubToken)
@@ -1449,7 +1455,9 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken, host string) Sub
 		if err == nil {
 			defer res.Body.Close()
 			b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-			if res.StatusCode < 200 || res.StatusCode >= 300 {
+			if copilotToSRefused(res.StatusCode, b) {
+				err = copilotToSHeld(githubToken, res.Header, res.Status, b)
+			} else if res.StatusCode < 200 || res.StatusCode >= 300 {
 				err = &accountStatusError{status: res.StatusCode}
 			} else {
 				err = json.Unmarshal(b, &data)

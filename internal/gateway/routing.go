@@ -745,11 +745,13 @@ func grokBalanceOut(p provider.Provider, status int, body []byte) bool {
 // restrictedSaid says an error is one magpie already put in words as an
 // account its vendor restricted: WorkBuddy's 11140 as the built-in
 // translates it, or as the plugin does, both ending in
-// provider.WBRestrictedHint, and ZCode's Start Plan 3012 as the ZCode
-// plugin puts it (provider.ZCodeRestrictedHint, plugins#348). magpie's own
-// words, which no vendor says, so they are read whoever answered.
+// provider.WBRestrictedHint, ZCode's Start Plan 3012 as the ZCode
+// plugin puts it (provider.ZCodeRestrictedHint, plugins#348), and GitHub
+// turning a Copilot account away under its terms (provider.CopilotToSHint,
+// yidasanqian on X). magpie's own words, which no vendor says, so they
+// are read whoever answered.
 func restrictedSaid(status int, body []byte) bool {
-	return status >= 400 && (bodyHas(body, provider.WBRestrictedHint) || bodyHas(body, provider.ZCodeRestrictedHint))
+	return status >= 400 && (bodyHas(body, provider.WBRestrictedHint) || bodyHas(body, provider.ZCodeRestrictedHint) || bodyHas(body, provider.CopilotToSHint))
 }
 
 // restrictedRefused says p's vendor restricted the account: magpie's words
