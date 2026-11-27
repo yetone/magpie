@@ -19,6 +19,10 @@ func installedWindowsStorePackages() []string {
 	return names
 }
 
+func installedWindowsStorePackageRoot(pkg string) string {
+	return readRegistry("HKCU", appxPackagesKey+`\`+pkg, "PackageRootFolder")
+}
+
 // registeredWindowsApp reads what an electron-builder installer
 // registered for the app with guid (registeredIn), for the current user
 // or for all users, in the 64-bit view and then the 32-bit one.

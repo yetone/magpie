@@ -178,6 +178,9 @@ func TestCodexWindowsStoreAppVersion(t *testing.T) {
 	if !codex.HasApp() {
 		t.Fatal("Codex Store app not detected")
 	}
+	if pkg, version := storeAppPackage(windowsStorePackages(), "OpenAI.Codex", "2p2nqsd0c76g0"); pkg != "OpenAI.Codex_26.1002.7124.0_arm64__2p2nqsd0c76g0" || version != "26.1002.7124.0" {
+		t.Fatalf("the selected Store package and its version differ: %q %q", pkg, version)
+	}
 	if v := (&Agent{ID: "codex@wsl:Ubuntu", WSL: "Ubuntu", Bin: "codex"}).AppVersion(); v != "" {
 		t.Fatalf("WSL twin: %q", v)
 	}

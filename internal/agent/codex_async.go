@@ -59,7 +59,7 @@ type CodexReader struct {
 
 // codexReaders are the Codexes that read the config at at: the CLI on
 // PATH, the desktop app's own (its bundled codex-cli on a Mac; the Store
-// app's on Windows, whose version magpie can't read; on Linux the
+// app's bundled codex.exe on Windows; on Linux the
 // package's resources/codex, which says its version as the CLI does:
 // codex-cli 0.166.0-alpha.5.1 in chatgpt 26.1027), the editor
 // extension's, or a WSL distro's CLI. A var so tests can name them.
@@ -81,8 +81,8 @@ var codexReaders = func(at place) []CodexReader {
 			}
 		}
 	case "windows":
-		if storeAppVersion(windowsStorePackages(), app.store, app.publisher) != "" {
-			out = append(out, CodexReader{Kind: "app"})
+		if pkg, _ := storeAppPackage(windowsStorePackages(), app.store, app.publisher); pkg != "" {
+			out = append(out, CodexReader{Kind: "app", Version: storeCodexVersion(windowsStorePackageRoot(pkg))})
 		}
 	case "linux":
 		if dir := app.linuxDir(); dir != "" {
@@ -90,6 +90,22 @@ var codexReaders = func(at place) []CodexReader {
 		}
 	}
 	return append(out, extensionCodexReaders(at.home)...)
+}
+
+// storeCodexVersion reads the Store app's own CLI, not its AppX version
+// A missing or unreadable install stays unknown to the compaction gate
+func storeCodexVersion(root string) string {
+	if !filepath.IsAbs(root) {
+		return ""
+	}
+	for _, parts := range [][]string{{root, "app", "resources", "codex.exe"}, {root, "resources", "codex.exe"}} {
+		bin := filepath.Join(parts...)
+		if _, err := os.Stat(bin); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		return installedVersion(bin)
+	}
+	return ""
 }
 
 // extensionCodexReaders are the Codexes the editors' OpenAI extension
