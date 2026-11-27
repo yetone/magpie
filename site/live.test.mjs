@@ -174,7 +174,10 @@ test("live: a session names the viewer: nobody, a visitor, or the owner by a one
   assert.equal(c.l, LEVEL.view);
   // another share's, a changed one, and an old one are no session
   assert.equal(await claimsOf(s.env, anon.token, "aaaaaaaaaaaaaaaa"), null);
-  assert.equal(await claimsOf(s.env, anon.token.replace(/.$/, (x) => (x === "A" ? "B" : "A")), sh.id), null);
+  // (the signature's first character: its last carries two bits of
+  // padding, which a decoder drops, so changing it can leave the same
+  // signature)
+  assert.equal(await claimsOf(s.env, anon.token.replace(/\.(.)/, (m, x) => "." + (x === "A" ? "B" : "A")), sh.id), null);
   assert.equal(await claimsOf(s.env, anon.token, sh.id, Date.now() + TOKEN_TTL + 1), null);
   assert.equal(await claimsOf({ LIVE_KEY: "another-key-0123456789" }, anon.token, sh.id), null);
 
