@@ -217,14 +217,21 @@ func readLogSnapshot() *logSnapshot {
 			first: next.first, firstOwn: next.firstOwn, keyProviders: maps.Clone(next.keyProviders), hosts: maps.Clone(next.hosts)}
 	}
 	rd := bufio.NewReaderSize(io.LimitReader(f, info.Size()-next.off), 64<<10)
+	// one record and the reader's own buffer for every line: a Record a
+	// line, which Unmarshal's pointer puts on the heap, and a copy of each
+	// line were ~42 MB of a real log's first read (#2278)
+	var r Record
+	var long []byte
 	for next.off < info.Size() {
-		b, e := rd.ReadBytes('\n')
+		var b []byte
+		var e error
+		b, long, e = readLine(rd, long)
 		if e != nil {
 			break
 		} // a partial final line is read again after it completes
 		next.off += int64(len(b))
 		sum.Write(b)
-		var r Record
+		r = Record{}
 		if json.Unmarshal(b, &r) != nil {
 			continue
 		}
@@ -290,6 +297,22 @@ func readLogSnapshot() *logSnapshot {
 	logIndex.snapshot = next
 	logDiskWrite(next)
 	return next
+}
+
+// readLine is rd's next line, '\n' included, in rd's own buffer, valid
+// until the next read; a line longer than the buffer is gathered in long,
+// which is handed back to be used again.
+func readLine(rd *bufio.Reader, long []byte) (line, kept []byte, err error) {
+	b, err := rd.ReadSlice('\n')
+	if err != bufio.ErrBufferFull {
+		return b, long, err
+	}
+	long = append(long[:0], b...)
+	for err == bufio.ErrBufferFull {
+		b, err = rd.ReadSlice('\n')
+		long = append(long, b...)
+	}
+	return long, long, err
 }
 
 // routeRows are the rows of the block being written, by their route: where
