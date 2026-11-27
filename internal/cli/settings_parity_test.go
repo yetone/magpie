@@ -210,6 +210,7 @@ var cliForRoute = map[string]string{
 	"GET /api/import/{id}":                 "magpie import",
 	"GET /api/settings/https":              "magpie https",
 	"POST /api/settings/https":             "magpie https on",
+	"POST /api/settings/lan":               "magpie lan on",
 	"POST /api/settings/https/ca":          "magpie https ca",
 	"POST /api/settings/https/import":      "magpie https import",
 	"POST /api/settings/https/remove":      "magpie https remove",
@@ -327,7 +328,6 @@ var notYet = map[string]string{
 	"POST /api/settings/github-token":            S2, // api.go
 	"POST /api/settings/guide":                   W,  // api.go
 	"POST /api/settings/join":                    S2, // join.go: the join password, set or turned off
-	"POST /api/settings/lan":                     S2, // api.go
 	"POST /api/settings/log/reveal":              W,  // api.go
 	"POST /api/settings/login":                   S2, // api.go
 	"POST /api/settings/minimax-checkin":         S2, // api.go

@@ -66,6 +66,8 @@ func helpFor(args []string) string {
 		return mtlsUsage
 	case "https":
 		return httpsUsage
+	case "lan":
+		return lanUsage
 	case "heap":
 		return heapUsage
 	case "cpu":
