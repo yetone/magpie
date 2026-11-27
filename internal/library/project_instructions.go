@@ -34,6 +34,8 @@ import (
 //	Command Code, Goose and Dim read AGENTS.md at the project's root
 //	(Dim: the nearest AGENTS.md above the folder it runs in,
 //	read_instructions in arcships/dim's prompt_sources.rs).
+//	Bub reads AGENTS.md in the folder it runs in, its workspace
+//	(_read_agents_file in bub/builtin/hook_impl.py).
 //
 // A file several picked agents read is written once.
 var projectInstrNames = map[string][]string{
@@ -56,6 +58,7 @@ var projectInstrNames = map[string][]string{
 	"commandcode": {"AGENTS.md"},
 	"goose":       {"AGENTS.md"},
 	"dim":         {"AGENTS.md"},
+	"bub":         {"AGENTS.md"},
 }
 
 // the order an agent looks for its names in, where that isn't the order

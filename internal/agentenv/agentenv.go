@@ -104,6 +104,8 @@ var Vars = []string{
 	"DIMCODE_HOME",
 	// Mistral Vibe's folder (config.toml, skills, AGENTS.md), ~/.vibe without it
 	"VIBE_HOME",
+	// Bub's folder (config.yml, mcp.json), ~/.bub without it
+	"BUB_HOME",
 	// jcode's folder, ~/.jcode without it
 	"JCODE_HOME",
 	// OpenClaw: its config file, its state folder (openclaw.json in it), a

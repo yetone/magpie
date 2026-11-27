@@ -483,6 +483,26 @@ func TestSharedSkillReachesZCode(t *testing.T) {
 
 // Mistral Vibe reads $VIBE_HOME/AGENTS.md and $VIBE_HOME/skills/<name>, else
 // the same under ~/.vibe (alterxyz4 on X).
+// Bub reads the shared ~/.agents/skills, and its MCP servers from the
+// bub-mcp plugin's mcp.json in $BUB_HOME (else ~/.bub), in mcpServers
+// form; it has no user-wide instructions file.
+func TestBubTarget(t *testing.T) {
+	h := sandbox(t)
+	t.Setenv("BUB_HOME", "")
+	write(t, filepath.Join(h, ".bub", "config.yml"), "")
+	tg := targetByID("bub")
+	if tg == nil || tg.Skills != filepath.Join(h, ".agents", "skills") || tg.Instructions != "" ||
+		tg.MCP == nil || tg.MCP.Path != filepath.Join(h, ".bub", "mcp.json") || tg.MCP.Format != fmtKimi {
+		t.Fatalf("bub: %+v", tg)
+	}
+	v := filepath.Join(h, "bhome")
+	t.Setenv("BUB_HOME", v)
+	write(t, filepath.Join(v, "config.yml"), "")
+	if tg := targetByID("bub"); tg == nil || tg.MCP == nil || tg.MCP.Path != filepath.Join(v, "mcp.json") {
+		t.Fatalf("bub under BUB_HOME: %+v", tg)
+	}
+}
+
 func TestVibeTarget(t *testing.T) {
 	h := sandbox(t)
 	t.Setenv("VIBE_HOME", "")

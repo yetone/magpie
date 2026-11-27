@@ -41,6 +41,9 @@ func TestAgentOf(t *testing.T) {
 		"kimi-code-cli/2.4.1":     "kimi",
 		"kimi-code-desktop/1.2.1": "kimi-code-desktop",
 		"KimiCLI/1.4.0":           "kimi",
+		// Bub's settings.USER_AGENT; a name it begins isn't its
+		"bub/0.6.2":    "bub",
+		"bubble/1.0.0": "bubble",
 	}
 	for ua, want := range cases {
 		if got := usage.AgentOf(ua); got != want {

@@ -639,6 +639,18 @@ func targetOf(a *agent.Agent) *Target {
 		// config.toml, a shape the library doesn't write.
 		t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
 		t.Skills = filepath.Join(a.Dir, "skills")
+	case "bub":
+		// Bub reads a project's skills from <cwd>/.agents/skills and the
+		// user's from ~/.agents/skills, before its built-in ones
+		// (bub/skills.py, iter_skill_roots). Its MCP servers are
+		// mcp.json's mcpServers in its folder ($BUB_HOME, else ~/.bub),
+		// fastmcp's MCPConfig shape (url and transport, or command, args
+		// and env), read by the bub-mcp plugin (bub-contrib packages/
+		// bub-mcp, MCPSettings.config_path). It has no user-wide
+		// instructions file: AGENTS.md is read in the workspace only
+		// (bub/builtin/hook_impl.py).
+		t.Skills = sharedSkillsDir()
+		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtKimi}
 	case "atomcode":
 		// AtomCode reads ~/.atomcode/ATOMCODE.md before every conversation
 		// (its ATOMCODE.md, beside AGENTS.md and CLAUDE.md), its MCP servers

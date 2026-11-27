@@ -209,6 +209,7 @@
       <tr><td>Claude Code</td><td><code>~/.claude/settings.json</code>：<code>env</code> ブロック内の <code>ANTHROPIC_BASE_URL</code>、<code>ANTHROPIC_AUTH_TOKEN</code> とモデル関連の変数</td></tr>
       <tr><td>Codex</td><td><code>~/.codex/config.toml</code>：<code>[model_providers.magpie]</code> テーブルとモデル、一覧は <code>magpie-models.json</code>。ChatGPT のサインインには手を加えません</td></tr>
       <tr><td>OpenCode、MiMo Code、DevEco Code、Pi、Crush</td><td><code>magpie</code> プロバイダのエントリと <code>magpie/provider/model</code></td></tr>
+      <tr><td>Bub</td><td><code>~/.bub/config.yml</code>：<code>magpie</code> プロバイダを追加し、<code>model</code> を <code>magpie:プロバイダ/モデル</code> に設定</td></tr>
       <tr><td>Open Code Review</td><td><code>~/.opencodereview/config.json</code>：<code>magpie</code> カスタムプロバイダを追加し、<code>ocr</code> が使うものに設定</td></tr>
       <tr><td>Kigi</td><td><code>~/.kigi/config.toml</code>：モデルごとに <code>[model."magpie/…"]</code> テーブルを追加し、選んだものをデフォルトに設定</td></tr>
       <tr><td>AtomCode</td><td><code>~/.atomcode/config.toml</code>：<code>magpie</code> プロバイダアカウントと、カタログ内の各モデルのエントリ</td></tr>
