@@ -554,19 +554,36 @@ var webLogo = sync.OnceValue(func() string {
 })
 
 // NetworkLinks are the links to the page, served on port, that other
-// machines open; key is the link's "/?k=…". MAGPIE_PUBLIC_URL with a port
-// of its own names the host the container's ports are published on, so
-// the page is at that host on its own port; one without (a reverse proxy's
-// https://magpie.example.com, #372) is where the page is, path and all.
+// machines open; key is the link's "/?k=…": PageAt when it names the
+// page's address, else MAGPIE_PUBLIC_URL's host (one with a port of its
+// own names the host the container's ports are published on, so the page
+// is there on its own port) or the gateway's own addresses.
 func NetworkLinks(port, key string) []string {
-	if u, err := url.Parse(gateway.PublicURL()); err == nil && u.Host != "" && u.Port() == "" {
-		return []string{strings.TrimRight(u.String(), "/") + key}
+	if u := PageAt(); u != "" {
+		return []string{u + key}
 	}
 	var out []string
 	for _, a := range LANAddrs() {
 		out = append(out, gateway.Scheme()+"://"+net.JoinHostPort(a, port)+key)
 	}
 	return out
+}
+
+// PageAt is the page's own address behind a reverse proxy, without a
+// trailing slash: MAGPIE_WEB_URL, else MAGPIE_PUBLIC_URL when it names a
+// proxy, path and all: one with no port (https://magpie.example.com,
+// #372), or https while magpie itself serves plain http, where TLS ends
+// at a proxy and the port is the proxy's (https://magpie.example.com:666,
+// #8014), not one a container publishes. "" otherwise.
+func PageAt() string {
+	if u := WebURL(); u != "" {
+		return u
+	}
+	u, err := url.Parse(gateway.PublicURL())
+	if err != nil || u.Host == "" || (u.Port() != "" && (u.Scheme != "https" || gateway.Scheme() == "https")) {
+		return ""
+	}
+	return strings.TrimRight(u.String(), "/")
 }
 
 // LANAddrs are this computer's addresses on the local network, for the

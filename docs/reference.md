@@ -3920,6 +3920,8 @@ magpie only sees the container's own address (Docker's 172.17.x), so set
 `-e MAGPIE_PUBLIC_URL=http://<the host's or NAS's address>:3425` (the port
 published on the host) for the address it shows and prints to be the one
 other machines use; behind a reverse proxy, set it to that external base URL
+as the browser opens it, `https://<name>[:<port>][/<path>]` (artifacts'
+links and the page's printed link keep its scheme, port and path, #8014),
 and follow the [authentication requirements above](#connecting-anything-else),
 especially when the proxy reaches magpie over loopback.
 Other containers on the same host reach the gateway at the host's Docker

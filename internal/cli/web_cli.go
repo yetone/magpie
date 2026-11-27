@@ -201,27 +201,18 @@ func webLink(addr, key string) string {
 }
 
 // proxyLink is the page's link through a reverse proxy in front of a page
-// served on loopback (#1479), with the key: MAGPIE_WEB_URL, the page's own
-// address there (https://magpie.example.com), or else MAGPIE_PUBLIC_URL
-// with no port of its own, as NetworkLinks takes it (#372). One with a
-// port names a host whose ports are published, not a proxy. "" with
-// neither, or a MAGPIE_WEB_URL that isn't a plain http(s) address.
+// served on loopback (#1479), with the key: gui.PageAt, MAGPIE_WEB_URL
+// (the page's own address there), else MAGPIE_PUBLIC_URL when it names a
+// proxy. "" with neither, or a MAGPIE_WEB_URL that isn't a plain http(s)
+// address.
 func proxyLink(key string) string {
-	if v := strings.TrimSpace(os.Getenv("MAGPIE_WEB_URL")); v != "" {
-		if !strings.Contains(v, "://") {
-			v = "https://" + v
-		}
-		u, err := url.Parse(v)
-		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
-			return ""
-		}
-		return strings.TrimRight(u.String(), "/") + key
-	}
-	u, err := url.Parse(gateway.PublicURL())
-	if err != nil || u.Host == "" || u.Port() != "" {
+	if os.Getenv("MAGPIE_WEB_URL") != "" && gui.WebURL() == "" {
 		return ""
 	}
-	return strings.TrimRight(u.String(), "/") + key
+	if u := gui.PageAt(); u != "" {
+		return u + key
+	}
+	return ""
 }
 
 // serveCmd: magpie serve [--web[=host:port]] — the gateway, and with
