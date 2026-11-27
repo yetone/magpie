@@ -620,7 +620,9 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 				fetches = append(fetches, perLogin(via("codex"), ls, accountCard("codex"))...)
 			} else {
 				dir := appdir.CodexHomeIn(home)
-				fetches = append(fetches, withUser(ctx, p.Account.User, func() SubscriptionQuota { return codexSubscriptionUsage(viaLogin("codex", p.Account.User), dir) }))
+				fetches = append(fetches, withUser(ctx, p.Account.User, func() SubscriptionQuota {
+					return codexSubscriptionUsage(viaLogin("codex", p.Account.User), dir, p.Account.User)
+				}))
 			}
 		}
 		// Every Copilot account magpie knows, the editors' or the CLI's own
@@ -1173,7 +1175,9 @@ func claudeScopeModel(name string) string {
 	return strings.NewReplacer(" ", "-", ".", "-").Replace(strings.ToLower(name))
 }
 
-func codexSubscriptionUsage(ctx context.Context, dir string) SubscriptionQuota {
+// codexSubscriptionUsage is the card of the Codex account user, signed in
+// in dir.
+func codexSubscriptionUsage(ctx context.Context, dir, user string) SubscriptionQuota {
 	q := SubscriptionQuota{Provider: "codex", Name: "Codex", Icon: "codex-color", Windows: []QuotaWindow{}}
 	if holding(ctx) {
 		q.Error = errNotAsked.Error()
@@ -1187,7 +1191,11 @@ func codexSubscriptionUsage(ctx context.Context, dir string) SubscriptionQuota {
 	renew := func(ctx context.Context, stale string) (string, string, error) {
 		return codexTokenRenewing(ctx, dir, stale)
 	}
-	q.Plan, q.Windows, q.Resets, q.Balance, q.Held, err = codexWindowsRenewing(ctx, token, accountID, renew)
+	var left *float64
+	q.Plan, q.Windows, q.Resets, q.Balance, left, q.Held, err = codexWindowsLeftRenewing(ctx, token, accountID, renew)
+	if err == nil {
+		noteWeekCredits(user, q.Windows, q.Resets, left, time.Now())
+	}
 	if b, _, rerr := readCodexLogin(dir, false); rerr == nil {
 		q.Until = codexUntil(b, time.Now())
 	}
@@ -1232,15 +1240,26 @@ func chatgptUntil(now time.Time, tokens ...string) *time.Time {
 // a window is used up, "" when it holds none or they are unlimited. held
 // is whether the Codex app sends nothing for the account now (codexHeld).
 func codexWindows(ctx context.Context, token, accountID string) (plan string, out []QuotaWindow, resets *ResetCredits, credits string, held bool, err error) {
+	plan, out, resets, credits, _, held, err = codexWindowsLeft(ctx, token, accountID)
+	return
+}
+
+// codexWindowsLeft is codexWindows with the credits left as the backend
+// said them, in full (nil when not said, or unlimited): credits words
+// them rounded, too coarse to tell a few spent (noteWeekCredits).
+func codexWindowsLeft(ctx context.Context, token, accountID string) (plan string, out []QuotaWindow, resets *ResetCredits, credits string, left *float64, held bool, err error) {
 	var data codexUsage
 	base := strings.TrimSuffix(CodexBase, "/codex")
 	out = []QuotaWindow{}
 	if err = accountJSON(ctx, base+"/wham/usage", token, codexAccountHeaders(accountID), &data); err != nil {
-		return "", out, nil, "", false, codexUsageWords(err)
+		return "", out, nil, "", nil, false, codexUsageWords(err)
 	}
 	if c := data.Credits; c != nil && c.Has && !c.Unlimited {
-		if n, perr := strconv.ParseFloat(strings.TrimSpace(c.Balance), 64); perr == nil && n > 0 {
-			credits = fmt.Sprintf("%s credits", compactNumber(math.Round(n*100)/100))
+		if n, perr := strconv.ParseFloat(strings.TrimSpace(c.Balance), 64); perr == nil && !math.IsNaN(n) && !math.IsInf(n, 0) {
+			left = &n
+			if n > 0 {
+				credits = fmt.Sprintf("%s credits", compactNumber(math.Round(n*100)/100))
+			}
 		}
 	}
 	if data.Resets != nil {
@@ -1257,7 +1276,7 @@ func codexWindows(ctx context.Context, token, accountID string) (plan string, ou
 			out[i].Credits = true
 		}
 	}
-	return data.PlanType, out, resets, credits, codexHeld(data), nil
+	return data.PlanType, out, resets, credits, left, codexHeld(data), nil
 }
 
 // codexGoesOnCredits reports whether the ChatGPT account goes on past its

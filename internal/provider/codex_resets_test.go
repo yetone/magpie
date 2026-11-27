@@ -82,7 +82,7 @@ func TestCodexResetsCounted(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			asked := fakeCodexResets(t, c.count, c.details)
-			q := codexSubscriptionUsage(context.Background(), dir)
+			q := codexSubscriptionUsage(context.Background(), dir, "")
 			if q.Error != "" || len(q.Windows) != 1 {
 				t.Fatalf("quota %+v", q)
 			}

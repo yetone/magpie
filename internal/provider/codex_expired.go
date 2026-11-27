@@ -74,18 +74,25 @@ func (e *codexSignInGone) Unwrap() error { return e.err }
 // the same is a codexSignInGone. Any other 401, a 403, a 5xx or a network
 // error is returned as it is: what it says of the sign-in is unknown.
 func codexWindowsRenewing(ctx context.Context, tok, accountID string, renew codexRenew) (plan string, out []QuotaWindow, resets *ResetCredits, credits string, held bool, err error) {
-	plan, out, resets, credits, held, err = codexWindows(ctx, tok, accountID)
+	plan, out, resets, credits, _, held, err = codexWindowsLeftRenewing(ctx, tok, accountID, renew)
+	return
+}
+
+// codexWindowsLeftRenewing is codexWindowsRenewing with the credits left
+// in full (codexWindowsLeft).
+func codexWindowsLeftRenewing(ctx context.Context, tok, accountID string, renew codexRenew) (plan string, out []QuotaWindow, resets *ResetCredits, credits string, left *float64, held bool, err error) {
+	plan, out, resets, credits, left, held, err = codexWindowsLeft(ctx, tok, accountID)
 	if renew == nil || !codexExpired(err) && !codexRevoked(err) {
 		return
 	}
 	fresh, id, rerr := renew(ctx, tok)
 	if rerr != nil {
-		return plan, out, resets, credits, held, rerr
+		return plan, out, resets, credits, left, held, rerr
 	}
 	if id != "" {
 		accountID = id
 	}
-	plan, out, resets, credits, held, err = codexWindows(ctx, fresh, accountID)
+	plan, out, resets, credits, left, held, err = codexWindowsLeft(ctx, fresh, accountID)
 	switch {
 	case codexExpired(err):
 		err = &codexSignInGone{tok: fresh, err: errCodexStillExpired}
