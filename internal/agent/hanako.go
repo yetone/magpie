@@ -95,6 +95,33 @@ func hanako(home string) *Agent {
 	}
 	onMagpie := func() bool { p, _ := chat(); return p == magpieID }
 	key := func() string { return "hanako:" + dir + ":" + hanakoAgent(dir) + ":chat" }
+	joined := func() bool { _, ok := hanakoCurrent(dir); return ok }
+	reset := func() error {
+		// nothing changes rather than half of it, while
+		// OpenHanako can be opened to do it all. Uninstalled,
+		// it can't: its agent's model goes back in its plain
+		// config, and magpie's provider stays in the sealed
+		// catalog, which only OpenHanako can change (aooo_han
+		// on X: Alma uninstalled said to open it first).
+		gone := false
+		if _, there := hanakoCurrent(dir); there && hanakoSealed(path) && hanakoLive(dir) == nil {
+			if hanakoInstalled() {
+				return errSealed("take magpie out of")
+			}
+			gone = true
+		}
+		if onMagpie() {
+			// the stash goes only once the model is back
+			if err := hanakoBack(dir, hanakoAgent(dir), stashShared()[key()]); err != nil {
+				return err
+			}
+			forget(key())
+		}
+		if gone {
+			return nil
+		}
+		return hanakoRemove(dir)
+	}
 	return &Agent{
 		ID: "hanako", Name: "OpenHanako", Icon: "hanako", Aliases: []string{"openhanako", "hana", "hanaagent"},
 		// what its provider client sends, though the key names it first
@@ -103,6 +130,13 @@ func hanako(home string) *Agent {
 		// its own providers' models are provider/id as magpie's are: one
 		// is magpie's only on magpie's provider
 		Spelled: prefixed,
+		Joined:  joined,
+		Unwire: func() error {
+			if onMagpie() {
+				return nil
+			}
+			return reset()
+		},
 		Sync: func() error {
 			cur, ok := hanakoCurrent(dir)
 			if !ok || hanakoSame(cur, hanakoProvider(), hanakoSealed(path)) {
@@ -134,33 +168,10 @@ func hanako(home string) *Agent {
 				return p + "/" + id
 			},
 			Set: func(v string) error {
-				agent := hanakoAgent(dir)
 				if v == "" {
-					// nothing changes rather than half of it, while
-					// OpenHanako can be opened to do it all. Uninstalled,
-					// it can't: its agent's model goes back in its plain
-					// config, and magpie's provider stays in the sealed
-					// catalog, which only OpenHanako can change (aooo_han
-					// on X: Alma uninstalled said to open it first).
-					gone := false
-					if _, there := hanakoCurrent(dir); there && hanakoSealed(path) && hanakoLive(dir) == nil {
-						if hanakoInstalled() {
-							return errSealed("take magpie out of")
-						}
-						gone = true
-					}
-					if onMagpie() {
-						// the stash goes only once the model is back
-						if err := hanakoBack(dir, agent, stashShared()[key()]); err != nil {
-							return err
-						}
-						forget(key())
-					}
-					if gone {
-						return nil
-					}
-					return hanakoRemove(dir)
+					return reset()
 				}
+				agent := hanakoAgent(dir)
 				if agent == "" {
 					return errors.New("OpenHanako has no agent yet — open it once to make one")
 				}

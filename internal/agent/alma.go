@@ -835,10 +835,16 @@ var almaOS = runtime.GOOS
 
 func alma() *Agent {
 	dir := almaDir(almaOS)
-	return &Agent{
+	a := &Agent{
 		ID: "alma", Name: "Alma", Icon: "alma",
 		UA:  []string{"alma"},
 		Dir: dir, Path: almaAPI,
+		Unwire: func() error {
+			if prefixed(almaGet()) {
+				return nil
+			}
+			return almaSet("")
+		},
 		Check: func() string {
 			s, err := almaSettingsSeen()
 			if err != nil {
@@ -903,4 +909,18 @@ func alma() *Agent {
 			},
 		}},
 	}
+	// A provider the user set up in Alma can be used directly as before.
+	// Its presence alone joins Alma only after magpie has connected it.
+	a.Joined = func() bool {
+		if !a.setUp() || stashShared()[almaTakeOut] != "" {
+			return false
+		}
+		ps, err := almaProvidersSeen()
+		if err != nil {
+			return false
+		}
+		p := almaMagpie(ps)
+		return p != nil && p.Enabled
+	}
+	return a
 }

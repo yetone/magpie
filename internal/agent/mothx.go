@@ -54,6 +54,21 @@ func mothxIn(at place) *Agent {
 	get := func(k string) (string, bool) { return edit.GetJSON(path, k) }
 	set := func(kvs ...edit.KV) error { return edit.SetJSON(path, kvs...) }
 	pair := pairSet(set, "defaultProvider", "defaultModel")
+	onMagpie := func() bool { p, _ := get("defaultProvider"); return p == magpieID }
+	joined := func() bool { _, ok := get("providers." + magpieID); return ok }
+	drop := func() error {
+		if !joined() {
+			return nil
+		}
+		if err := edit.DelJSON(path, "providers."+magpieID); err != nil {
+			return err
+		}
+		// MothX omits an empty providers object.
+		if raw, ok := get("providers"); ok && strings.TrimSpace(raw) == "{}" {
+			return edit.DelJSON(path, "providers")
+		}
+		return nil
+	}
 	key := func() string { return agentKeyAt("mothx", at.gw()) }
 	block := mothxBlockKept(path, func() any { return mothxProvider(at, key()) })
 	writeMagpie := func() error {
@@ -78,7 +93,14 @@ func mothxIn(at place) *Agent {
 				"baseUrl", at.v1(), "apiKey", key())
 		},
 		ListOnly: true,
-		Sync:     func() error { return syncJSON(path, "providers."+magpieID, block) },
+		Joined:   joined,
+		Unwire: func() error {
+			if onMagpie() {
+				return nil
+			}
+			return drop()
+		},
+		Sync: func() error { return syncJSON(path, "providers."+magpieID, block) },
 		Notice: func() string {
 			if p, _ := get("defaultProvider"); p == magpieID && Running(`(^|/)mothx( |$)`, `(^|/)vibecoding( |$)`) {
 				return noticeMothx.String()
@@ -92,23 +114,17 @@ func mothxIn(at place) *Agent {
 				Get: pairGet(get, "defaultProvider", "defaultModel"),
 				Set: func(v string) error {
 					if v == "" {
-						if err := edit.DelJSON(path, "defaultProvider", "defaultModel"); err != nil {
-							return err
+						if onMagpie() {
+							if err := edit.DelJSON(path, "defaultProvider", "defaultModel"); err != nil {
+								return err
+							}
 						}
-						if err := edit.DelJSON(path, "providers."+magpieID); err != nil {
-							return err
-						}
-						// providers left empty is magpie's: MothX writes none
-						// (omitempty), and reads none the same as {}
-						if raw, ok := get("providers"); ok && strings.TrimSpace(raw) == "{}" {
-							return edit.DelJSON(path, "providers")
-						}
-						return nil
+						return drop()
 					}
 					// a model of magpie's: its provider block goes in beside the pick
 					if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
 						if _, has := get("providers." + magpieID); !has {
-							if p, _ := get("defaultProvider"); p != magpieID {
+							if !onMagpie() {
 								before.take()
 							}
 						}
