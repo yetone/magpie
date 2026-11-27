@@ -253,6 +253,7 @@
     await Promise.all(parts);
     askNPM();
     askGit();
+    awaitNamed();
   }
   window.loadPlugins = load;
   // pluginsBack: the window back on this page (app.js load, on focus or
@@ -343,6 +344,36 @@
     window.renderPluginDot?.();
     askNPM(true);
     askGit(true);
+    awaitNamed();
+  }
+  // A plugin installed a moment ago has no subscriptions yet: the host
+  // lists them in the background (plugin.Cached), so its card said
+  // Installed where Sign in belongs until the page was opened again (the
+  // owner, 11-27). The page asks again each second till the plugins have
+  // answered (named), a minute at most, and draws what changed.
+  let namedTimer = 0;
+  function awaitNamed(tries = 0) {
+    clearTimeout(namedTimer);
+    if (tries >= 60 || !mine?.plugins?.some((e) => !e.off && !e.named)) return;
+    namedTimer = setTimeout(async () => {
+      if (view !== "plugins") return;
+      if (midway()) return awaitNamed(tries + 1);
+      const mark = backAt;
+      let m, p;
+      try { [m, p] = await Promise.all([api("plugins"), api("providers")]); } catch { return awaitNamed(tries + 1); }
+      // a read made since (an action's, the page's own load) stands
+      if (backAt !== mark || view !== "plugins" || midway()) return awaitNamed(tries + 1);
+      const was = JSON.stringify([mine, providers?.plugins]);
+      mine = m;
+      providers = p;
+      if (m.jsRoutings) state.jsRoutings = m.jsRoutings;
+      merge();
+      if (JSON.stringify([mine, providers?.plugins]) !== was) {
+        draw();
+        window.renderPluginDot?.();
+      }
+      awaitNamed(tries + 1);
+    }, 1000);
   }
 
   async function act(pkg, op, body, done) {
