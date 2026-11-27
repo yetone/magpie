@@ -186,3 +186,56 @@ func writeLongCodexThread(t *testing.T, ats ...time.Time) {
 		t.Fatal(err)
 	}
 }
+
+// A first start's spans begin on the oldest row's day in the reader's
+// zone, the zone the cut is in. A call stamped in UTC early on a day that
+// is still the day before west of UTC (a reported call's "t", a session
+// file's timestamp) began before the first span and was counted in no
+// total of All nor in the heatmap's first day, while the page still
+// listed it (#8000).
+func TestColdSpansBeginOnTheOldestRowsLocalDay(t *testing.T) {
+	zone := time.Local
+	time.Local = time.FixedZone("west", -8*3600)
+	t.Cleanup(func() { time.Local = zone })
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 11, 27, 12, 0, 0, 0, time.Local))
+	// 00:24 UTC on 10-17, 16:24 on 10-16 here
+	Append(Record{Time: time.Date(2026, 10, 17, 0, 24, 29, 0, time.UTC), Agent: "claude-code", Provider: "openai", Model: "m", Input: 1000, Output: 100, Status: 200})
+	for i := range 3 {
+		Append(Record{Time: now.Add(-time.Duration(i+1) * time.Hour).UTC(), Agent: "claude-code", Provider: "openai", Model: "m", Input: 10, Output: 1, Status: 200})
+	}
+	restart := func() {
+		requestCache.Lock()
+		requestCache.parts, requestCache.pageOld, requestCache.heatParts, requestCache.heatOld, requestCache.heats, requestCache.pairs, requestCache.pages = nil, nil, nil, nil, nil, nil, map[pageKey]RequestPage{}
+		requestCache.Unlock()
+		for _, path := range []string{pageDiskPath(), heatDiskPath(), effortDiskPath()} {
+			os.Remove(path)
+		}
+	}
+	restart()
+	t.Cleanup(restart)
+	// a page of one row: its newest are since the cut, and its totals
+	// are the kept cells' of the rows before
+	build := func() (RequestPage, Heatmap) { return QueryPage(All, Filter{}, 0, 1), HeatmapOf(Filter{}) }
+	spans := 0
+	coldSpanning = func(int) { spans++ }
+	t.Cleanup(func() { coldSpanning = nil })
+	page, heat := build()
+	if spans == 0 {
+		t.Fatal("no span paired")
+	}
+	if page.Total != 4 || page.Sum.Input != 1030 {
+		t.Fatalf("page: %d rows, %d in, want 4 rows, 1030 in", page.Total, page.Sum.Input)
+	}
+	if len(heat.Days) == 0 || heat.Days[0].Date != "2026-10-16" || heat.Days[0].Calls != 1 {
+		t.Fatalf("heatmap: %+v, want 2026-10-16 first, 1 call", heat.Days)
+	}
+	restart()
+	span := coldSpan
+	coldSpan = 0
+	t.Cleanup(func() { coldSpan = span })
+	whole, wholeHeat := build()
+	if page.Total != whole.Total || !reflect.DeepEqual(page.Sum, whole.Sum) || !reflect.DeepEqual(heat, wholeHeat) {
+		t.Fatalf("spans: %d rows %+v, %+v; paired at once: %d rows %+v, %+v", page.Total, page.Sum, heat, whole.Total, whole.Sum, wholeHeat)
+	}
+}

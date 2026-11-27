@@ -45,6 +45,11 @@ func coldSpans(since, cut time.Time, sets [3][]*rowChunk, fn func(from, to time.
 		}
 	}
 	from := since
+	// the oldest row's day in the cut's zone: a row's time keeps the zone
+	// it was written in (a reported call's "t", a session file's, in UTC),
+	// and its day there can be the one after, which began after the row
+	// (#8000)
+	oldest = oldest.In(cut.Location())
 	if oldest.IsZero() {
 		from = cut
 	} else if day := time.Date(oldest.Year(), oldest.Month(), oldest.Day(), 0, 0, 0, 0, cut.Location()); from.Before(day) {
