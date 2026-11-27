@@ -782,7 +782,19 @@ started under the old one.**
   then, not in the helper every test goes through.
 - When a test is red only in a full run, bisect the tests that run
   before it (`-run '^(first half|Target)$'`) instead of rerunning.
-- Seen 2× (2026-10-17, 2026-11-15).
+- 11-27, twice. fakeReach began each internal/agent test with
+  `reach.m = nil`, while a reach probe an earlier test's Drift started
+  was still out; its answer wrote into the nil map and panicked the
+  whole package on ubuntu CI at a233f85b2 (5456743b7: reachForget waits
+  for it). pageHome's last read started a chunk write that outlived the
+  test (#4390, red on macOS CI since 10-29): the write reads HOME when
+  it runs, so it landed in the testenv HOME once `t.Setenv` gave it
+  back, or in the TempDir as it was removed. Its cleanup now waits for
+  requestDiskSaves before HOME goes back (bcb683af5).
+- A cleanup registered after `t.TempDir` and `t.Setenv` runs before
+  them; that is where a helper waits.
+- Seen 3× (2026-10-17, 2026-11-15, 2026-11-27); moved into the code
+  standards' "Whatever a test starts ends when the test does".
 
 **A request the page sends on its own is looked for in every GUI test
 that counts the page's requests, before it lands.**
