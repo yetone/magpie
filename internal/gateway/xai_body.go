@@ -10,7 +10,7 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// xAI's own API (api.x.ai), wherever a Grok model is served, takes three
+// xAI's own API (api.x.ai), wherever a Grok model is served, takes four
 // things a client's wire puts in wrong, as the Grok subscription's plugin
 // shapes its bodies too (provider's grokShaped):
 //
@@ -31,6 +31,8 @@ import (
 //     (#3392: TwinsDestiny and guqing, straight against api.x.ai:
 //     {"type":"object","properties":{}} is refused, the same with
 //     "required":[] taken) — every object node gets an empty array.
+//   - Its Messages and chat take no stop sequences, Claude Code's
+//     auto-mode "</block>" among them (withoutStop) — they go.
 //
 // The relay and the translation shape alike: a refusal of custom tools
 // puts a Codex request on the translated path from the next turn on
@@ -48,9 +50,50 @@ func xaiBody(p provider.Provider, proto provider.Protocol, body []byte) []byte {
 	case provider.Responses:
 		return withoutNullReasoningContent(body)
 	case provider.Anthropic:
-		return systemTurnsFolded(body)
+		return systemTurnsFolded(withoutStop(proto, body))
+	case provider.Chat:
+		return withoutStop(proto, body)
 	}
 	return body
+}
+
+// withoutStop is a Messages or chat body without its stop sequences:
+// xAI's /v1/messages and /v1/chat/completions answer any that are there
+// "Model grok-4.7 does not support parameter stop." (#3392, guqing:
+// Claude Code's auto-mode classifier asks with ["</block>"]; straight
+// against api.x.ai both endpoints refused a non-empty stop, took an empty
+// one, and /v1/responses took it). The reply
+// runs on past where it would have stopped, which the classifier's
+// parser reads as before (it takes "<block>no" with or without the
+// closing tag) and max_tokens still bounds. An empty list or string goes
+// as it came.
+func withoutStop(proto provider.Protocol, body []byte) []byte {
+	key := "stop"
+	if proto == provider.Anthropic {
+		key = "stop_sequences"
+	}
+	if !bodyHas(body, `"`+key+`"`) {
+		return body
+	}
+	r := gjson.GetBytes(body, key)
+	switch {
+	case !r.Exists() || r.Type == gjson.Null:
+		return body
+	case r.IsArray() && len(r.Array()) == 0, r.Type == gjson.String && r.Str == "":
+		return body
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var m map[string]any
+	if dec.Decode(&m) != nil || m == nil {
+		return body
+	}
+	delete(m, key)
+	out, err := marshalPlain(m)
+	if err != nil {
+		return body
+	}
+	return out
 }
 
 // withoutNullReasoningContent is a Responses body with the null content of

@@ -557,3 +557,114 @@ func TestXAICountTokensFillsRequired(t *testing.T) {
 		t.Errorf("CronList went to xAI's count without its required: %.600s", f.got)
 	}
 }
+
+// xaiRefusesStop answers as xAI's Messages and chat answered guqing's
+// Claude Code (#3392): a stop sequence there is turned away by name.
+func xaiRefusesStop(body []byte) (int, string) {
+	var q struct {
+		Stop          json.RawMessage `json:"stop"`
+		StopSequences json.RawMessage `json:"stop_sequences"`
+	}
+	json.Unmarshal(body, &q)
+	for _, s := range []json.RawMessage{q.Stop, q.StopSequences} {
+		if t := string(bytes.TrimSpace(s)); t != "" && t != "null" && t != "[]" && t != `""` {
+			return 400, `{"code":"Client specified an invalid argument","error":"Model grok-4.7 does not support parameter stop."}`
+		}
+	}
+	return 0, ""
+}
+
+// providerAt is a server whose fake provider is p, its requests dialled
+// to up whatever host p's bases name.
+func providerAt(t *testing.T, up *httptest.Server, p provider.Provider) *Server {
+	t.Helper()
+	p.ID, p.Name, p.Key, p.Models = "fake", "Fake", "k", []string{"grok-4.7"}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	addr := strings.TrimPrefix(up.URL, "http://")
+	s.client = &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}}}
+	return s
+}
+
+func xaiChatOK(t *testing.T) *fake {
+	return &fake{t: t, reply: sse(
+		`data: {"id":"c1","object":"chat.completion.chunk","model":"grok-4.7","choices":[{"index":0,"delta":{"role":"assistant","content":"<block>no"},"finish_reason":null}]}`,
+		`data: {"id":"c1","object":"chat.completion.chunk","model":"grok-4.7","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":3,"total_tokens":12}}`,
+		`data: [DONE]`)}
+}
+
+// Claude Code's auto-mode classifier asks with stop_sequences
+// ["</block>"], which xAI's Messages turns away (#3392, guqing): relayed
+// to api.x.ai the list goes, and the ask is answered.
+func TestXAIDropsClaudeCodesStopSequences(t *testing.T) {
+	f := xaiMessagesOK(t)
+	f.refuse = xaiRefusesStop
+	up := setup(t, provider.Anthropic, f)
+	s := providerAt(t, up, provider.Provider{Anthropic: "http://api.x.ai"})
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(autoModeAsk("fake/grok-4.7"))))
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if bytes.Contains(f.got, []byte(`stop_sequences`)) {
+		t.Errorf("stop_sequences went to xAI: %s", f.got)
+	}
+	if !bytes.Contains(f.got, []byte(`Action: Bash rm -rf build/`)) || !strings.Contains(rec.Body.String(), "ok") {
+		t.Errorf("the ask or its answer lost on the way: %s\n%s", f.got, rec.Body)
+	}
+}
+
+// The same ask translated to xAI's chat goes without its stop, and a chat
+// client's own stop, a string or a list, goes too.
+func TestXAIChatGoesWithoutStop(t *testing.T) {
+	f := xaiChatOK(t)
+	f.refuse = xaiRefusesStop
+	up := setup(t, provider.Chat, f)
+	s := providerAt(t, up, provider.Provider{Chat: "http://api.x.ai/v1"})
+	for name, req := range map[string]struct{ path, body string }{
+		"translated":  {"/v1/messages", autoModeAsk("fake/grok-4.7")},
+		"chat list":   {"/v1/chat/completions", `{"model":"fake/grok-4.7","stream":true,"stop":["</block>"],"messages":[{"role":"user","content":"hi"}]}`},
+		"chat string": {"/v1/chat/completions", `{"model":"fake/grok-4.7","stream":true,"stop":"</block>","messages":[{"role":"user","content":"hi"}]}`},
+	} {
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", req.path, strings.NewReader(req.body)))
+		if rec.Code != 200 || f.path != "/v1/chat/completions" {
+			t.Errorf("%s: %d %s at %q", name, rec.Code, rec.Body, f.path)
+			continue
+		}
+		if bytes.Contains(f.got, []byte(`"stop"`)) || bytes.Contains(f.got, []byte(`</block>`)) && !bytes.Contains(f.got, []byte(`Answer <block>`)) {
+			t.Errorf("%s: a stop went to xAI: %s", name, f.got)
+		}
+	}
+}
+
+// Stop sequences are xAI's to lose alone: another upstream gets the
+// classifier's ["</block>"], and xaiBody leaves an empty list and
+// Responses' body as they came.
+func TestStopKeptOffXAI(t *testing.T) {
+	f := xaiMessagesOK(t)
+	up := setup(t, provider.Anthropic, f)
+	s := providerAt(t, up, provider.Provider{Anthropic: "http://api.anthropic-like.example"})
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(autoModeAsk("fake/grok-4.7"))))
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if !bytes.Contains(f.got, []byte(`"stop_sequences":["</block>"]`)) {
+		t.Errorf("another upstream lost the stop sequences: %s", f.got)
+	}
+	x := provider.Provider{ID: "fake", Anthropic: "https://api.x.ai", Chat: "https://api.x.ai/v1"}
+	for _, b := range []string{`{"model":"grok-4.7","stop_sequences":[],"messages":[]}`, `{"model":"grok-4.7","stop":"","messages":[]}`} {
+		proto := provider.Anthropic
+		if strings.Contains(b, `"stop":`) {
+			proto = provider.Chat
+		}
+		if got := xaiBody(x, proto, []byte(b)); string(got) != b {
+			t.Errorf("an empty stop was written over: %s", got)
+		}
+	}
+}
