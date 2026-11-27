@@ -35,9 +35,7 @@ window.keyEdit = (row, p, k, name) => {
 
 function balanceAuth(p, k, cancel) {
   const a = k.balanceAuth, who = k.name || k.masked;
-  const box = el("details", "more key-bal-auth");
-  box.open = !!a;
-  box.append(el("summary", "", t("Advanced")));
+  const [box, inner] = advFold({ cls: "key-bal-auth", editor: true, open: !!a });
   const user = input(a?.user || "", t("User ID"));
   user.inputMode = "numeric";
   user.setAttribute("aria-label", t("User ID"));
@@ -52,14 +50,12 @@ function balanceAuth(p, k, cancel) {
   };
   save.onclick = go;
   for (const f of [user, tok]) f.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") go(); else if (e.key === "Escape") cancel(); };
-  const inner = el("div", "inner");
   inner.append(user, tok, save);
   if (a) {
     const rm = el("button", "text quiet", t("Remove"));
     rm.onclick = () => accountAction("keys/balance", { id: p.id, ref: k.id, clear: true }, t("{key}'s balance is read as the provider's", { key: who }));
     inner.append(rm);
   }
-  box.append(inner);
   // a click on the fold's summary or buttons keeps the focus where it is,
   // so the key's box doesn't close under it; its fields take it
   box.onmousedown = (e) => e.target.closest("input") || e.preventDefault();

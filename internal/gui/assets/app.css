@@ -3325,7 +3325,6 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .acct-models .acm-foot .grow { flex: 0 0 0; }
 /* a key's own balance query, folded under its Change key box (keyedit.js) */
 .acc .key-bal-auth { flex-basis: 100%; padding: 2px 0 2px 25px; }
-.editor .acc .key-bal-auth summary { margin-left: 0; }
 .editor .acc .key-bal-auth .inner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 6px; }
 .editor .acc .key-bal-auth input { height: 24px; padding: 0 7px; font-size: 12.5px; width: 150px; min-width: 0; flex: 0 1 150px; }
 .editor .acc .key-bal-auth input[type="password"] { flex-basis: 220px; width: 220px; }
@@ -3877,7 +3876,6 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .proxy-form { gap: 8px; }
 .proxy-form .proxy-kind { flex: none; }
 .proxy-form .proxy-advanced { flex: 1 1 100%; min-width: 0; }
-.proxy-advanced summary { margin-left: 0; }
 .proxy-advanced .inner { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
 .proxy-advanced textarea.proxy-key { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 64px; padding: 6px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: inherit; font: 11.5px/1.45 var(--mono, ui-monospace, monospace); resize: vertical; outline: none; }
 .proxy-advanced textarea.proxy-key:focus { border-color: var(--accent); }
@@ -4072,21 +4070,6 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .link { font-size: 12px; color: var(--accent); padding: 3px 4px; white-space: nowrap; }
 .link:hover { text-decoration: underline; text-underline-offset: 2px; }
 .editor .more { grid-column: 1 / -1; }
-/* an editor's fold (Advanced, More endpoints) is a macOS disclosure: a
-   chevron at a readable 10px and its label in the form labels' colour, so it
-   reads as a control and not as a disabled hint (sylvenPR on X, a 5px ▸ in
-   the muted grey); a pointer and a brighter label under it. The chevron
-   starts where the fields do (--ed-at), no padding before it. */
-.editor .more summary, .proxy-advanced summary { font-size: 12px; line-height: 18px; color: var(--fg-2); list-style: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; margin-left: var(--ed-at, 86px); border-radius: 4px; cursor: pointer; transition: color .12s; }
-.editor .more summary::-webkit-details-marker, .proxy-advanced summary::-webkit-details-marker { display: none; }
-.editor .more summary::before, .proxy-advanced summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .24s var(--ease-out), background-color .12s;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
-          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
-.editor .more[open]:not(.closing) summary::before, .proxy-advanced[open] summary::before { transform: rotate(90deg); }
-@media (prefers-reduced-motion: reduce) { .editor .more summary, .editor .more summary::before, .proxy-advanced summary, .proxy-advanced summary::before { transition: none; } }
-.editor .more summary:hover, .proxy-advanced summary:hover { color: var(--fg); }
-.editor .more summary:hover::before, .proxy-advanced summary:hover::before { background: var(--fg-2); }
-.editor .more summary:focus-visible, .proxy-advanced summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* its labels are longer (Anthropic 地址, Responses-URL): their column takes
    the longest, on one line, rather than wrap a last 址 under it (#875) */
 .editor .more .inner { display: grid; grid-template-columns: minmax(var(--ed-lab, 72px), max-content) minmax(0, 1fr); gap: 10px 14px; align-items: first baseline; padding-top: 8px; }
@@ -5591,16 +5574,27 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 /* Claude Desktop's "largest window only" switch (#1272): its words beside it, the hint after them */
 .ag-longest, .ag-isolated, .ag-iso-claude { cursor: pointer; }
 .ag-longest-say, .ag-isolated-say, .ag-iso-claude-say { color: var(--fg-2); }
-/* the Claude Magpie app's own Claude Code folder (#6459), folded under Advanced */
-.ag-iso-more > summary, .prefs-more > summary { font-size: 12px; line-height: 18px; color: var(--fg-2); list-style: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; border-radius: 4px; cursor: pointer; transition: color .12s ease; }
-.ag-iso-more > summary::-webkit-details-marker, .prefs-more > summary::-webkit-details-marker { display: none; }
-.ag-iso-more > summary::before, .prefs-more > summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .2s cubic-bezier(.23, 1, .32, 1), background-color .12s ease;
+/* every fold advFold makes (Advanced, an editor's More endpoints) is a
+   macOS disclosure on a line of its own above what it folds: a block,
+   whatever else its classes meet (billion-context's took the toolbar's
+   inline-flex .lib-more, the owner 11-27), a chevron at a readable 10px
+   and its label in the form labels' colour (sylvenPR on X: a 5px ▸ in the
+   muted grey read as a disabled hint). An editor's starts where its fields
+   do (--ed-at, set by edAligned), no padding before it. */
+details.adv-fold { display: block; }
+.adv-fold > summary { font-size: 12px; line-height: 18px; color: var(--fg-2); list-style: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; border-radius: 4px; cursor: pointer; transition: color .12s ease; }
+.adv-fold > summary::-webkit-details-marker { display: none; }
+.adv-fold > summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .2s var(--ease-out), background-color .12s ease;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
           mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
-.ag-iso-more[open] > summary::before, .prefs-more[open] > summary::before { transform: rotate(90deg); }
-@media (hover: hover) and (pointer: fine) { .ag-iso-more > summary:hover, .prefs-more > summary:hover { color: var(--fg); } }
-.ag-iso-more > summary:focus-visible, .prefs-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .ag-iso-more > summary, .ag-iso-more > summary::before, .prefs-more > summary, .prefs-more > summary::before { transition: none; } }
+.adv-fold[open]:not(.closing) > summary::before { transform: rotate(90deg); }
+@media (hover: hover) and (pointer: fine) { .adv-fold > summary:hover { color: var(--fg); } .adv-fold > summary:hover::before { background: var(--fg-2); } }
+.adv-fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .adv-fold > summary, .adv-fold > summary::before { transition: none; } }
+.adv-fold.more > summary { margin-left: var(--ed-at, 0px); }
+/* the Claude Magpie app's own Claude Code folder (#6459), in its agent's line */
+.prefs-more.ag-iso-more { margin: 0; }
+.prefs-more.ag-iso-more > summary { margin-left: 0; }
 /* a settings page's rarely changed rows, folded under Advanced (the menu
    bar's currency, onkashiko on X) */
 .prefs-more { margin: 10px 0 0; }

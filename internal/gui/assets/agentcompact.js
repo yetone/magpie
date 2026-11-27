@@ -256,9 +256,7 @@ function ownFieldsFold(list, a) {
   const build = () => {
     if (!list.parentNode) return;
     list.parentNode.querySelector(":scope > .own-fields")?.remove();
-    const fold = el("details", "prefs-more own-fields");
-    const inner = el("div", "list prefs");
-    fold.append(el("summary", "", t("Advanced")), inner);
+    const [fold, inner] = advFold({ cls: "own-fields", inner: "list prefs" });
     if (pct) inner.append(pct);
     for (const f of own) {
       const label = f.label[0].toUpperCase() + f.label.slice(1);

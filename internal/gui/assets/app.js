@@ -8118,6 +8118,25 @@ function shown(x) {
   for (let d = x?.closest("details"); d; d = d.parentElement?.closest("details")) d.open = true;
   return x;
 }
+// advFold makes every Advanced fold, a page's and an editor's (the owner,
+// 11-27: 从根上避免这种垃圾布局; billion-context's had the toolbar's
+// .lib-more class, an inline-flex row, so its summary sat left of its
+// content). Its own block, its summary on a line above what it folds: on
+// a page a .list card as wide as the cards above; in an editor (editor)
+// an .inner grid starting where the fields do. open: a value isn't its
+// default, or the reader left it open; keep(open) is told when they fold
+// it. inner: the content's class, or false to add it oneself.
+function advFold({ cls = "", open, keep, editor, inner, label } = {}) {
+  const d = el("details", (editor ? "adv-fold more " : "adv-fold prefs-more ") + cls);
+  d.open = !!open;
+  if (keep && editor) d.onfold = keep;
+  else if (keep) d.ontoggle = () => keep(d.open);
+  if (editor) edAligned(d);
+  d.append(el("summary", "", label || t("Advanced")));
+  const body = inner !== false && el("div", inner || (editor ? "inner" : "list"));
+  if (body) d.append(body);
+  return [d, body];
+}
 // An editor's fold opens as an iOS disclosure: it and the dialog grow on one
 // spring, rows in one by one; at once with Reduce motion or for a Save
 // (shown). A click while it moves turns it back.
@@ -9777,13 +9796,8 @@ function drawEditor(p, presetID) {
     return field(t("Upstream"), ptk, t("Since 2026-11-06 Cline refuses a pinned DeepSeek or GLM request with 403, so magpie sends them unpinned and Cline picks the host; only glm-5.3-flash still asks Z.ai"));
   };
 
-  const adv = edAligned(el("details", "more advanced"));
-  adv.open = advanced && advanced.of === editing ? advanced.open : advancedSet(draft, p) || (custom && !!(draft.balanceURL || "").trim());
   const of = editing;
-  adv.onfold = (open) => { advanced = { of, open }; };
-  adv.append(el("summary", "", t("Advanced")));
-  const advIn = el("div", "inner");
-  adv.append(advIn);
+  const [adv, advIn] = advFold({ cls: "advanced", editor: true, open: advanced && advanced.of === editing ? advanced.open : advancedSet(draft, p) || (custom && !!(draft.balanceURL || "").trim()), keep: (open) => { advanced = { of, open }; } });
   // a plugin's panels for this provider (magpie.panels' provider), told
   // which: rows of the form, before Advanced
   const panels = p && magpie.slot?.("provider", { provider: { id: p.id, name: p.name || p.id } }) || "";
@@ -10461,9 +10475,7 @@ function drawEditor(p, presetID) {
   groupAdvanced(advIn);
 
   if (custom) {
-    const more = edAligned(el("details", "more"));
-    more.append(el("summary", "", t("More endpoints")));
-    const inner = el("div", "inner");
+    const [more, inner] = advFold({ editor: true, label: t("More endpoints") });
     // the other protocols' URLs, drawn again when the base URL's changes
     const eps = el("div");
     eps.style.display = "contents";
@@ -10535,7 +10547,6 @@ function drawEditor(p, presetID) {
       balPair.classList.add("wrap");
     }
     balSlot.append(...field(t("Balance field"), balPair, t("Where the amount is in the reply, e.g. data.balance; it can be a sum with + - * / and brackets, e.g. data.total / 500000 or (1 - credits.used / 70) %; \"$\" in front adds the sign, \"%\" after it shows a percent, with a bar; several, each with a label, go apart by \";\", e.g. 5h: a.used / a.cap %; $credits.left; a list's items are a.*.used, or a[status=active].used for those that match, put in sum(), max(), min() or count(); an amount the reply hasn't shows \"—\" and the others still show")));
-    more.append(inner);
     ed.append(more);
   }
 

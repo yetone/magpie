@@ -31,7 +31,29 @@ const QUOTAS = [
   { provider: "openrouter", name: "OpenRouter", icon: "openrouter", user: "key-b", windows: [], balance: "$9.50" },
 ];
 
-function server(lang) {
+// with folds: the Library's tabs that have an Advanced fold, each with
+// something in it (adv-fold-layout): billion-context's settings, Memory's
+// digest, a subagent and a rule to open in their editors
+const FOLD_LIB = {
+  hooks: [], hookAgents: [], commands: [], commandAgents: [], subagentModels: [],
+  subagents: [{ name: "reviewer", description: "Reviews a diff for bugs.", prompt: "Review the diff.", skills: [], mcp: [], agents: ["claude"] }],
+  subagentAgents: [{ id: "claude", dir: "/u/.claude/agents", skills: true, mcp: true }],
+  rules: [{ name: "api", paths: ["src/api/**"], body: "Keep handlers small.", agents: ["claude"], files: ["/u/.claude/rules/api.md"] }],
+  ruleAgents: [{ id: "claude", dir: "/u/.claude/rules", paths: true }],
+};
+const BILI = { path: "/u/.local/bin/bili", version: "0.1.213", url: "https://github.com/ranxianglei/billion-context", agents: [{ id: "claude", name: "Claude Code", icon: "", on: true }] };
+const BILI_SET = {
+  path: "/u/.config/billion-context/billion-context.json", growth: 0, nudge: false, summary: false, targets: [], recipes: ["claude/claude-haiku"],
+  philosophy: "", risk: false, markers: true, running: 1, models: [{ id: "gpt-5.4-mini", name: "GPT-5.4 mini", provider: "codex", providerName: "Codex" }],
+};
+const MEMORY = {
+  memories: [{ id: "m1", text: "Use pnpm, never npm, in this repo", kind: "rule", scope: "global", origin: "user", status: "active", created: "2026-11-01T10:00:00Z", updated: "2026-11-02T10:00:00Z" }],
+  projects: {}, digest: true, agents: ["claude"],
+};
+const DISTILL = { on: false, model: "", auto: "", running: false, efforts: [], effort: "", days: 0, ranges: [7, 30], models: [] };
+const SEMANTIC = { on: false, installed: false, size: 135137323, downloading: false, done: 0, read: 0, of: 0, reading: false };
+
+function server(lang, { folds } = {}) {
   const listings = [
     { package: RIVER, name: "River", providers: ["river"], community: true, github: { stars: 7, owner: "a" }, summary: { en: "River pay-as-you-go inference." } },
     { package: KILO, name: "Kilo Code", kind: "agent", community: true, github: { stars: 0, owner: "a" }, summary: { en: "Kilo Code on magpie's Agents page." } },
@@ -49,6 +71,7 @@ function server(lang) {
     instructions: { agents: [], sets: [] }, foundSkills: [], problems: [], foundServers: [], projects: [],
     skills: [{ name: "pdf", description: "Read and write PDF files.", agents: ["claude"] }],
     servers: [{ name: "notes", transport: "stdio", command: "uvx", args: ["notes-mcp"], agents: ["claude"] }],
+    ...(folds ? FOLD_LIB : {}),
   };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -67,6 +90,11 @@ function server(lang) {
     if (url.pathname === "/api/usage/requests") return json(ledger(url.searchParams.get("period")));
     if (url.pathname === "/api/usage") return json({ calls: 7, errors: 0, input: 23100, output: 859, cache_read: 0, cache_write: 0, reasoning: 0, cost: 0.004, unpriced: 0, accounts, callerKeys: [], agents, models, series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });
     if (url.pathname === "/api/library") return json(lib);
+    if (folds && url.pathname === "/api/library/bili") return json(BILI);
+    if (folds && url.pathname === "/api/library/bili/settings") return json(BILI_SET);
+    if (folds && url.pathname === "/api/memory") return json(MEMORY);
+    if (folds && url.pathname.startsWith("/api/memory/distill")) return json(DISTILL);
+    if (folds && url.pathname === "/api/memory/semantic") return json(SEMANTIC);
     if (url.pathname === "/api/library/mcp/check") return json({ servers: {} });
     if (url.pathname === "/api/plugins") return json(pstate);
     if (url.pathname === "/api/plugins/listings") return json({ listings });

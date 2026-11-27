@@ -1383,16 +1383,12 @@ magpie.plugin("library", (ctx) => {
     // summary is in the instructions: whether it gives each memory's why
     // (#7780). Open while it doesn't, or while the user keeps it open.
     if (mem.digest) {
-      const more = el("details", "prefs-more lib-memmore");
-      more.open = memMore || !!mem.digestOmitWhy;
-      more.ontoggle = () => { memMore = more.open; };
-      const list = el("div", "list lib-list");
+      const [more, list] = advFold({ cls: "lib-memmore", open: memMore || !!mem.digestOmitWhy, keep: (o) => { memMore = o; }, inner: "list lib-list" });
       const r = el("div", "row lib-row lib-memwhy");
       const w = el("div", "who");
       w.append(el("div", "name", t("Include reasons in summary")));
       r.append(glyph(GLYPH.rule), w, toggle(!mem.digestOmitWhy, t("Include reasons in summary"), (on) => memChange("memory/digest", { omitWhy: !on }, on ? t("Reasons are shown in the memories' summary") : t("Reasons are left out of the memories' summary"))));
       list.append(r);
-      more.append(el("summary", "", t("Advanced")), list);
       body.append(more);
     }
 
@@ -2205,21 +2201,20 @@ magpie.plugin("library", (ctx) => {
     row(t("Nudge every"), num, el("span", "note", t("tokens")));
     body.append(list);
 
-    const more = el("details", "lib-more lib-bili-more");
-    more.append(el("summary", "", t("Advanced")));
+    // one card under Advanced, as the Settings card above: the markers'
+    // row and the philosophy's, its words, note and Save inside the card
+    const [more, adv] = advFold({ cls: "lib-bili-more", open: biliMoreOpen, keep: (o) => { biliMoreOpen = o; }, inner: "list lib-list" });
     // compress.visibilityMarkers: the 📦/❌ lines after a fold, which
     // some models imitate (@JamesYu32 on X)
-    const marks = el("div", "list lib-list lib-bili-marks");
     const mk = toggle(s.markers !== false, t("Show compression markers"), (v) => biliChange({ markers: v }));
     mk.disabled = biliSetBusy;
-    const mr = el("div", "row lib-row");
+    const mr = el("div", "row lib-row lib-bili-marks");
     const mw = el("div", "who");
     mw.append(el("div", "name", t("Show compression markers")));
     mr.append(mw, el("span", "grow"), mk);
-    marks.append(mr);
-    more.append(marks);
-    const ph = el("div", "lib-bili-phil");
-    ph.append(el("div", "name", t("Compression philosophy")));
+    const ph = el("div", "row lib-row lib-bili-phil");
+    const pw = el("div", "who");
+    pw.append(el("div", "name", t("Compression philosophy")));
     const ta = el("textarea", "lib-text small");
     // what's typed outlives a redraw until it is saved
     ta.value = biliPhil ?? (s.philosophy || "");
@@ -2227,16 +2222,12 @@ magpie.plugin("library", (ctx) => {
     ta.placeholder = t("billion-context's own");
     ta.setAttribute("aria-label", t("Compression philosophy"));
     ta.disabled = biliSetBusy;
-    ph.append(ta, el("p", "lib-rtk-note", t("Replaces billion-context's guidance on what a fold keeps. Setting it also tells billion-context you accept the risk of changing its prompts.")));
     const acts = el("div", "lib-acts");
     const save = button(t("Save"), "action", () => ta.value.trim() !== (s.philosophy || "") && biliChange({ philosophy: ta.value }));
     save.disabled = biliSetBusy;
     acts.append(save);
-    ph.append(acts);
-    more.append(ph);
-    // open as it was across redraws
-    more.open = biliMoreOpen;
-    more.ontoggle = () => { biliMoreOpen = more.open; };
+    ph.append(pw, ta, el("p", "lib-rtk-note", t("Replaces billion-context's guidance on what a fold keeps. Setting it also tells billion-context you accept the risk of changing its prompts.")), acts);
+    adv.append(mr, ph);
     body.append(more);
     autosize(ta, 72);
   }
@@ -5724,14 +5715,10 @@ magpie.plugin("library", (ctx) => {
     // a file of the user's own, in a git repository say: rarely, so under
     // Advanced, open while it is
     if (!s?.bundle) {
-      const more = el("details", "more advanced lib-subagentmore");
-      more.open = !!d.file;
-      more.append(el("summary", "", t("Advanced")));
-      const inner = el("div", "inner");
+      const [more, inner] = advFold({ cls: "advanced lib-subagentmore", editor: true, open: !!d.file });
       own = field2(d.file, ownExample(), (v) => { d.file = v; });
       own.classList.add("mono", "lib-subagentownfile");
       inner.append(...field(t("Keep in a file of your own"), own, t("A Markdown file anywhere, in a git repository say. One there already is what the subagent says.")));
-      more.append(inner);
       ed.append(more);
     }
     ed.append(err);
@@ -6108,17 +6095,13 @@ magpie.plugin("library", (ctx) => {
     }
     if (files.childElementCount) ed.append(...field(t("Files"), files));
     // kept to some files: rarely, so under Advanced, open while it is
-    const more = el("details", "more advanced lib-rulemore");
-    more.open = !!d.paths;
-    more.append(el("summary", "", t("Advanced")));
-    const inner = el("div", "inner");
+    const [more, inner] = advFold({ cls: "advanced lib-rulemore", editor: true, open: !!d.paths });
     const paths = box("lib-rulepaths mono", d.paths, "src/api/**/*.ts", 2, 25000);
     const pathsHint = el("div", "hint lib-rulehint-paths");
     paths.oninput = () => { d.paths = paths.value; drawHint(); };
     const [ml, mw] = field(t("Only for files"), paths, t("One glob a line. Empty: read in every conversation"));
     mw.append(pathsHint);
     inner.append(ml, mw);
-    more.append(inner);
     ed.append(more, err);
     function drawHint() {
       const no = rulePaths(d.paths).length ? noRulePaths(all, d.agents) : [];

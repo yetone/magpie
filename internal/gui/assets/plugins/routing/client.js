@@ -6520,11 +6520,9 @@ function routingPage(part) {
   // provider alone serves is a found group too (realLemonawa on X), shown
   // while found groups are on
   const gOne = el("div", "rt-gone hint-row");
-  const gMore = el("details", "prefs-more rt-gmore");
+  const [gMore, gMoreList] = advFold({ cls: "rt-gmore", inner: "list rt-gset" });
   gMore.dataset.feature = "groups";
-  const gMoreList = el("div", "list rt-gset");
   gMoreList.append(gOne);
-  gMore.append(el("summary", "", t("Advanced")), gMoreList);
   gsec.append(gHead, gList, gOff, sHead, gSet, gMore, pHead, pList);
   // on the Routing groups page, a page of their own; Try again on it puts
   // them back in its markup made anew. With the groups off, that page's
@@ -7369,16 +7367,13 @@ function routingPage(part) {
       ed.append(...field(t("Link"), link));
     }
     // what goes out, read from magpie as Share would send it
-    const adv = edAligned(el("details", "more advanced"));
-    adv.append(el("summary", "", t("Advanced")));
-    const inner = el("div", "inner");
+    const [adv, inner] = advFold({ cls: "advanced", editor: true });
     const out = el("pre", "rt-gshare-json");
     const asText = el("button", "text", t("Copy as text"));
     asText.type = "button";
     asText.title = t("{name} as text to paste into another magpie: its models, routing and rules, no key", { name: g.name });
     asText.onclick = (e) => { e.stopPropagation(); copyAsText(g, null); };
     inner.append(el("div", "hint expl", t("What goes to usemagpie.ai: no key or account, and a provider you added yourself is named custom.")), out, asText);
-    adv.append(inner);
     adv.ontoggle = async () => {
       if (!adv.open || out.textContent) return;
       try { out.textContent = JSON.stringify((await api("groups/public", { id: g.id })).shared.group, null, 2); }
@@ -8987,13 +8982,8 @@ function routingPage(part) {
     // Advanced below the rules, as a provider's editor folds its own (the
     // owner: the form was too much at once). Open when one of them is set,
     // or as it was left while this group is being edited
-    const adv = edAligned(el("details", "more advanced rt-gadv"));
-    adv.open = gEdit.adv ?? !!(d.match.length || d.unlists || d.routing || d.sink === "sink" || d.sink === "" || d.firstToken || d.patience || d.context || d.compact || d.affinity || d.effort || d.classifyPrompt || d.levels?.length || d.keys.length || d.redact);
     const advOf = gEdit;
-    adv.onfold = (open) => { advOf.adv = open; };
-    adv.append(el("summary", "", t("Advanced")));
-    const advIn = el("div", "inner");
-    adv.append(advIn);
+    const [adv, advIn] = advFold({ cls: "advanced rt-gadv", editor: true, keep: (open) => { advOf.adv = open; }, open: gEdit.adv ?? !!(d.match.length || d.unlists || d.routing || d.sink === "sink" || d.sink === "" || d.firstToken || d.patience || d.context || d.compact || d.affinity || d.effort || d.classifyPrompt || d.levels?.length || d.keys.length || d.redact) });
     advIn.append(el("label", "", t("Patterns")), pw);
     // its models in the lists agents see too, or the group alone (#1783)
     const listHint = el("div", "hint", t(LIST_HINT[d.unlists ? "unlists" : ""])), listW = el("div");

@@ -182,11 +182,9 @@ function proxyFormRow(done) {
   r.append(kind, val);
   if (ssh) {
     // the key and the server's trusted host key: set by few, so folded
-    const adv = el("details", "more advanced proxy-advanced");
-    adv.open = !!f.adv;
+    // in a Settings row, not an editor: kept as it toggles
+    const [adv, inner] = advFold({ cls: "advanced proxy-advanced", editor: true, open: !!f.adv });
     adv.ontoggle = () => { f.adv = adv.open; };
-    adv.append(el("summary", "", t("Advanced")));
-    const inner = el("div", "inner");
     key = el("textarea", "words proxy-key");
     key.placeholder = f.hasKey ? t("A private key is saved; paste another to replace it") : t("Private key (instead of or with the password)");
     key.setAttribute("aria-label", t("Private key"));
@@ -206,7 +204,6 @@ function proxyFormRow(done) {
       }
       inner.append(hk);
     }
-    adv.append(inner);
     r.append(adv);
   }
   r.append(err);

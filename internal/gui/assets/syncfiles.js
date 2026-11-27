@@ -75,11 +75,8 @@ window.davForm = function (v) {
   si.onchange = siShow;
   const what = el("div", "stack");
   what.append(provL, keysL, setL, agentsL, libL, memL);
-  const adv = el("details", "more advanced sync-advanced");
-  adv.open = v.profiles === false || !!v.usage || !!v.signIns || !!v.providerSettingsHere;
-  const advIn = el("div", "stack");
+  const [adv, advIn] = advFold({ cls: "advanced sync-advanced", editor: true, inner: "stack", open: v.profiles === false || !!v.usage || !!v.signIns || !!v.providerSettingsHere });
   advIn.append(ownL, profL, useL, siL, exL, siSay, el("div", "hint", t("Usage goes as a file a day: times, tokens, models and costs, never what was said. Turn it on on each computer that shares its own.")));
-  adv.append(el("summary", "", t("Advanced")), advIn);
   const davFields = [...field(t("Address"), url, t("A folder named magpie is made in it.")),
     ...field(t("User"), user),
     ...field(t("Password"), pass)];

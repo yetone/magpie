@@ -16,9 +16,7 @@ window.pmFolder = function (row, score, m, act) {
   if (row.parentNode.lastElementChild !== box) row.parentNode.append(box);
   let d = box.querySelector("details.pm-adv");
   if (!d) {
-    d = el("details", "prefs-more pm-adv");
-    d.ontoggle = () => { pmFolderOpen = d.open; };
-    d.append(el("summary", "", t("Advanced")));
+    [d] = advFold({ cls: "pm-adv", keep: (o) => { pmFolderOpen = o; }, inner: false });
   }
   d.open = pmFolderOpen || !!m.folderSet || !!m.moving || !!m.moveError;
   const r = el("div", "row pref pm-folder");
