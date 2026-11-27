@@ -73,6 +73,10 @@ const ROOM = /^[a-z0-9][a-z0-9_.-]{0,47}$/;
 const BAR = "~";
 const MAX_SOCKETS = 1000; // a share's open pages
 const MAX_VIEWER_SOCKETS = 20; // one signed-in viewer's
+// one address's (a /64 for IPv6), signed in or not: a viewer with no
+// name has no id to count by, so without it one machine could fill a
+// share's MAX_SOCKETS and keep everyone else out
+const MAX_PLACE_SOCKETS = 50;
 const CORS = { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
 
 const LIVE_SCHEMA = [
@@ -179,6 +183,21 @@ function stub(env, id) {
 }
 
 // toLive is a request to the share's object at path, as viewer, with caps
+// placeOf is who a socket comes from, for counting: a hash of the
+// address Cloudflare saw, an IPv6 one by its /64 (one machine holds a
+// whole /64), "" when there is none
+export async function placeOf(req) {
+  let ip = (req.headers.get("CF-Connecting-IP") || "").trim().toLowerCase();
+  if (!ip) return "";
+  if (ip.includes(":")) {
+    const [head, tail = ""] = ip.split("::");
+    const h = head ? head.split(":") : [], t = tail ? tail.split(":") : [];
+    const all = ip.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : h;
+    ip = all.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":") + "::/64";
+  }
+  return (await sha256("magpie-live:" + ip)).slice(0, 24);
+}
+
 function toLive(env, id, path, { viewer, caps, body, headers = {}, method = "POST" } = {}) {
   const h = new Headers(headers);
   // a header carries Latin-1 only, and a name or a rule may hold any text
@@ -322,7 +341,7 @@ export async function api(req, env, ctx, now = Date.now()) {
     if (!c) return rtError(401, "expired", "the session ended; open the page again");
     // a signed-in viewer is in the bar's room on any page
     if (!live(caps) && !c.v) return rtError(403, "not_granted", "the page declares none of db, room and user");
-    return toLive(env, id, "live", { method: "GET", viewer: { id: c.v, name: c.n, level: c.l, guest: !!c.g, exp: c.e }, caps, headers: { Upgrade: "websocket" } });
+    return toLive(env, id, "live", { method: "GET", viewer: { id: c.v, name: c.n, level: c.l, guest: !!c.g, exp: c.e, at: await placeOf(req) }, caps, headers: { Upgrade: "websocket" } });
   }
   if (req.method !== "POST") return rtError(405, "invalid_argument", "POST");
   const b = await bodyOf(req);
@@ -463,16 +482,22 @@ export class ShareLive {
   }
 
   open(viewer) {
+    this.sweep(Date.now());
     if (this.ctx.getWebSockets().length >= MAX_SOCKETS) return json({ error: { code: "limit_reached", message: `a shared page is open in ${MAX_SOCKETS} places at most` } }, 429);
     if (viewer.id && this.ctx.getWebSockets("v:" + viewer.id).length >= MAX_VIEWER_SOCKETS)
       return json({ error: { code: "limit_reached", message: `one viewer has a page open in ${MAX_VIEWER_SOCKETS} places at most` } }, 429);
+    if (viewer.at && this.ctx.getWebSockets("at:" + viewer.at).length >= MAX_PLACE_SOCKETS)
+      return json({ error: { code: "limit_reached", message: `the page is open ${MAX_PLACE_SOCKETS} times from here already` } }, 429);
     return new Response(null, { status: 101, webSocket: this.accept(viewer) });
   }
   // accept takes a page's socket, and answers the page's end of it
   accept(viewer) {
     const pair = new WebSocketPair();
     const sid = viewerID();
-    this.ctx.acceptWebSocket(pair[1], viewer.id ? [sid, "v:" + viewer.id] : [sid]);
+    const tags = [sid];
+    if (viewer.id) tags.push("v:" + viewer.id);
+    if (viewer.at) tags.push("at:" + viewer.at);
+    this.ctx.acceptWebSocket(pair[1], tags);
     pair[1].serializeAttachment({ sid, id: viewer.id || "", n: cleanName(viewer.name), o: viewer.level >= LEVEL.owner, level: viewer.level | 0, guest: !!viewer.guest, exp: viewer.exp || 0 });
     pair[1].send(JSON.stringify({ t: "hi", sid }));
     return pair[0];
@@ -659,6 +684,19 @@ export class ShareLive {
     ws.send(JSON.stringify({ t: "joined", ref, room, peers }));
   }
 
+  // sweep closes the sockets whose session ended: a quiet one sends
+  // nothing, so webSocketMessage never finds it expired, and it would
+  // count against the limits for good
+  sweep(now) {
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = ws.deserializeAttachment();
+      if (!a || !a.exp || a.exp >= now) continue;
+      try {
+        ws.close(4002, "expired");
+      } catch {}
+      this.gone(ws);
+    }
+  }
   async webSocketClose(ws) {
     this.gone(ws);
   }

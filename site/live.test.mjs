@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { api as shareAPI, page } from "./shares.js";
-import { api, ShareLive, mint, claimsOf, TOKEN_TTL } from "./live.js";
+import { api, ShareLive, mint, claimsOf, TOKEN_TTL, placeOf } from "./live.js";
 import { LEVEL } from "./livedb.js";
 import { bucket } from "./r2stub.mjs";
 import { d1 } from "./d1stub.mjs";
@@ -516,6 +516,46 @@ test("live: a name in any script reaches the share's object", async () => {
   const vs = await session(s, sh.id, { visitor: v.key });
   const r = await db(s, sh.id, vs.token, { op: "set", path: "votes/" + v.id, data: { pick: "b" } });
   assert.equal(r.status, 200, await r.clone().text());
+});
+
+test("live: one place's sockets are bounded, a viewer with no name too, and a quiet socket's session ends", async () => {
+  const s = setup();
+  const sh = await share(s);
+  s.env.LIVE.get(sh.id);
+  const obj = s.env.LIVE.objs.get(sh.id);
+  const now = Date.now();
+  const anon = (at, exp = now + 6e4) => ({ id: "", name: "", level: LEVEL.view, guest: false, exp, at });
+  // the socket is taken before the 101 is made, which node's Response refuses
+  const tryOpen = (v) => {
+    try {
+      return obj.open(v).status;
+    } catch {
+      return 101;
+    }
+  };
+  for (let i = 0; i < 50; i++) obj.accept(anon("p1"));
+  const r = obj.open(anon("p1"));
+  assert.equal(r.status, 429, "a 51st socket from one place, no name to count by");
+  assert.equal((await r.json()).error.code, "limit_reached");
+  assert.equal(tryOpen(anon("p2")), 101, "another place still gets in");
+  assert.equal(obj.ctx.getWebSockets("at:p2").length, 1);
+  // sessions that ended while their sockets stayed quiet are closed on the next open
+  const old = [];
+  for (let i = 0; i < 50; i++) old.push(obj.accept(anon("p3", now - 1)));
+  assert.equal(tryOpen(anon("p3")), 101);
+  assert.ok(old.every((ws) => ws.closed?.code === 4002), "every expired socket closed");
+  assert.equal(obj.ctx.getWebSockets("at:p3").length, 1);
+  // the place: an address, an IPv6 one by its /64, in any spelling
+  const at = (ip) => placeOf(req("GET", "/", { ip }));
+  assert.equal(await at("2001:db8:1:2::1"), await at("2001:0db8:0001:0002:ffff:0:0:2"));
+  assert.notEqual(await at("2001:db8:1:2::1"), await at("2001:db8:1:3::1"));
+  assert.notEqual(await at("198.51.100.7"), await at("198.51.100.8"));
+  assert.equal(await at(""), "");
+  // the route counts by it
+  const v = await session(s, sh.id);
+  const r2 = await call(s, `/api/shares/${sh.id}/rt/live?t=${encodeURIComponent(v.token)}`, { method: "GET", ip: "203.0.113.9", headers: { Upgrade: "websocket" } }).catch(() => null);
+  assert.ok(obj.ctx.getWebSockets("at:" + (await at("203.0.113.9"))).length === 1, "the socket the route took is counted by its address");
+  void r2;
 });
 
 test("live: a page asking only who is viewing is live", async () => {
