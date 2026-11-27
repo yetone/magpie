@@ -2549,7 +2549,10 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 	// counted, and not at all where there are none
 	wires := sync.OnceValue(func() map[string]string { return settings.Shared().Wires() })
 	for i, c := range counts {
-		res, err := s.forward(r.Context(), c.p, provider.Anthropic, "/v1/messages/count_tokens", rewriteModel(body, provider.UpstreamNameAsIn(wires(), c.p.ID, model, c.p.SentIDAt(model, sentEffortIf(c.p, model, provider.Anthropic, body)))), r.Header)
+		// xAI's own API checks the tools and messages counted as it
+		// checks a turn's (xai_body.go, #3392)
+		counted := xaiBody(c.p, provider.Anthropic, rewriteModel(body, provider.UpstreamNameAsIn(wires(), c.p.ID, model, c.p.SentIDAt(model, sentEffortIf(c.p, model, provider.Anthropic, body)))))
+		res, err := s.forward(r.Context(), c.p, provider.Anthropic, "/v1/messages/count_tokens", counted, r.Header)
 		if tooMany := (*errRPM)(nil); errors.As(err, &tooMany) {
 			break // its minute filled since: nobody rests, the estimate answers
 		}

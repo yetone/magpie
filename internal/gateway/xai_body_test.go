@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -323,5 +325,235 @@ func TestXaiBodyLeavesWhatItTakes(t *testing.T) {
 	xp := provider.Provider{ID: "fake", Chat: "https://api.x.ai/v1"}
 	if got := xaiBody(xp, provider.Chat, []byte(real)); !bytes.Equal(got, []byte(real)) {
 		t.Errorf("real required arrays changed: %s", got)
+	}
+}
+
+// xaiRefusesRequiredlessObjects refuses as xAI does past the null
+// (#3392, TwinsDestiny on v0.1.2557 and guqing on 0.1.4344, straight
+// against api.x.ai): an object schema node whose required is left out is
+// taken for null — {"type":"object","properties":{}} is turned away, the
+// same with "required":[] goes through.
+func xaiRefusesRequiredlessObjects(body []byte) (int, string) {
+	var q struct {
+		Tools []struct {
+			InputSchema json.RawMessage `json:"input_schema"`
+			Parameters  json.RawMessage `json:"parameters"`
+			Function    json.RawMessage `json:"function"`
+		} `json:"tools"`
+	}
+	json.Unmarshal(body, &q)
+	for _, t := range q.Tools {
+		for _, s := range []json.RawMessage{t.InputSchema, t.Parameters, t.Function} {
+			var v any
+			if json.Unmarshal(s, &v) == nil && objectWithoutRequired(v) {
+				return 400, xaiNullRequired
+			}
+		}
+	}
+	return 0, ""
+}
+
+// objectWithoutRequired says whether v holds a node of type object whose
+// required is no array — left out or null.
+func objectWithoutRequired(v any) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		if t["type"] == "object" {
+			if _, ok := t["required"].([]any); !ok {
+				return true
+			}
+		}
+		for k, child := range t {
+			if k == "default" || k == "enum" || k == "const" || k == "examples" {
+				continue // data, not a schema
+			}
+			if objectWithoutRequired(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range t {
+			if objectWithoutRequired(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// xaiMessagesOK is a Messages stream xAI answers a turn with.
+func xaiMessagesOK(t *testing.T) *fake {
+	return &fake{t: t, reply: sse(
+		`event: message_start`+"\n"+`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"grok-4.7","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
+		`event: content_block_delta`+"\n"+`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`,
+		`event: content_block_stop`+"\n"+`data: {"type":"content_block_stop","index":0}`,
+		`event: message_delta`+"\n"+`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`,
+		`event: message_stop`+"\n"+`data: {"type":"message_stop"}`)}
+}
+
+// anthropicAt is a server whose fake provider's Messages base is base, its
+// requests dialled to up whatever host base names.
+func anthropicAt(t *testing.T, up *httptest.Server, base string) *Server {
+	t.Helper()
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"grok-4.7"}, Anthropic: base}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	addr := strings.TrimPrefix(up.URL, "http://")
+	s.client = &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}}}
+	return s
+}
+
+// claudeCode2327Turn is a turn of Claude Code 2.1.327 with its tools as it
+// sent them, byte for byte (testdata, captured from the real binary
+// against a recording upstream): CronList's schema is
+// {"type":"object","properties":{},"additionalProperties":false}, and
+// TaskStop, ListAgents, ScheduleWakeup, Workflow and EnterWorktree leave
+// required out at their root too.
+func claudeCode2327Turn(t *testing.T) (body, tools []byte) {
+	t.Helper()
+	tools, err := os.ReadFile(filepath.Join("testdata", "claude-code-2.1.327-tools.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = []byte(`{"model":"fake/grok-4.7","messages":[{"role":"user","content":[{"type":"text","text":"remove the old dir"}]}],"system":[{"type":"text","text":"You are Claude Code, Anthropic's official CLI for Claude."}],"tools":` + string(tools) + `,"max_tokens":64000,"stream":true}`)
+	return body, tools
+}
+
+const cronListSchema = `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{},"additionalProperties":false}`
+
+// #3392's round after the null fix: Claude Code to xAI still 400ed
+// "/required: null is not of type \"array\"" with no null in the body,
+// for its no-argument tools leave required out and xAI takes that as the
+// null. Every such object goes out with "required": []; a real array
+// stays as it came, and the rest of the body keeps its bytes.
+func TestXAIFillsClaudeCodesLeftOutRequired(t *testing.T) {
+	f := xaiMessagesOK(t)
+	f.refuse = xaiRefusesRequiredlessObjects
+	up := setup(t, provider.Anthropic, f)
+	s := anthropicAt(t, up, "http://api.x.ai")
+	body, _ := claudeCode2327Turn(t)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", bytes.NewReader(body)))
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	var q struct {
+		Tools []struct {
+			Name        string `json:"name"`
+			InputSchema struct {
+				Required json.RawMessage `json:"required"`
+			} `json:"input_schema"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(f.got, &q); err != nil {
+		t.Fatal(err)
+	}
+	if len(q.Tools) != 21 {
+		t.Fatalf("xAI got %d tools, Claude Code sent 21", len(q.Tools))
+	}
+	for _, tl := range q.Tools {
+		want := `[]`
+		if tl.Name == "Bash" {
+			want = `["command"]`
+		}
+		if tl.Name == "Bash" || tl.Name == "CronList" || tl.Name == "TaskStop" || tl.Name == "Workflow" {
+			if got := string(tl.InputSchema.Required); got != want {
+				t.Errorf("%s's required went as %s, want %s", tl.Name, got, want)
+			}
+		}
+	}
+	if !bytes.Contains(f.got, []byte(`"messages":[{"role":"user","content":[{"type":"text","text":"remove the old dir"}]}]`)) {
+		t.Errorf("the messages didn't keep their bytes: %.400s", f.got)
+	}
+}
+
+// The objects an MCP server's schema nests: in a property, a union's
+// branch, an items schema, a tuple's, $defs — left out or null, each gets
+// its []. A null required on a node that is no object goes, and a
+// default or an enum holding an object's shape is data, left as it came.
+func TestXAIFillsNestedObjectsRequired(t *testing.T) {
+	f := xaiMessagesOK(t)
+	f.refuse = xaiRefusesRequiredlessObjects
+	up := setup(t, provider.Anthropic, f)
+	s := anthropicAt(t, up, "http://api.x.ai")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"fake/grok-4.7","stream":true,"max_tokens":128000,
+	"tools":[{"name":"Bash","description":"Run a command","input_schema":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}},
+		{"name":"mcp__s__plan","description":"Plan","input_schema":{"type":"object","properties":{"plan":{"type":"object","properties":{}}},"required":null}},
+		{"name":"mcp__s__find","description":"Find","input_schema":{"type":"object","properties":{"filter":{"anyOf":[{"type":"object","properties":{"id":{"type":"string"}}},{"type":"string","required":null}]},"rows":{"type":"array","items":{"type":["object","null"],"properties":{"k":{"type":"string"}}}},"pair":{"type":"array","prefixItems":[{"$ref":"#/$defs/pt"}]}},"$defs":{"pt":{"type":"object","properties":{"x":{"type":"number"}}}},"required":["filter"]}},
+		{"name":"mcp__s__opts","description":"Opts","input_schema":{"type":"object","properties":{"opts":{"type":"object","default":{"type":"object"},"enum":[{"type":"object"}]}},"required":[]}}],
+	"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}]}`)))
+	if rec.Code != 200 {
+		t.Fatalf("%d %s\nxAI got %s", rec.Code, rec.Body, f.got)
+	}
+	if bytes.Contains(f.got, []byte(`"required":null`)) {
+		t.Errorf("null required left: %s", f.got)
+	}
+	// plan's root and its plan, filter's object branch, rows' items, $defs' pt, opts
+	if n := bytes.Count(f.got, []byte(`"required":[]`)); n != 7 {
+		t.Errorf("%d required:[] where 6 nodes left theirs out and opts' root had one: %s", n, f.got)
+	}
+	for _, said := range []string{`"required":["command"]`, `"required":["filter"]`, `"default":{"type":"object"}`, `"enum":[{"type":"object"}]`} {
+		if !bytes.Contains(f.got, []byte(said)) {
+			t.Errorf("xAI's schemas lost %s: %s", said, f.got)
+		}
+	}
+}
+
+// The other two shapes a tool schema leaves magpie in are filled alike:
+// chat's function.parameters and Responses' parameters.
+func TestXaiBodyFillsALeftOutRequiredInEveryShape(t *testing.T) {
+	p := provider.Provider{ID: "fake", Chat: "https://api.x.ai/v1", Responses: "http://api.x.ai/v1"}
+	chat := `{"model":"fake/grok-4.7","tools":[{"type":"function","function":{"name":"CronList","parameters":` + cronListSchema + `}}],"messages":[]}`
+	if got := xaiBody(p, provider.Chat, []byte(chat)); !bytes.Contains(got, []byte(`"required":[]`)) {
+		t.Errorf("chat shape kept its left-out required: %s", got)
+	}
+	responses := `{"model":"fake/grok-4.7","tools":[{"type":"function","name":"TaskStop","parameters":{"type":"object"}}],"input":[]}`
+	if got := xaiBody(p, provider.Responses, []byte(responses)); !bytes.Contains(got, []byte(`"required":[]`)) {
+		t.Errorf("responses shape kept its left-out required: %s", got)
+	}
+}
+
+// Another upstream gets Claude Code's tools as it sent them, CronList's
+// left-out required too: the filling is xAI's alone.
+func TestOtherUpstreamGetsClaudeCodesToolsAsSent(t *testing.T) {
+	f := xaiMessagesOK(t)
+	up := setup(t, provider.Anthropic, f)
+	s := anthropicAt(t, up, "http://api.anthropic-like.example")
+	body, tools := claudeCode2327Turn(t)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", bytes.NewReader(body)))
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if !bytes.Contains(f.got, tools) {
+		t.Errorf("another upstream's tools were changed: %.600s", f.got)
+	}
+	if !bytes.Contains(f.got, []byte(cronListSchema)) {
+		t.Errorf("CronList's schema changed for another upstream: %.600s", f.got)
+	}
+}
+
+// Claude Code counts a turn's tokens with the same tools, and xAI's
+// count_tokens is sent them filled as the turn is.
+func TestXAICountTokensFillsRequired(t *testing.T) {
+	f := &fake{t: t, ctype: "application/json", reply: `{"input_tokens":5}`}
+	f.refuse = xaiRefusesRequiredlessObjects
+	up := setup(t, provider.Anthropic, f)
+	s := anthropicAt(t, up, "http://api.x.ai")
+	body, _ := claudeCode2327Turn(t)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(body)))
+	if rec.Code != 200 || f.path != "/v1/messages/count_tokens" {
+		t.Fatalf("%d %s at %q", rec.Code, rec.Body, f.path)
+	}
+	if !strings.Contains(rec.Body.String(), `"input_tokens":5`) {
+		t.Errorf("count not xAI's: %s", rec.Body)
+	}
+	if bytes.Contains(f.got, []byte(cronListSchema)) {
+		t.Errorf("CronList went to xAI's count without its required: %.600s", f.got)
 	}
 }

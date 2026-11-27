@@ -3,6 +3,9 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
+
+	"github.com/tidwall/gjson"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -20,24 +23,27 @@ import (
 //     them GA), which xAI's Messages answers "Invalid request content:
 //     Invalid message role." (#3392: every claude call 400ed) — each folds
 //     into the top-level system, the only place it takes the role.
-//   - A tool's schema can say "required": null where none are (Claude
-//     Code's tools, an MCP server's among them — Anthropic's API takes
-//     it), which xAI answers "Invalid request content: Schema validation
-//     failed: [standard_violation] /required: null is not of type
-//     \"array\"" (#3392: the claude calls 400ed after the system-turn
-//     fix) — the key goes, null says none.
+//   - A tool's object schema can say "required": null where none are
+//     (an MCP server's — Anthropic's API takes it) or leave the key out
+//     (Claude Code's CronList, TaskStop, ListAgents, Workflow…), and xAI
+//     answers both "Invalid request content: Schema validation failed:
+//     [standard_violation] /required: null is not of type \"array\""
+//     (#3392: TwinsDestiny and guqing, straight against api.x.ai:
+//     {"type":"object","properties":{}} is refused, the same with
+//     "required":[] taken) — every object node gets an empty array.
 //
 // The relay and the translation shape alike: a refusal of custom tools
 // puts a Codex request on the translated path from the next turn on
 // (custom_tool.go), and there is nothing to learn from either answer —
-// xAI takes no null content, no system turn and no null required at all.
+// xAI takes no null content, no system turn and no object schema without
+// its required at all.
 
 // xaiBody shapes body as xAI's own API takes it on proto.
 func xaiBody(p provider.Provider, proto provider.Protocol, body []byte) []byte {
 	if p.VendorHost() != "api.x.ai" {
 		return body
 	}
-	body = withoutNullToolRequired(body)
+	body = toolsRequiredFilled(body)
 	switch proto {
 	case provider.Responses:
 		return withoutNullReasoningContent(body)
@@ -145,77 +151,116 @@ func systemTurnsFolded(body []byte) []byte {
 	return out
 }
 
-// withoutNullToolRequired is a body whose tool schemas carry no null
-// required (#3392). xAI validates each tool's schema as a JSON Schema
-// and refuses the null at its root or anywhere nested; a client's wire
-// puts it there where none are required (Anthropic's API takes it). The
-// schemas are found under every shape a body leaves magpie in:
+// toolsRequiredFilled is a body whose tool schemas give every object node
+// its required (#3392). xAI validates each tool's schema and takes a
+// required left out as null, refusing both; Claude Code leaves it out on
+// the tools that take no arguments, and an MCP server's schema can say
+// null. The schemas are found under every shape a body leaves magpie in:
 // input_schema (Anthropic), parameters (Responses) and function's
-// parameters (chat).
-func withoutNullToolRequired(body []byte) []byte {
-	if !bodyHas(body, `"tools"`) || !bodyHas(body, `"required"`) {
+// parameters (chat). Only the tools array is written again: the rest of
+// the body keeps its bytes, and a body whose objects all carry their
+// required keeps all of them.
+func toolsRequiredFilled(body []byte) []byte {
+	if !bodyHas(body, `"tools"`) {
 		return body
 	}
-	dec := json.NewDecoder(bytes.NewReader(body))
+	r := gjson.GetBytes(body, "tools")
+	if !r.IsArray() {
+		return body
+	}
+	dec := json.NewDecoder(strings.NewReader(r.Raw))
 	dec.UseNumber()
-	var m map[string]any
-	if dec.Decode(&m) != nil || m == nil {
+	var tools []any
+	if dec.Decode(&tools) != nil {
 		return body
 	}
 	dirty := false
-	tools, _ := m["tools"].([]any)
 	for _, t := range tools {
 		tm, _ := t.(map[string]any)
 		if tm == nil {
 			continue
 		}
 		for _, k := range []string{"parameters", "input_schema"} {
-			if dropNullRequired(tm[k]) {
-				dirty = true
-			}
+			dirty = fillRequired(tm[k]) || dirty
 		}
 		if fm, _ := tm["function"].(map[string]any); fm != nil {
-			if dropNullRequired(fm["parameters"]) {
-				dirty = true
-			}
+			dirty = fillRequired(fm["parameters"]) || dirty
 		}
 	}
 	if !dirty {
 		return body
 	}
-	out, err := marshalPlain(m)
+	out, err := marshalPlain(tools)
 	if err != nil {
 		return body
 	}
-	return out
+	return spliced(body, r, out)
 }
 
-// dropNullRequired deletes every "required": null in v, recursively —
-// through a schema's objects and its arrays alike, where a union's anyOf
-// branch or a tuple items holds one — and says whether it did; a real
-// array of names stays as it came.
-func dropNullRequired(v any) bool {
-	switch t := v.(type) {
-	case map[string]any:
-		dirty := false
-		if r, there := t["required"]; there && r == nil {
-			delete(t, "required")
+// Where a JSON Schema holds schemas of its own: a keyword's value is one,
+// or an array of them (subschemaKeys), or names each mapped to one
+// (subschemaMapKeys). Values elsewhere (a default, an enum, an example)
+// are data, and stay as they came.
+var (
+	subschemaKeys = [...]string{"items", "prefixItems", "additionalItems",
+		"additionalProperties", "unevaluatedItems", "unevaluatedProperties",
+		"contains", "propertyNames", "not", "if", "then", "else",
+		"anyOf", "oneOf", "allOf"}
+	subschemaMapKeys = [...]string{"properties", "patternProperties",
+		"$defs", "definitions", "dependentSchemas"}
+)
+
+// fillRequired gives each object node of schema v, at its root and
+// nested, a required of [] where it has none or a null one, and says
+// whether it changed anything. A real array of names stays as it came; a
+// null required on a node that is no object goes, as there it means
+// nothing.
+func fillRequired(v any) bool {
+	s, _ := v.(map[string]any)
+	if s == nil {
+		return false
+	}
+	dirty := false
+	if r, there := s["required"]; r == nil {
+		if ofTypeObject(s) {
+			s["required"] = []any{}
+			dirty = true
+		} else if there {
+			delete(s, "required")
 			dirty = true
 		}
-		for _, child := range t {
-			if dropNullRequired(child) {
-				dirty = true
+	}
+	for _, k := range subschemaKeys {
+		switch c := s[k].(type) {
+		case map[string]any:
+			dirty = fillRequired(c) || dirty
+		case []any:
+			for _, e := range c {
+				dirty = fillRequired(e) || dirty
 			}
 		}
-		return dirty
+	}
+	for _, k := range subschemaMapKeys {
+		m, _ := s[k].(map[string]any)
+		for _, e := range m {
+			dirty = fillRequired(e) || dirty
+		}
+	}
+	return dirty
+}
+
+// ofTypeObject says whether schema s is of type object: "object", or a
+// list of types that has it.
+func ofTypeObject(s map[string]any) bool {
+	switch t := s["type"].(type) {
+	case string:
+		return t == "object"
 	case []any:
-		dirty := false
-		for _, child := range t {
-			if dropNullRequired(child) {
-				dirty = true
+		for _, e := range t {
+			if e == "object" {
+				return true
 			}
 		}
-		return dirty
 	}
 	return false
 }
