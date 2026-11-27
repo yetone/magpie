@@ -26,7 +26,11 @@ func Niri() bool {
 // among the windows niri announces, made floating and moved there; it
 // still opens in the middle and slides up. A click on another window takes
 // niri's focus from it, and Wails' HideOnFocusLost closes it then.
-type NiriPanel struct {
+type NiriPanel struct{ panelClick }
+
+// panelClick is the click that is opening the panel, which a compositor's
+// watch reads as the panel appears.
+type panelClick struct {
 	mu    sync.Mutex
 	iconX int  // where the icon was clicked across its bar
 	known bool // whether iconX is known: not when `magpie panel` opened it
@@ -35,7 +39,7 @@ type NiriPanel struct {
 // Opening says the panel is about to open, from a click at x across the
 // tray's bar (the tray host's Activate(x, y)), or with x nil from anything
 // else, when it goes to the top right.
-func (p *NiriPanel) Opening(x *int) {
+func (p *panelClick) Opening(x *int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.known = x != nil
@@ -45,7 +49,7 @@ func (p *NiriPanel) Opening(x *int) {
 }
 
 // take is the click Opening was told of, once.
-func (p *NiriPanel) take() (x int, known bool) {
+func (p *panelClick) take() (x int, known bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	x, known = p.iconX, p.known
