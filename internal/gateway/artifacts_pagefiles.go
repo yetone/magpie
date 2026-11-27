@@ -13,13 +13,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/artifact"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A page's files (docs/subsystems/artifacts.md, "Files") are the files of
@@ -74,7 +74,7 @@ func filesPath(p string) (string, bool) {
 }
 
 // gitShort is the short (8.3) name Windows may give .git: GIT~1.
-var gitShort = regexp.MustCompile(`(?i)^git~[0-9]+$`)
+var gitShort = lazyre.New(`(?i)^git~[0-9]+$`)
 
 // gitPart is whether a path part names .git as a file system may open
 // it: in any case (macOS's and Windows' folders don't tell .GIT from
