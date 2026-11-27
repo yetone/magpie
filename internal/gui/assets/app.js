@@ -9196,23 +9196,10 @@ function holdModal(later) {
   m.addEventListener("pointerdown", (e) => { modalHold.touched = true; modalMark(e.target); }, true);
   m.addEventListener("keydown", () => { modalHold.touched = true; }, true);
   m.addEventListener("focusin", (e) => { if (!modalRefocus) modalMark(e.target); }, true);
-  // a scroll moves the marked element, not the dialog; one held low with
-  // its fields cut short takes the room above as they scroll
-  m.addEventListener("scroll", (e) => { modalClimb(e.target); modalMark(modalHold.at); }, true);
-}
-// A dialog held low rises as its fields scroll, its foot staying, to the room it needs.
-function modalClimb(body) {
-  const m = $("#modal"), d = m.firstElementChild;
-  if (!body?.classList?.contains("ebody") || body.parentElement?.parentElement !== d) return;
-  if (m.hidden || !m.classList.contains("held") || !modalHold.touched || modalHold.cap != null || modalHold.off <= 0) return;
-  const space = m.clientHeight - parseFloat(getComputedStyle(m).paddingTop) - parseFloat(getComputedStyle(m).paddingBottom);
-  const need = d.offsetHeight + body.scrollHeight - body.clientHeight;
-  const by = Math.min(modalHold.off - Math.max(0, (space - Math.min(need, space)) / 2), body.scrollTop);
-  if (by < 1) return;
-  modalHold.off -= by;
-  d.style.top = modalHold.off + "px";
-  d.style.maxHeight = modalHold.capSet = modalCap();
-  body.scrollTop -= by;
+  // a scroll moves the marked element, never the dialog: one held low with
+  // its fields cut short stays there, its fields scrolling (the owner,
+  // 11-27: a sheet rising as it was scrolled read as absurd)
+  m.addEventListener("scroll", () => { modalMark(modalHold.at); }, true);
 }
 function openModal(content, quiet) {
   const m = $("#modal"), d = m.firstElementChild;

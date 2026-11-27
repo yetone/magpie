@@ -6,9 +6,10 @@
 // label: the focus given back went to the first account's, and holding
 // that one instead of the pressed one let the pressed row move as the rows
 // above it grew. The pressed account's refresh stays where it was, and
-// keeps the focus. And a sheet pressed while short, then grown to the
-// window's foot, held low with its accounts cut to a few rows, rises into
-// the room above as they are scrolled, lifted by the scroll before them.
+// keeps the focus. A sheet pressed while short, then grown to the window's
+// foot, stays where it is as its accounts are scrolled, down and up: it
+// rose into the room above as they scrolled (9dd7aabca), and the owner
+// (11-27) read a sheet moving with the wheel as absurd.
 // In every language, wide, narrow and in a phone's browser, both engines.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -108,7 +109,7 @@ for (const [engine, browserType] of [["chromium", chromium], ["webkit", webkit]]
     }
   });
 
-  test(engine + ": a sheet pressed while short rises into the room as its accounts scroll", async (t) => {
+  test(engine + ": a sheet pressed while short stays where it is as its accounts scroll", async (t) => {
     const browser = await browserType.launch();
     t.after(() => browser.close());
     for (const [web, width] of sizes) for (const lang of langs) {
@@ -132,23 +133,23 @@ for (const [engine, browserType] of [["chromium", chromium], ["webkit", webkit]]
       const over = await body.evaluate((b) => b.scrollHeight - b.clientHeight);
       assert.ok(over > 200, `${engine} ${at}: the accounts outgrew the sheet (${over})`);
       assert.ok(Math.abs(low.top - short.top) <= 1, `${engine} ${at}: the press held the sheet (${short.top} → ${low.top})`);
-      // the scroll lifts the sheet with its accounts, its foot staying
+      // the wheel scrolls the accounts, down and up, and the sheet stays
       const row = page.locator('.editor .acc[data-account-id="u1@example.com"]');
-      const rowAt = await row.evaluate((r) => r.getBoundingClientRect().top);
-      await body.evaluate((b) => { b.scrollTop += 40; });
-      await page.waitForTimeout(150);
-      const rose = await d();
-      assert.ok(rose.top <= low.top - 39, `${engine} ${at}: the sheet rose as its accounts scrolled (${low.top} → ${rose.top})`);
-      assert.ok(Math.abs(rose.bottom - low.bottom) <= 1, `${engine} ${at}: its foot stayed (${low.bottom} → ${rose.bottom})`);
-      const rowNow = await row.evaluate((r) => r.getBoundingClientRect().top);
-      assert.ok(Math.abs(rowNow - (rowAt - 40)) <= 1, `${engine} ${at}: the accounts moved as scrolled (${rowAt} → ${rowNow})`);
-      assert.equal(await body.evaluate((b) => b.scrollTop), 0, `${engine} ${at}: the sheet rose before its accounts scrolled`);
-      // scrolled on, it takes the whole room it needs, centred no higher
-      await body.evaluate((b) => { b.scrollTop += 2000; });
-      await page.waitForTimeout(150);
-      const top = await d();
-      const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector("#modal")).paddingTop));
-      assert.ok(Math.abs(top.top - pad) <= 1, `${engine} ${at}: the sheet took the room above (top ${top.top}, padding ${pad})`);
+      const box = await body.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      for (const dy of [120, 120, -80, -80, 2000, -2000]) {
+        const rowAt = await row.evaluate((r) => r.getBoundingClientRect().top);
+        const was = await body.evaluate((b) => b.scrollTop);
+        await page.mouse.wheel(0, dy);
+        await page.waitForFunction((w) => document.querySelector(".editor .ebody").scrollTop !== w, was, { timeout: 2000 }).catch(() => {});
+        await page.waitForTimeout(150);
+        const now = await d();
+        assert.ok(Math.abs(now.top - low.top) <= 1 && Math.abs(now.bottom - low.bottom) <= 1, `${engine} ${at}: the sheet stayed as its accounts scrolled ${dy} (${low.top}–${low.bottom} → ${now.top}–${now.bottom})`);
+        const moved = (await body.evaluate((b) => b.scrollTop)) - was;
+        assert.ok(dy > 0 ? moved > 0 : moved < 0, `${engine} ${at}: the accounts scrolled ${dy} (by ${moved})`);
+        const rowNow = await row.evaluate((r) => r.getBoundingClientRect().top);
+        assert.ok(Math.abs(rowNow - (rowAt - moved)) <= 1, `${engine} ${at}: the accounts moved as scrolled (${rowAt} → ${rowNow}, by ${moved})`);
+      }
       assert.deepEqual(errors, [], `${engine} ${at}: page errors`);
       await context.close();
     }
