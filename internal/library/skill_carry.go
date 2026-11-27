@@ -170,6 +170,19 @@ func missing(c *CarriedSkill, s *Skill) {
 		return
 	}
 	for _, rel := range notIn(realDir(skillDir(s.Name)), s.Missing) {
+		// An older bundle could leave out installed dependencies as too
+		// large, but these are no longer part of the carried skill
+		parts := strings.Split(rel, "/")
+		installed := false
+		for i, name := range parts {
+			if fromInstall(name, i < len(parts)-1, false) {
+				installed = true
+				break
+			}
+		}
+		if installed {
+			continue
+		}
 		if _, ok := c.Files[rel]; !ok && !slices.Contains(c.Left, rel) {
 			c.Left = append(c.Left, rel)
 		}

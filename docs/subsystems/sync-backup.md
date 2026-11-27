@@ -710,6 +710,22 @@ status (`askPreviewRows` in syncfiles.js; `TestSyncSkillsBySourceAndLeftOut`,
 `sync-library-left.test.cjs`). A restore (`backup.Restore` through the
 restore and plan paths) doesn't record them yet.
 
+Skill and local plugin files carried by `readSkillsMax` leave dependency
+directories and Python bytecode on the computer that installed them
+(`#7952`, `fromInstall` in `skill_changed.go`): they use no file budget,
+appear in neither `Files` nor `Left`, and are omitted from Remote magpie's
+shared library too
+Lock files are kept because the skill may ship them and `npm ci` needs
+them to rebuild dependencies on another computer
+Old `Skill.Missing` records for installation files are no longer carried
+on as `Left`; source files and assets that exceeded the budget still are
+An unchanged skill keeps the receiving computer's local installation
+Replacing a changed skill retains the existing restore behavior; its
+dependencies may need installing again there
+`TestCarryLeavesInstalledFilesLocal`, `TestCarryInstalledFilesTakeNoBudget`,
+`TestCarryOldMissingInstalledFilesStayLocal` and
+`TestCarryPluginLeavesInstalledFilesLocal` exercise these cases
+
 ## Verification
 
 ```sh
