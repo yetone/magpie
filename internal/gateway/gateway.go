@@ -7471,7 +7471,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// vendor's (Muse Spark's "rs_…:rs_…"), to an upstream that checks
 		// them (echo_ts)
 		if validatesItemIDs(p) || !s.fits(p.ID, itemIDsRefused(model), proto) {
-			body = plainItemIDs(body)
+			body = plainItemIDs(boundCallIDs(body))
 		}
 		// xAI's API turns away a tool_choice with no tools beside it ("A
 		// tool_choice was set on the request but no tools were specified"),
@@ -8024,7 +8024,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// have, which a relay in front of OpenAI turns away as it
 			// does (echo_ts): asked once more with ids it takes, and so
 			// from then on
-			if nb := plainItemIDs(body); !bytes.Equal(nb, body) {
+			if nb := plainItemIDs(boundCallIDs(body)); !bytes.Equal(nb, body) {
 				refused = append(refused, itemIDsRefused(model))
 				body = nb
 				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
@@ -9290,6 +9290,17 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			// characters and more (#4525, #5812), which the build never
 			// bound. A request of no id to plain goes as it came.
 			body = plainItemIDs(body)
+		}
+		if to == provider.Responses {
+			// and a call's call_id longer than the 64 OpenAI's schema
+			// takes, which Copilot, OpenAI and the relays in front of
+			// them turn the whole request away over ("Invalid
+			// 'input[157].call_id': string too long", IotXws97689 on X):
+			// another provider's in the history (Cursor's are 87), or one
+			// a client was given salted (saltCallID). The body is
+			// magpie's own writing, so it goes bound to every upstream:
+			// a call and its output the same way, every turn
+			body = boundCallIDs(body)
 		}
 		if to == provider.Chat && req.WebSearch && p.IsRemoteMagpie() {
 			// the other magpie searches for it (search_remote.go)

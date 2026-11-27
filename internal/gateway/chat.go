@@ -500,7 +500,7 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 		if len(p.Images) == 0 {
 			return
 		}
-		of := "tool call " + p.CallID
+		of := "tool call " + provider.BoundCallID(p.CallID)
 		if name := names[p.CallID]; name != "" {
 			of = name + " (" + of + ")"
 		} else if p.Name != "" {
@@ -541,7 +541,13 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 						id = "call_" + newID()
 					}
 					names[id] = p.Name
-					call := map[string]any{"id": id, "type": "function",
+					// an id longer than the 64 characters an upstream
+					// behind OpenAI's schema takes (another provider's:
+					// Cursor's call-<uuid>-<n>__fc_<uuid>_0 is 87, #6941)
+					// goes as provider.BoundCallID has it, as the result
+					// answering it does below: the same id the same way
+					// every turn, so the pair still matches
+					call := map[string]any{"id": provider.BoundCallID(id), "type": "function",
 						"function": map[string]any{"name": p.Name, "arguments": argsString(p)}}
 					if sig := p.Signature; sig != "" && (gemini || r.signer != "" && signerOf(sig) == r.signer) {
 						// Gemini's, or a relay's that gave it there
@@ -649,7 +655,7 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 				if p.IsError && failedAsText[host] {
 					out = "Error: " + out
 				}
-				tool := map[string]any{"role": "tool", "tool_call_id": p.CallID, "content": out}
+				tool := map[string]any{"role": "tool", "tool_call_id": provider.BoundCallID(p.CallID), "content": out}
 				if p.IsError && host == "cursor" {
 					// Cursor's plugin reads it, as the built-in told Cursor
 					// isError; another chat upstream has no such field
