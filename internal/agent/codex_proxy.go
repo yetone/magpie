@@ -219,10 +219,10 @@ func systemBypassed(host string, bypass []string) bool {
 }
 
 // proxyProbe says whether a request for base sent through proxy is answered
-// by magpie: its gateway's GET / names it. A proxy's own 502, or anything
-// else that isn't magpie, is not. A socks proxy is asked as Codex asks it:
-// as an HTTP one at the same address, since its reqwest has no SOCKS. A var
-// for tests.
+// by this magpie: its gateway's GET / names it and proves it is this one
+// (answersAsMagpie). A proxy's own 502, or anything else, is not. A socks
+// proxy is asked as Codex asks it: as an HTTP one at the same address,
+// since its reqwest has no SOCKS. A var for tests.
 var proxyProbe = realProxyProbe
 
 func realProxyProbe(base, proxy string) bool {
@@ -234,11 +234,12 @@ func realProxyProbe(base, proxy string) bool {
 		p.Scheme = "http"
 	}
 	c := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: http.ProxyURL(p)}}
-	res, err := c.Get(strings.TrimSuffix(base, "/") + "/")
+	u, nonce := selfAsk(base)
+	res, err := c.Get(u)
 	if err != nil {
 		return false
 	}
-	return answersAsMagpie(res)
+	return answersAsMagpie(res, nonce)
 }
 
 // codexThroughProxy says whether Codex, configured by cfg, gets to the

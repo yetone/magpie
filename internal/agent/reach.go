@@ -2,7 +2,9 @@ package agent
 
 import (
 	"cmp"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -50,27 +52,43 @@ func realReachProbe(base string) bool {
 	return true
 }
 
-// magpieProbe says whether base answers as a magpie gateway: GET base/ is
-// 200 with {"name":"magpie"} (the gateway's info), as it is through a
-// reverse proxy that forwards base to it. A var for tests.
+// magpieProbe says whether base answers as this magpie's gateway: GET
+// base/ is 200 with {"name":"magpie"} (the gateway's info), as it is
+// through a reverse proxy that forwards base to it, and proves it is this
+// magpie, not another one: a magpie on a server of the user's answers as
+// magpie too (Alex on Discord: the cloud magpie in Nowledge Mem read as
+// connected here). A var for tests.
 var magpieProbe = realMagpieProbe
 
 func realMagpieProbe(base string) bool {
 	c := &http.Client{Timeout: 3 * time.Second}
-	res, err := c.Get(strings.TrimSuffix(base, "/") + "/")
+	u, nonce := selfAsk(base)
+	res, err := c.Get(u)
 	if err != nil {
 		return false
 	}
-	return answersAsMagpie(res)
+	return answersAsMagpie(res, nonce)
 }
 
-// answersAsMagpie: res, closed here, is the gateway's info (GET /).
-func answersAsMagpie(res *http.Response) bool {
+// selfAsk is the URL of base's info asking whether it is this magpie
+// (gateway.SelfProof), and the nonce asked with.
+func selfAsk(base string) (u, nonce string) {
+	b := make([]byte, 16)
+	rand.Read(b)
+	nonce = hex.EncodeToString(b)
+	return strings.TrimSuffix(base, "/") + "/?" + gateway.SelfParam + "=" + nonce, nonce
+}
+
+// answersAsMagpie: res, closed here, is this magpie's gateway's info (GET
+// /?self=nonce): named magpie, with this magpie's proof for nonce. Another
+// magpie, or one from before the proof, names itself without it.
+func answersAsMagpie(res *http.Response, nonce string) bool {
 	defer res.Body.Close()
 	var info struct {
 		Name string `json:"name"`
+		Self string `json:"self"`
 	}
-	return res.StatusCode == http.StatusOK && json.NewDecoder(res.Body).Decode(&info) == nil && info.Name == "magpie"
+	return res.StatusCode == http.StatusOK && json.NewDecoder(res.Body).Decode(&info) == nil && info.Name == "magpie" && gateway.IsSelfProof(nonce, info.Self)
 }
 
 // magpieAt is whether base answers as magpie (magpieProbe), and whether

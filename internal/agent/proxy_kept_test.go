@@ -124,9 +124,18 @@ func reverseProxyIsStillMagpie(t *testing.T, proxy string) {
 		}
 	}
 
-	// a relay at that address, not magpie: told
+	// a relay at that address, not magpie: told. Nowledge Mem's provider
+	// named magpie at another machine's address that isn't this magpie is
+	// the user's own, as a magpie on their server is (Alex on Discord): Mem
+	// was switched off magpie, told as replaced
 	fakeMagpieAt(t, map[string]bool{})
 	for _, a := range agents {
+		if a.ID == "nowledge-mem" && onAnotherMachine(proxy) {
+			if d := a.Drift(); a.Wired() || d == nil || d.Kind != "replaced" {
+				t.Errorf("%s at a relay: wired %v, %+v", a.ID, a.Wired(), d)
+			}
+			continue
+		}
 		if c := a.Check(); (c == "") != (a.ID == "codex") {
 			t.Errorf("%s at a relay: %q", a.ID, c)
 		}
@@ -226,7 +235,8 @@ func TestReverseProxyTriedFirst(t *testing.T) {
 
 // The probe takes magpie's own answer at the proxy's path (the gateway's
 // GET /, forwarded), and nothing else: a relay's, an error page, magpie's
-// name in a page that isn't 200.
+// name in a page that isn't 200, another magpie's (Alex on Discord: the
+// cloud magpie in Nowledge Mem), one that echoes the nonce.
 func TestMagpieProbe(t *testing.T) {
 	gw := gateway.New().Handler()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -237,6 +247,13 @@ func TestMagpieProbe(t *testing.T) {
 		case r.URL.Path == "/broken/":
 			w.WriteHeader(502)
 			w.Write([]byte(`{"name":"magpie"}`))
+		case r.URL.Path == "/other/":
+			// another magpie: a server's, or one from before the proof
+			w.Write([]byte(`{"name":"magpie","version":"0.1.4814"}`))
+		case r.URL.Path == "/echo/":
+			// another magpie, or a relay, that answers with what it was sent
+			n := r.URL.Query().Get(gateway.SelfParam)
+			w.Write([]byte(`{"name":"magpie","self":"` + n + `"}`))
 		default:
 			w.WriteHeader(404)
 			w.Write([]byte(`{"error":{"message":"not found"}}`))
@@ -248,6 +265,8 @@ func TestMagpieProbe(t *testing.T) {
 		srv.URL + "/magpie/": true,
 		srv.URL + "/relay":   false,
 		srv.URL + "/broken":  false,
+		srv.URL + "/other":   false,
+		srv.URL + "/echo":    false,
 		"http://127.0.0.1:1": false,
 	} {
 		if got := realMagpieProbe(base); got != want {

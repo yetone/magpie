@@ -176,9 +176,7 @@ func TestCodexEnvTakesLoginShell(t *testing.T) {
 
 // A proxy's own 502 isn't magpie; a proxy that passes the request on is.
 func TestRealProxyProbe(t *testing.T) {
-	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `{"name":"magpie"}`)
-	}))
+	gw := httptest.NewServer(gateway.New().Handler())
 	defer gw.Close()
 	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upstream", http.StatusBadGateway)
