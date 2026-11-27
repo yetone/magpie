@@ -654,6 +654,18 @@ function renderLAN(s) {
     if (ns.rekeyed) status(ns.rekeyed, "err");
   })
     .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+  // MAGPIE_ADDR on the network (Docker's image, a service that carried
+  // it) listens there whatever the switch says: the row says it is on, and
+  // what turns it off (rael_tao on X: Off, and still [::] after a restart)
+  if (s.onNetwork && !s.lan) {
+    const port = (s.addrEnv || "").split(":").pop() || String(s.port || 3425);
+    const on = segs([["off", t("Off")], ["on", t("On")]], "on", () => {});
+    for (const b of on.querySelectorAll("button")) b.disabled = true;
+    row(t("Share on local network"), s.inContainer
+      ? t("MAGPIE_ADDR={addr} listens on every address in this container: publish the port as -p 127.0.0.1:{port}:{port} to keep the gateway on this computer", { addr: s.addrEnv, port })
+      : t("MAGPIE_ADDR={addr} has the gateway listen on the network whatever is set here: set it to 127.0.0.1:{port}, or unset it, and restart magpie to keep the gateway on this computer", { addr: s.addrEnv, port }), "", on);
+    return;
+  }
   row(t("Share on local network"), t("Agents on other computers on this network, or through a tunnel to this one such as Cloudflare Tunnel, can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
   if (!s.lan) return;

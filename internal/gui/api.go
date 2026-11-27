@@ -479,6 +479,9 @@ type settingsJSON struct {
 	AllowIPsEnv     string   `json:"allowIPsEnv,omitempty"`
 	AllowIPsFromEnv []string `json:"allowIPsFromEnv,omitempty"`
 	OnNetwork       bool     `json:"onNetwork,omitempty"`
+	// InContainer: magpie runs in a container, where MAGPIE_ADDR on the
+	// network is how its port is published at all
+	InContainer bool `json:"inContainer,omitempty"`
 	// the client certificates issued and still good (mtls.go), while
 	// other computers can reach magpie or mTLS is on; MTLSSaved: the
 	// folder the one just issued was saved to
@@ -901,6 +904,7 @@ func settingsState() settingsJSON {
 	s.Builtins = builtinsState()
 	s.PanelKeys = panelKeysState()
 	s.OnNetwork = gateway.OnNetwork()
+	s.InContainer = s.OnNetwork && gateway.InContainer()
 	if list, env := gateway.AllowIPs(); env {
 		s.AllowIPsEnv, s.AllowIPsFromEnv = os.Getenv(gateway.AllowIPsEnv), list
 	}

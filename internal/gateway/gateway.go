@@ -964,6 +964,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	rt, watched := pluginrt.Path(), []string{settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path()}
 	bg.Go("filememo.Watch", func() { filememo.Watch(freshCtx, append([]string{rt}, watched...)...) })
 	bg.Go("pluginrt.KeepFresh", func() { pluginrt.KeepFresh(freshCtx, filememo.OthersEvery, watched...) })
+	// and Share on local network, or the port, changed in another magpie
+	// or by hand moves the gateway here too (follow_listen.go)
+	bg.Go("followSavedAddr", func() { s.followSavedAddr(freshCtx) })
 	// and the OpenCode plugins another magpie turned on or off, added,
 	// removed or updated (magpie plugin … in a terminal) are this one's at
 	// once, as the window's change is, not on the next request

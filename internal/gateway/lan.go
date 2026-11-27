@@ -517,7 +517,9 @@ func (s *Server) Relisten() error {
 	// where it listens now is what a command in another shell is told
 	defer func() { recordListening(s.ln.Addr()) }()
 	to := listenAddr()
-	if s.ln.Addr().String() == to {
+	// 0.0.0.0 reads back as [::]: by string it was never the same, and
+	// every look closed and opened the socket again
+	if listensAt(s.ln.Addr(), to) {
 		return nil
 	}
 	was := s.ln.Addr().String()
