@@ -47,7 +47,7 @@ const SUB_AGENTS = [
   { id: "opencode", dir: `${HOME}/.config/opencode/agents` },
   { id: WSL, wsl: true, no: "magpie gives no subagents to an agent in WSL yet" },
 ];
-const MODELS = [{ id: "openai/gpt-6-sol", name: "GPT-6 Sol", note: "OpenAI" }, { id: "group/review", name: "review", group: true }];
+const MODELS = [{ id: "openai/gpt-6-sol", name: "GPT-6 Sol", note: "OpenAI", provider: "openai", providerName: "OpenAI" }, { id: "group/review", name: "review", group: true }];
 const lib = (subagents, held = "") => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   agents: [agent("claude", "Claude Code"), agent("codex", "Codex"), agent("cursor", "Cursor"), agent("droid", "Droid"), agent("opencode", "OpenCode"), agent(WSL, "Claude Code (Ubuntu)")],
@@ -252,18 +252,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await hint("mcp").textContent()).trim(), w("Not bound for {agents}: theirs uses every server the agent has", { agents: "Codex, Cursor, OpenCode" }));
         await edChip("opencode").click();
         assert.equal((await hint("mcp").textContent()).trim(), w("Not bound for {agents}: theirs uses every server the agent has", { agents: "Codex, Cursor" }));
-        // the model from an app menu: the agent's pick at first, then a
-        // routing group, which only Codex is given
+        // the model from the one model picker, the Agents page's (its rail,
+        // its search): the agent's pick at first, then a routing group,
+        // which only Codex is given
         assert.equal((await ed.locator(".lib-subagentmodel").textContent()).trim(), w("Picked by the agent"));
         assert.equal((await hint("model").textContent()).trim(), w("Each agent runs it on the model it picks for a subagent"));
         await ed.locator(".lib-subagentmodel").click();
-        const mmenu = page.locator(".proto-menu");
-        await mmenu.waitFor();
-        assert.equal((await mmenu.locator(".pm-head").textContent()).trim(), w("Model"));
-        assert.deepEqual((await mmenu.locator(".pm-name").allTextContents()).map((x) => x.trim()), [w("Picked by the agent"), "GPT-6 Sol", "review"]);
-        assert.equal((await mmenu.locator(".pm-item", { hasText: "review" }).locator(".pm-note").textContent()).trim(), w("routing group"));
-        await mmenu.locator(".pm-item", { hasText: "review" }).click();
-        await mmenu.waitFor({ state: "detached" });
+        const mpop = page.locator("#pop.model-picker:not([hidden])");
+        await mpop.waitFor();
+        assert.ok(await mpop.locator("#pickerRail:not([hidden]) .rail-item").count() >= 3, "the picker's rail");
+        assert.ok(await mpop.locator("#q").isVisible(), "the picker's search");
+        assert.equal(await page.locator(".proto-menu").count(), 0, "a menu of the page's own");
+        const mrows = mpop.locator("#list li[data-i]");
+        assert.deepEqual((await mrows.locator(".option-words > .v").allTextContents()).map((x) => x.trim()).sort(), [w("Picked by the agent"), "GPT-6 Sol", "review"].sort());
+        // the group among the routing groups, under their head
+        assert.equal(await mpop.locator("#list li.group", { hasText: w("Routing groups") }).count(), 1);
+        await mrows.filter({ hasText: /^review/ }).click();
+        await mpop.waitFor({ state: "hidden" });
         assert.equal((await ed.locator(".lib-subagentmodel").textContent()).trim(), "review");
         assert.equal((await hint("model").textContent()).trim(), w("Not set for {agents}: theirs runs on the model the agent picks", { agents: "Claude Code, Cursor, Droid" }));
         // the skills from an app menu

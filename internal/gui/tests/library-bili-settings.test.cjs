@@ -5,9 +5,9 @@
 // philosophy and the compression markers' switch (@JamesYu32 on X:
 // compress.visibilityMarkers) under Advanced, folded until opened. Each change posts only
 // what changed to /api/library/bili/settings, and the status says whether
-// the running billion-context reloaded it. The model is picked from the
-// app's menu (never a <select>): magpie's models and the file's own
-// recipes. A file billion-context can't read is said so, with nothing to
+// the running billion-context reloaded it. The model is picked in the
+// one model picker (never a <select>, never a menu of the page's own):
+// the file's own recipes, then magpie's models. A file billion-context can't read is said so, with nothing to
 // change. Every language, Chromium and WebKit, 1100 and 420 wide, nothing
 // sideways. No backend: the API is faked here.
 const assert = require("node:assert/strict");
@@ -125,14 +125,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const sum = rows.nth(0).locator(".lib-switch");
         assert(await sum.isDisabled(), "summary switch works with no model");
 
-        // a model of magpie's: picked and switched on in one go
+        // a model of magpie's, in the one model picker, the Agents page's
+        // (its rail, its search), not a menu of the page's own: picked and
+        // switched on in one go
         await rows.nth(0).locator(".lib-bili-model").click();
-        const items = page.locator(".proto-menu .pm-item");
-        assert.equal(await items.count(), 3, "magpie's two models and the file's recipe");
-        await page.locator(".proto-menu .pm-item", { hasText: "GPT-5.4 mini" }).click();
+        const pop = page.locator("#pop.model-picker:not([hidden])");
+        await pop.waitFor();
+        assert(await pop.locator("#pickerRail:not([hidden]) .rail-item").count() >= 3, "the picker's rail");
+        assert(await pop.locator("#q").isVisible(), "the picker's search");
+        assert.equal(await page.locator(".proto-menu").count(), 0, "a menu of the page's own");
+        const items = pop.locator("#list li[data-i]");
+        assert.deepEqual(await items.locator(".option-words > .v").allTextContents(), ["claude/claude-haiku", "GPT-5.4 mini", "GLM-4.9 Flash"], "the file's recipe, then magpie's two models");
+        await items.filter({ hasText: "GPT-5.4 mini" }).click();
         await page.waitForFunction(() => document.querySelector("#view-library .lib-bili-set .lib-switch")?.getAttribute("aria-checked") === "true");
         assert.deepEqual(st.posts.at(-1), { model: "gpt-5.4-mini", summary: true });
         assert.match(await rows.nth(0).locator(".lib-bili-model").textContent(), /GPT-5\.4 mini/);
+        assert.equal(await rows.nth(0).locator(".lib-bili-model > .ic").count(), 1, "the model's logo on its button");
         const said = (await page.locator("#status").textContent()).trim();
         if (lang !== "en") assert.notEqual(said, RELOADED);
         else assert.equal(said, RELOADED);
@@ -170,6 +178,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(st.posts.at(-1), { markers: false });
         assert.equal(await more.evaluate((d) => d.open), true, "Advanced closed again on its own");
         assert.equal(st.posts.length, 5);
+        // the file's own recipe, from the same picker: its target, as before
+        await rows.nth(0).locator(".lib-bili-model").click();
+        await pop.waitFor();
+        assert.equal((await pop.locator("#list li.cur .option-words > .v").textContent()).trim(), "GPT-5.4 mini");
+        await items.filter({ hasText: "claude/claude-haiku" }).click();
+        await page.waitForFunction(() => /claude\/claude-haiku/.test(document.querySelector("#view-library .lib-bili-model")?.textContent || ""));
+        assert.deepEqual(st.posts.at(-1), { target: "claude/claude-haiku", summary: true });
 
         const sideways = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         assert(sideways <= 0, `the page scrolls sideways by ${sideways}px`);

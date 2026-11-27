@@ -4952,7 +4952,7 @@ function openPicker(agent, field, anchor, ev, only) {
     options.splice(at < 0 ? options.length : at, 0, { value: "\0disconnect", label: t("Disconnect from magpie"), note: t("put back what {agent} had before magpie", { agent: agent.name }), svg: UNPLUG, reset: true, run: () => askDisconnect(agent) });
   }
   const modelPicker = (["model", "small", "large", MEMORIES, SUB_MODEL, AUTO_MODE, ADVISOR, COMPACT_MODEL, "executor", "planner", ...ROLE_MODELS].includes(field.label) || hermesBot(field)) && !only;
-  pick = { agent, field, options, groups, anchor, cursor: 0, free: !only && !field.menu, modelPicker, effortPicker, groupFilter: "all" };
+  pick = { agent, field, options, groups, anchor, cursor: 0, free: !only && !field.menu && field.any !== false, modelPicker, effortPicker, groupFilter: "all" };
   if (modelPicker) { readSpeeds(); readLoads(); }
   anchor.classList.add("open");
   const pop = $("#pop");
@@ -5459,7 +5459,7 @@ function pathTag(o) {
   let tag = null;
   if (o.ref || o.via) {
     tag = el("span", "badge path via", t("via magpie"));
-    tag.title = t("{agent} asks magpie for it", { agent: pick.agent.name });
+    if (pick.agent.name) tag.title = t("{agent} asks magpie for it", { agent: pick.agent.name });
   } else if (o.direct) {
     tag = el("span", "badge path direct", t("direct, not via magpie"));
     tag.title = t("straight to {vendor}, not through magpie", { vendor: o.direct });
@@ -21727,7 +21727,29 @@ function renderAgentPrefLinks() {
 // modelOpt is a Settings model picker's row: a routing group (no provider
 // of its own) goes with the others, as in an agent's picker.
 function modelOpt(x) {
-  return { value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id };
+  return { value: x.id, label: x.name || x.id, note: x.note || x.providerName, icon: x.icon, icons: x.icons, context: x.context, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id };
+}
+
+// openModelPicker is the one model picker, the Agents page's, for a model
+// picked anywhere: models as the API lists them (modelRef), extras the
+// rows above them ({ value, label, note, icon }), options rows made as
+// modelOpt's, the rest openPicker's field (value, onPick, any: false for no
+// model typed in). Never a menu of models of a page's own:
+// model-picker-only.test.cjs holds pages to this.
+function openModelPicker(anchor, ev, { models = [], extras = [], options = [], ...f }) {
+  openPicker({ id: "", name: "", fields: [] }, { key: "model", label: "model", ...f, options: [...extras.map((o) => ({ ...o, reset: true })), ...options, ...models.map(modelOpt)] }, anchor, ev);
+}
+
+// modelButton: a model picked, as the Agents page shows it (its logo,
+// name and chevron), opening the model picker; o as openModelPicker's,
+// with name for a value it lists nowhere
+function modelButton(cls, o) {
+  const b = el("button", "sess-pick model-btn " + cls), m = o.models?.find((e) => e.id === o.value);
+  const x = [...o.extras || [], ...o.options || []].find((e) => e.value === o.value) || (m ? modelOpt(m) : { icon: "generic" });
+  b.type = "button";
+  b.append(optionIcon(x), el("span", "", o.name || x.label || o.value), svg(CHEV, 11, 1.6));
+  b.onclick = (ev) => openModelPicker(b, ev, o);
+  return b;
 }
 
 // a model id as "Name · Provider", else as is

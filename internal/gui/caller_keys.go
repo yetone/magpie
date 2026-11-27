@@ -33,10 +33,14 @@ type keyModelJSON struct {
 	Name         string `json:"name"`
 	Provider     string `json:"provider,omitempty"`
 	ProviderName string `json:"providerName,omitempty"`
-	Group        bool   `json:"group,omitempty"`   // a routing group (Magic_zero on Discord)
-	Account      bool   `json:"account,omitempty"` // a signed-in account the key may be held to (#905)
-	Key          bool   `json:"key,omitempty"`     // one of a provider's keys, by its KeyID
-	Plan         string `json:"plan,omitempty"`    // the account's subscription, for the menu's note
+	// Icon and Icons: its provider's logo, a group's providers' stacked,
+	// for the model picker a key's model names are picked in
+	Icon    string   `json:"icon,omitempty"`
+	Icons   []string `json:"icons,omitempty"`
+	Group   bool     `json:"group,omitempty"`   // a routing group (Magic_zero on Discord)
+	Account bool     `json:"account,omitempty"` // a signed-in account the key may be held to (#905)
+	Key     bool     `json:"key,omitempty"`     // one of a provider's keys, by its KeyID
+	Plan    string   `json:"plan,omitempty"`    // the account's subscription, for the menu's note
 	// Decides marks a decision model (Jev, Clef…), which no agent lists:
 	// a key held to some models reaches it at /v1/systemone, and another
 	// magpie lists it, only when it is picked (Kautism on Discord)
@@ -103,10 +107,10 @@ func callerKeyRoutes(mux *http.ServeMux) {
 				// by the id magpie keeps it by, group/<id>, as a key held to it
 				// before names it: a found group's auto/<model> passes for it
 				// (gateway's allows), and its name is what the picker shows
-				out = append(out, keyModelJSON{ID: provider.GroupPrefix + e.Group, Name: cmp.Or(e.Name, e.Group), Group: true})
+				out = append(out, keyModelJSON{ID: provider.GroupPrefix + e.Group, Name: cmp.Or(e.Name, e.Group), Group: true, Icons: e.Icons})
 				continue
 			}
-			out = append(out, keyModelJSON{ID: e.Provider.ID + "/" + e.Model, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID)})
+			out = append(out, keyModelJSON{ID: e.Provider.ID + "/" + e.Model, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID), Icon: e.Provider.Icon})
 		}
 		// the decision groups, after the chat groups: Catalog keeps them
 		// out as no agent chats with one, but the gateway gives a key
@@ -144,7 +148,7 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			if slices.ContainsFunc(out, func(m keyModelJSON) bool { return strings.EqualFold(m.ID, id) }) {
 				continue
 			}
-			m := keyModelJSON{ID: id, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID)}
+			m := keyModelJSON{ID: id, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID), Icon: e.Provider.Icon}
 			at := len(out)
 			for i := len(out) - 1; i >= 0; i-- {
 				if out[i].Provider == m.Provider {
@@ -165,7 +169,7 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			if slices.ContainsFunc(out, func(m keyModelJSON) bool { return strings.EqualFold(m.ID, id) }) {
 				continue
 			}
-			m := keyModelJSON{ID: id, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID), Decides: true}
+			m := keyModelJSON{ID: id, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID), Icon: e.Provider.Icon, Decides: true}
 			at := len(out)
 			for i := len(out) - 1; i >= 0; i-- {
 				if out[i].Provider == m.Provider {

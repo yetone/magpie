@@ -29,7 +29,7 @@ const SUB_AGENTS = [
   { id: "opencode", dir: `${HOME}/.config/opencode/agents` },
   { id: WSL, wsl: true, no: "magpie gives no subagents to an agent in WSL yet" },
 ];
-const MODELS = [{ id: "openai/gpt-6-sol", name: "GPT-6 Sol", note: "OpenAI", efforts: ["low", "medium", "high"] }, { id: "group/review", name: "review", group: true }];
+const MODELS = [{ id: "openai/gpt-6-sol", name: "GPT-6 Sol", note: "OpenAI", provider: "openai", providerName: "OpenAI", efforts: ["low", "medium", "high"] }, { id: "group/review", name: "review", group: true }];
 const lib = (subagents, held = "") => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   agents: [agent("claude", "Claude Code"), agent("codex", "Codex"), agent("cursor", "Cursor"), agent("droid", "Droid"), agent("opencode", "OpenCode"), agent(WSL, "Claude Code (Ubuntu)")],
@@ -166,9 +166,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // on a model Codex runs at low to high, max: Codex won't start it
         await ed.locator(".lib-subagentmodel").click();
-        await menu.waitFor();
-        await menu.locator(".pm-item", { hasText: "GPT-6 Sol" }).click();
-        await menu.waitFor({ state: "detached" });
+        const mpop = page.locator("#pop.model-picker:not([hidden])");
+        await mpop.waitFor();
+        await mpop.locator("#list li[data-i]", { hasText: "GPT-6 Sol" }).click();
+        await mpop.waitFor({ state: "hidden" });
         await pick.click();
         await menu.waitFor();
         await menu.locator(".pm-item").nth(5).click();

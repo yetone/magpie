@@ -1604,11 +1604,9 @@ magpie.plugin("library", (ctx) => {
   function memModelPick(d) {
     const modelName = (id) => { const m = d.models.find((x) => x.id === id); return m ? (m.name || m.id) : id; };
     const auto = d.auto ? t("Automatic") + " · " + modelName(d.auto) : t("Automatic");
-    const pick = menuButton(d.model ? modelName(d.model) : auto, "lib-distmodel", () => openProtoMenu(pick, [
-      { v: "", name: t("Automatic"), note: d.auto ? modelName(d.auto) : t("No models"), literalName: true },
-      ...d.models.map((m) => ({ v: m.id, name: m.name || m.id, note: m.providerName || "", literalName: true }))],
-    d.model || "", (v) => distChange("memory/distill", { on: d.on, model: v }), "Model", "", "left", false, d.models.length > 8 ? "Search models" : ""));
-    return pick;
+    return modelButton("lib-menu lib-distmodel", { value: d.model || "", models: d.models, name: d.model ? modelName(d.model) : auto,
+      extras: [{ value: "", label: t("Automatic"), note: d.auto ? modelName(d.auto) : t("No models"), icon: d.models.find((x) => x.id === d.auto)?.icon || "generic" }],
+      onPick: (v) => distChange("memory/distill", { on: d.on, model: v }) });
   }
   // the reasoning level the model reads and tidies at, when its levels
   // are known: Default sends none (RealZeroP27 on X)
@@ -2176,13 +2174,11 @@ magpie.plugin("library", (ctx) => {
     const target = s.targets[0] || "";
     const ours = target.startsWith("magpie/") ? target.slice(7) : "";
     const named = ours ? (models.find((m) => m.id === ours)?.name || ours) : target;
-    const pick = menuButton(named || t("Choose a model"), "lib-bili-model", () => openProtoMenu(pick, [
-      ...models.map((m) => ({ v: "m\n" + m.id, name: m.name || m.id, note: m.providerName || "", literalName: true })),
-      ...s.recipes.map((r) => ({ v: "r\n" + r, name: r, note: "billion-context.json", literalName: true }))],
-    ours ? "m\n" + ours : target ? "r\n" + target : "", (v) => {
-      const [k, id] = v.split("\n");
-      biliChange(k === "m" ? { model: id, summary: true } : { target: id, summary: true });
-    }, "Model", "", "left", false, models.length + s.recipes.length > 8 ? "Search models" : ""));
+    // the file's own recipes are the picker's rows above magpie's models,
+    // told apart by a value no model id starts with
+    const pick = modelButton("lib-menu lib-bili-model", { value: ours || (target && "\x01" + target), models, name: named || t("Choose a model"),
+      extras: [...new Set([...s.recipes, ...(target && !ours ? [target] : [])])].map((r) => ({ value: "\x01" + r, label: r, note: "billion-context.json", icon: "generic" })),
+      onPick: (v) => biliChange(v[0] === "\x01" ? { target: v.slice(1), summary: true } : { model: v, summary: true }) });
     pick.disabled = biliSetBusy;
     const sum = toggle(s.summary, t("Summarize with a fast model"), (v) => biliChange({ summary: v }));
     sum.disabled = biliSetBusy || !target;
@@ -5629,25 +5625,15 @@ magpie.plugin("library", (ctx) => {
     return b;
   }
 
-  // the model a subagent runs on, from the app menu: the agent's pick ("")
-  // or one of the models and routing groups Codex lists, the one agent
-  // whose subagent file takes a model
+  // the model a subagent runs on, in the model picker: the agent's pick
+  // ("") or one of the models and routing groups Codex lists, the one
+  // agent whose subagent file takes a model; one set before that Codex no
+  // longer lists stays, as the picker's current value
   function modelPick(d, changed) {
-    const b = el("button", "sess-pick lib-menu lib-subagentmodel");
-    b.type = "button";
-    b.setAttribute("aria-haspopup", "menu");
-    b.setAttribute("aria-expanded", "false");
-    const draw = () => b.replaceChildren(el("span", "", d.model ? subagentModelName(d.model) : t("Picked by the agent")), svg(CHEV, 11, 1.6));
-    b.onclick = (e) => {
-      e.stopPropagation();
-      const models = lib.subagentModels || [];
-      const opts = [{ v: "", name: t("Picked by the agent"), literalName: true, note: "", always: true },
-        ...models.map((m) => ({ v: m.id, name: m.name, literalName: true, note: m.group ? t("routing group") : m.note || "" }))];
-      // a model set before that Codex no longer lists stays pickable
-      if (d.model && !models.some((m) => m.id === d.model)) opts.push({ v: d.model, name: d.model, literalName: true, note: "" });
-      openProtoMenu(b, opts, d.model, (v) => { d.model = v; draw(); changed(); }, "Model", "", "left", false, opts.length > 8 ? "Find a model…" : "");
-    };
-    draw();
+    const b = modelButton("lib-menu lib-subagentmodel", { value: d.model || "", models: lib.subagentModels || [],
+      name: d.model ? subagentModelName(d.model) : t("Picked by the agent"),
+      extras: [{ value: "", label: t("Picked by the agent"), icon: "generic" }],
+      onPick: (v) => { d.model = v; b.replaceWith(modelPick(d, changed)); changed(); } });
     return b;
   }
 

@@ -2,7 +2,8 @@
 // The tray panel's Routing tab switches a Manual routing group's model
 // (#2489, Jerell.OvO on Discord): each Manual group of two or more members
 // that is on is a row under today's totals, its picked member a button. A
-// click opens the members as the app's menu (no native select), and a pick
+// click opens the members in the one model picker, the Agents page's (no
+// native select, no menu of the panel's own, no model typed in), and a pick
 // saves through /api/groups/pick, the group's id and the member alone, and
 // the row says the new member. A group that routes otherwise, one switched
 // off, and one of a single member get no row. At the panel's 440px, in both
@@ -116,27 +117,38 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(fit.stripe, ["0px", "0px"]);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "no sideways scroll");
 
-      // the app's menu, its members ticked at the picked one
+      // the one model picker, the Agents page's (its rail, its search),
+      // its members ticked at the picked one, none typed in
+      assert((await btn.getAttribute("aria-label")).startsWith(want[lang].head), await btn.getAttribute("aria-label"));
+      assert.equal(await btn.locator(".ic").count(), 1, "the member's logo on its button");
       await btn.click();
-      const menu = page.locator(".proto-menu");
-      await menu.waitFor();
-      assert.equal((await menu.locator(".pm-head").textContent()).trim(), want[lang].head);
-      const items = await menu.locator(".pm-item").evaluateAll((bs) => bs.map((b) => ({ name: b.querySelector(".pm-name").textContent, note: b.querySelector(".pm-note").textContent, on: b.classList.contains("on") })));
-      assert.deepEqual(items.map((i) => i.name), models.map((m) => m.name));
-      assert.deepEqual(items.map((i) => i.on), [true, false, false]);
-      assert(items[2].note.includes(want[lang].note), items[2].note);
-      const mb = await menu.boundingBox();
+      const pop = page.locator("#pop.model-picker:not([hidden])");
+      await pop.waitFor();
+      assert(await pop.locator("#pickerRail:not([hidden]) .rail-item").count() >= 3, "the picker's rail");
+      assert(await pop.locator("#q").isVisible(), "the picker's search");
+      assert.equal(await page.locator(".proto-menu").count(), 0, "a menu of the page's own");
+      const rows = pop.locator("#list li[data-i]");
+      const items = await rows.evaluateAll((ls) => ls.map((l) => ({ name: l.querySelector(".v").textContent, note: l.querySelector(".n")?.textContent || "", on: l.classList.contains("cur") })));
+      assert.deepEqual(items.map((i) => i.name).sort(), models.map((m) => m.name).sort());
+      assert.deepEqual(items.filter((i) => i.on).map((i) => i.name), ["GPT-6 Sol"]);
+      assert(items.find((i) => i.name === models[2].name).note.includes(want[lang].note), JSON.stringify(items));
+      await pop.locator("#q").fill("no-such-model");
+      assert.equal(await rows.count(), 0, "a model typed in is offered");
+      await pop.locator("#q").fill("");
+      const mb = await pop.boundingBox();
       assert(mb.x >= 0 && mb.x + mb.width <= 440 + 0.5, JSON.stringify(mb));
 
       // a pick saves the group's id and the member, nothing else of it
-      await menu.locator(".pm-item").nth(1).click();
+      await rows.filter({ hasText: "Claude Opus 5" }).click();
       await page.waitForFunction(() => document.querySelector(".pr-pick .sess-pick")?.textContent.trim() === "Claude Opus 5");
       assert.deepEqual(picks, [{ id: "daily", pick: "claude/claude-opus-5" }]);
-      assert.equal(await page.locator(".proto-menu").count(), 0, "the menu closed");
+      assert.equal(await pop.count(), 0, "the picker closed");
 
       // the picked one again changes nothing
       await page.locator(".pr-pick .sess-pick").click();
-      await page.locator(".proto-menu .pm-item").nth(1).click();
+      await pop.waitFor();
+      await rows.filter({ hasText: "Claude Opus 5" }).click();
+      await pop.waitFor({ state: "hidden" });
       assert.equal(picks.length, 1);
       assert.deepEqual(errors, []);
     });

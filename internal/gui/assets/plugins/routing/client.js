@@ -10576,30 +10576,23 @@ function routingPage(part) {
       const picked = g.picked || (g.members.includes(g.pick) ? g.pick : g.members[0]);
       const row = el("div", "pr-pick");
       row.dataset.id = g.id;
-      const b = el("button", "sess-pick set");
-      b.type = "button";
-      b.setAttribute("aria-haspopup", "menu");
-      b.setAttribute("aria-expanded", "false");
+      // the members, in the model picker: each under its provider, a
+      // group among the routing groups, none typed in
+      const options = g.members.map((id) => {
+        const info = memberInfoOf(g, id), m = modelOf(id), s = subOf(id);
+        const note = [memberNote(id), speedIn(g, id), info && !info.ready && t("no provider serves it now")].filter(Boolean).join(" · ");
+        return { value: id, label: memberName(id), note, icon: m?.icon || offOf(id)?.icon || info?.icon, icons: s && groupIcons(s), free: freeIn(g, id), group: s || info?.group ? ROUTING_GROUPS : m?.providerName || info?.name || "", ref: m?.id };
+      });
+      const b = modelButton("set", { value: picked, options, any: false, onPick: async (id) => {
+        if (id === picked) return;
+        try {
+          groups = groupsFrom(await api("groups/pick", { id: g.id, pick: id }));
+          renderPanel();
+          load(); // the gateway's model list, the agents' pickers
+        } catch (err) { status(err.message, "err"); }
+      } });
       b.setAttribute("aria-label", t("Model every request goes to") + " · " + g.name);
       b.title = t("Every request goes to {name}", { name: memberLabel(g, picked) });
-      b.append(el("span", "", memberName(picked)), svg(CHEV, 10, 1.6));
-      b.onclick = (e) => {
-        e.stopPropagation();
-        if (b.classList.contains("open")) return closeProtoMenu();
-        openProtoMenu(b, g.members.map((id) => {
-          const info = g.memberInfo?.find((x) => x.id === id);
-          const note = [memberNote(id), speedIn(g, id), freeIn(g, id) && t("free"), info && !info.ready && t("no provider serves it now")].filter(Boolean).join(" · ");
-          return { v: id, name: memberName(id), literalName: true, note, title: memberLabel(g, id) };
-        }), picked, async (id) => {
-          closeProtoMenu();
-          if (id === picked) return;
-          try {
-            groups = groupsFrom(await api("groups/pick", { id: g.id, pick: id }));
-            renderPanel();
-            load(); // the gateway's model list, the agents' pickers
-          } catch (err) { status(err.message, "err"); }
-        }, "Model every request goes to", "", "right");
-      };
       row.append(el("span", "pr-gname", g.name), b);
       box.append(row);
     }

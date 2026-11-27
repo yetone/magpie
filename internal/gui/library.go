@@ -49,6 +49,14 @@ type subagentModel struct {
 	Name  string `json:"name"`
 	Note  string `json:"note,omitempty"`
 	Group bool   `json:"group,omitempty"`
+	// Provider, ProviderName, Icon and Icons place it in the model
+	// picker as the Agents page does: under its provider, with its logo
+	// (a group's: its providers', stacked)
+	Provider string   `json:"provider,omitempty"`
+	PName    string   `json:"providerName,omitempty"`
+	Icon     string   `json:"icon,omitempty"`
+	Icons    []string `json:"icons,omitempty"`
+	Context  int      `json:"context,omitempty"`
 	// Efforts are the efforts Codex runs it at, when the catalog knows
 	Efforts []string `json:"efforts,omitempty"`
 }
@@ -56,7 +64,10 @@ type subagentModel struct {
 func subagentModels() []subagentModel {
 	out := []subagentModel{}
 	for _, e := range provider.CodexSubagentModels() {
-		m := subagentModel{ID: e.ID, Name: e.Name, Note: e.Provider.Name, Group: e.Group != "", Efforts: e.Efforts}
+		m := subagentModel{ID: e.ID, Name: e.Name, Note: e.Provider.Name, Group: e.Group != "", Efforts: e.Efforts, Icons: e.Icons, Context: e.Context}
+		if e.Provider != nil && !m.Group {
+			m.Provider, m.PName, m.Icon = e.Provider.ID, e.Provider.Name, e.Provider.Icon
+		}
 		if a := e.Provider.Account; a != nil && a.User != "" {
 			m.Note = a.User
 		}

@@ -220,7 +220,10 @@ type modelRef struct {
 	Provider string `json:"provider"`
 	PName    string `json:"providerName"`
 	Icon     string `json:"icon,omitempty"`
-	Context  int    `json:"context,omitempty"` // the tokens it takes, when known
+	// Icons: a routing group's providers' icons, stacked in the model
+	// picker as the Agents page stacks them
+	Icons   []string `json:"icons,omitempty"`
+	Context int      `json:"context,omitempty"` // the tokens it takes, when known
 	// Efforts: the model's reasoning levels, when known — those a group's
 	// member of it may be fixed at
 	Efforts []string `json:"efforts,omitempty"`

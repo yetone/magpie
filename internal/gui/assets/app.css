@@ -235,8 +235,8 @@ code { font: var(--code-style, normal) var(--code-weight, 400) 11.5px var(--code
 /* the stack sizes its own icons, whatever sizes the icons around it */
 .ic-stack .disc > .ic { width: 13px !important; height: 13px !important; }
 .ic-stack .more { font-size: 8.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
-.row .field .ic-stack .disc { width: 17px; height: 17px; }
-.row .field .ic-stack .disc > .ic { width: 11px !important; height: 11px !important; }
+.row .field .ic-stack .disc, .model-btn .ic-stack .disc { width: 17px; height: 17px; }
+.row .field .ic-stack .disc > .ic, .model-btn .ic-stack .disc > .ic { width: 11px !important; height: 11px !important; }
 .row .field .ic-stack .disc + .disc { margin-left: -4px; }
 .ic.generic svg { width: 100%; height: 100%; }
 .ic.anthropic-mark svg { width: 100%; height: 100%; display: block; }
@@ -2008,6 +2008,11 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .pop.pc-pop li .v { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pop.pc-pop li .n { font-size: 10.5px; }
 .pop.pc-pop li.pc-none { justify-content: center; color: var(--faint); }
+/* modelButton: a model picked, its logo before its name as the Agents page's field shows it */
+.sess-pick.model-btn { gap: 6px; color: var(--fg); }
+.sess-pick.model-btn > .ic, .sess-pick.model-btn > .ic-stack { flex: none; overflow: visible; }
+.sess-pick.model-btn > .ic { width: 14px; height: 14px; }
+.sess-pick.model-btn > .ic svg { opacity: 1; }
 .pop.proto-menu.sess-menu { width: 300px; max-height: min(360px, 70vh); overflow-y: auto; overscroll-behavior: contain; }
 .sess-menu .pm-name, .sess-menu .pm-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pop.proto-menu.sess-menu { width: 340px; padding-top: 0; display: block; background: var(--card); }
@@ -3422,7 +3427,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gatewayKeys .klf-acct[hidden] { display: none; }
 #gatewayKeys .klf-models { grid-column: 1 / -1; }
 #gatewayKeys .klf .klf-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.editor .headers.aliases .pair .alias-pick { flex: 6; max-width: none; min-width: 0; height: 27px; justify-content: space-between; }
+.editor .headers.aliases .pair .alias-pick { flex: 6; max-width: none; min-width: 0; height: 27px; }
+.editor .headers.aliases .pair .alias-pick > span { flex: 1; text-align: start; }
 .editor .headers.aliases .pair input:first-child { flex: 4; }
 #gatewayKeys .klf-used { display: flex; align-items: center; gap: 8px; min-width: 0; }
 #gatewayKeys .klf-used .key-limit { flex: 1 1 auto; }

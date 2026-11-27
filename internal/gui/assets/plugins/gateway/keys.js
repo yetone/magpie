@@ -439,14 +439,14 @@ function gatewayBrowserTag() {
 }
 
 // gatewayAliasesAsk edits the names a key gives its models: a row each, the
-// name typed and the model picked in the app's menu. /v1/models lists the
+// name typed and the model picked in the model picker. /v1/models lists the
 // name in the model's place and a request by it goes to the model.
 function gatewayAliasesAsk(k) {
   const ed = el("div", "editor alias-ask");
   const head = el("div", "ehead");
   head.append(el("b", "", t("Model names")));
   const rows = Object.entries(k.aliases || {});
-  let models = null;  // the models a row may pick, read when a row is first opened
+  let models = null;  // the models a row may pick
   const box = el("div", "headers aliases");
   const bar = el("div", "bar");
   const cancel = el("button", "text", t("Cancel"));
@@ -456,16 +456,10 @@ function gatewayAliasesAsk(k) {
   // a row with neither is left out
   const half = () => rows.some(([n, m]) => !!n.trim() !== !!m);
   const check = () => { go.disabled = half(); };
-  const pick = async (b, row) => {
-    if (b.classList.contains("open")) return closeProtoMenu();
-    if (!models) {
-      try { ({ models } = await api("caller-keys/models")); } catch (err) { status(t(err.message), "err"); return; }
-    }
-    if (!b.isConnected) return;
-    const opts = (models || []).map((m) => ({ v: m.id, find: m.id, name: m.name, note: m.id, literalName: true }));
-    if (row[1] && !opts.some((o) => o.v === row[1])) opts.push({ v: row[1], name: row[1], note: "Not served now", literalName: true });
-    openProtoMenu(b, opts, row[1], (v) => { row[1] = v; draw(rows.indexOf(row)); check(); }, "Pick a model", "sess-menu", "left", false, "Search models");
-  };
+  // the models a row may pick, in the model picker: a key's models, not
+  // its accounts and keys; read once the editor opens
+  const loaded = api("caller-keys/models").then((r) => { models = (r.models || []).filter((m) => !m.account && !m.key); }, (err) => status(t(err.message), "err"));
+  const pick = (row) => ({ value: row[1], models: models || [], name: row[1] ? "" : t("Pick a model"), onPick: (v) => { row[1] = v; draw(rows.indexOf(row)); check(); } });
   const draw = (at = -1) => {
     box.replaceChildren();
     rows.forEach((row, i) => {
@@ -475,14 +469,15 @@ function gatewayAliasesAsk(k) {
       name.setAttribute("aria-label", t("Model names"));
       name.oninput = () => { row[0] = name.value; check(); };
       name.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") closeConfirmAsk(); };
-      const b = el("button", "sess-pick alias-pick" + (row[1] ? " set" : ""));
-      b.type = "button";
+      const b = modelButton("alias-pick" + (row[1] ? " set" : ""), pick(row));
       b.setAttribute("aria-label", t("Pick a model"));
-      b.setAttribute("aria-haspopup", "menu");
-      b.setAttribute("aria-expanded", "false");
       b.title = row[1];
-      b.replaceChildren(el("span", "", row[1] || t("Pick a model")), svg(CHEV, 11, 1.6));
-      b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); pick(b, row); };
+      b.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await loaded;
+        if (b.isConnected) openModelPicker(b, e, pick(row));
+      };
       const del = el("button", "text danger", "\u00d7");
       del.type = "button";
       del.title = t("Remove");
@@ -516,6 +511,8 @@ function gatewayAliasesAsk(k) {
   ed.append(head, box, bar);
   if (!rows.length) rows.push(["", ""]);
   draw();
+  // read: each row's model by its logo and name, the focus where it was
+  loaded.then(() => box.querySelectorAll(".alias-pick").forEach((b, i) => rows[i] && b.replaceChildren(...modelButton("", pick(rows[i])).childNodes)));
   confirmAsk = ed;
   openModal(ed);
   $("#modal").classList.add("lib");

@@ -58,7 +58,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelector('#gatewayKeys .acc[data-key="work"] .key-models.set')?.textContent.trim() === "re:^gpt-");
 
         // the key's names for models, a row each: a name typed and a model
-        // picked in the app's menu. A row with half of it can't be saved.
+        // picked in the model picker. A row with half of it can't be saved.
         const open = async () => {
           await row.hover();
           await row.locator(".gw-key-more").click();
@@ -73,13 +73,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await pairs.count(), 1);
         await pairs.nth(0).locator("input").fill("oops");
         assert.equal(await save.isDisabled(), true);
+        // in the one model picker, the Agents page's: its rail, its search
         const choose = async (n, find, name) => {
           await pairs.nth(n).locator(".alias-pick").click();
-          const pm = page.locator(".proto-menu");
-          await pm.waitFor();
-          await pm.locator(".sc-q").fill(find);
-          await pm.locator(".pm-item:not([hidden])").filter({ has: page.locator(".pm-name", { hasText: new RegExp("^" + name + "$") }) }).click();
-          await pm.waitFor({ state: "detached" });
+          const pop = page.locator("#pop.model-picker:not([hidden])");
+          await pop.waitFor();
+          assert.ok(await pop.locator("#pickerRail:not([hidden]) .rail-item").count() >= 3, "the picker's rail");
+          assert.equal(await page.locator(".proto-menu").count(), 0, "a menu of the page's own");
+          await pop.locator("#q").fill(find);
+          await pop.locator("#list li[data-i]").filter({ has: page.locator(".option-words > .v").getByText(name, { exact: true }) }).click();
+          await pop.waitFor({ state: "hidden" });
         };
         await choose(0, "openai/gpt", "GPT-5");
         assert.equal(await save.isDisabled(), false);
@@ -105,6 +108,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await pairs.nth(1).waitFor();
         assert.deepEqual(await pairs.locator("input").evaluateAll((l) => l.map((i) => i.value)), ["gpt-4", "fast"]);
         assert.deepEqual(await pairs.locator(".alias-pick").evaluateAll((l) => l.map((b) => b.title)), ["openai/gpt-5", "relay/m"]);
+        // each by its name, as the picker names it
+        await page.waitForFunction(() => [...document.querySelectorAll("#modal .alias-pick")].map((b) => b.textContent.trim()).join("|") === "GPT-5|Model");
         await page.keyboard.press("Escape");
         await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth);
         assert.deepEqual(errors, []);

@@ -377,9 +377,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(`${view} .lib-mems .lib-mem`, { hasText: "Ships on Tuesdays" }).waitFor();
 
         if (width === 980) {
-          // a model picked through the app's menu, not a <select>
+          // a model picked in the one model picker, the Agents page's (its
+          // rail, its search), not a <select> or a menu of the page's own
           await drow.locator(".lib-distmodel").click();
-          await page.locator(".proto-menu .pm-item", { hasText: "Model One" }).click();
+          const pop = page.locator("#pop.model-picker:not([hidden])");
+          await pop.waitFor();
+          assert.ok(await pop.locator("#pickerRail:not([hidden]) .rail-item").count() >= 3, "the picker's rail");
+          assert.ok(await pop.locator("#q").isVisible(), "the picker's search");
+          assert.equal(await page.locator(".proto-menu").count(), 0, "a menu of the page's own");
+          assert.equal(await pop.locator("#list li[data-i]").count(), 3, "Automatic and the two models");
+          await pop.locator("#list li[data-i]", { hasText: "Model One" }).click();
           await page.waitForFunction(() => /Model One/.test(document.querySelector("#view-library .lib-distmodel")?.textContent || ""));
           assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "dt/m1" });
           assert.equal(await page.locator(`${view} select`).count(), 0, "a native select");
@@ -414,6 +421,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await drow.locator(".sub.err").waitFor();
           assert.match(await drow.locator(".sub.err").textContent(), /429: too many requests/);
           assert.ok(sent.some((x) => x.path === "/api/memory/distill/run"));
+          // Automatic, the picker's first row: no model of its own again
+          await drow.locator(".lib-distmodel").click();
+          await pop.waitFor();
+          assert.equal(await pop.locator("#list li.cur", { hasText: "Model One" }).count(), 1);
+          await pop.locator("#list li.reset").first().click();
+          await page.waitForFunction(() => !/Model One/.test(document.querySelector("#view-library .lib-distmodel")?.textContent || ""));
+          assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "" });
         }
 
         // tidied now: what it set aside leaves To review, and is undone once

@@ -65,9 +65,9 @@ func servedModels() []modelRef {
 	ms := []modelRef{}
 	for _, e := range provider.Served() {
 		if e.Group != "" || e.Provider.Ready() && !e.Provider.DecideOnly() {
-			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
+			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context}
 			if e.Group != "" {
-				m.Provider, m.PName = "", e.Group
+				m.Provider, m.PName, m.Icons = "", e.Group, e.Icons
 			}
 			ms = append(ms, m)
 		}
