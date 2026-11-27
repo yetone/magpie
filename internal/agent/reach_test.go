@@ -21,9 +21,9 @@ func fakeReach(t *testing.T, answers map[string]bool) *sync.Mutex {
 	was, age := reachProbe, reachAge
 	reachProbe = func(base string) bool { mu.Lock(); defer mu.Unlock(); return answers[base] }
 	reachAge = time.Hour
-	reach.Lock()
-	reach.m = nil
-	reach.Unlock()
+	// a probe an earlier test's Drift left out is waited for, not cut
+	// off: its answer is written into reach.m, so a nil map there panics
+	reachForget()
 	t.Cleanup(func() {
 		reachForget()
 		reachProbe, reachAge = was, age
@@ -49,6 +49,26 @@ func reachForget() {
 		reach.Unlock()
 	}
 	panic("a reach probe never answered")
+}
+
+// TestFakeReachWaitsForAProbeOut: a probe an earlier test started and
+// left out (any Drift starts one) still answers into reach.m after
+// fakeReach has started the next test. Dropping the map under it panicked
+// the whole package on ubuntu CI (a233f85b2, reach.go:268).
+func TestFakeReachWaitsForAProbeOut(t *testing.T) {
+	reachForget()
+	answered := make(chan struct{})
+	probed("left out", func() bool {
+		time.Sleep(50 * time.Millisecond)
+		close(answered)
+		return true
+	})
+	fakeReach(t, nil)
+	select {
+	case <-answered:
+	default:
+		t.Fatal("fakeReach began before the probe left out answered")
+	}
 }
 
 // driftSettled is the agent's drift once the probes it starts have
