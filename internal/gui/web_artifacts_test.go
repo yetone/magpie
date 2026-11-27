@@ -138,20 +138,50 @@ func TestWebArtifactsSignedIn(t *testing.T) {
 // says where it is, and this computer's otherwise. The Library's page
 // lists them at this computer's address either way, which artifacts.js
 // moves to the page's own in a browser away.
+//
+// The address is MAGPIE_PUBLIC_URL whole, its scheme, port and path: a
+// proxy at https://123.abc:666 was given http://123.abc:3430, its host on
+// the page's own scheme and port (#8014). MAGPIE_WEB_URL, the page's own
+// address, comes first.
 func TestWebArtifactLinks(t *testing.T) {
-	for _, c := range []struct{ public, host, want string }{
-		{"https://magpie.example.com", "0.0.0.0", "https://magpie.example.com"},
-		{"https://magpie.example.com", "127.0.0.1", "https://magpie.example.com"}, // a proxy on this host
-		{"http://nas.local:3425", "0.0.0.0", "http://nas.local:3430"},
-		{"http://nas.local:3425", "127.0.0.1", ""},
-		{"", "0.0.0.0", ""},
+	for _, c := range []struct{ public, want string }{
+		{"https://magpie.example.com", "https://magpie.example.com"}, // 443 implied stays so
+		{"https://magpie.example.com/", "https://magpie.example.com"},
+		{"https://123.abc:666", "https://123.abc:666"},
+		{"https://123.abc:666/magpie/", "https://123.abc:666/magpie"},
+		{"https://x.example/magpie", "https://x.example/magpie"},
+		{"http://nas.local:3425", "http://nas.local:3425"}, // the gateway, published on the host
+		{"", ""},
 	} {
 		t.Setenv("MAGPIE_PUBLIC_URL", c.public)
+		t.Setenv("MAGPIE_WEB_URL", "")
 		t.Setenv("LAZYCAT_APP_DOMAIN", "")
-		if got := artifactsAtWeb(c.host, "3430"); got != c.want {
-			t.Errorf("%q on %s: %q, want %q", c.public, c.host, got, c.want)
+		got := ArtifactsAt()
+		if got != c.want {
+			t.Errorf("%q: %q, want %q", c.public, got, c.want)
+		}
+		gateway.SetArtifactsAt(got)
+		want := c.want + "/a/abc@2/"
+		if c.want == "" {
+			want = gateway.URL() + "/a/abc@2/"
+		}
+		if u := gateway.ArtifactURL("abc", 2); u != want {
+			t.Errorf("%q: the link %q, want %q", c.public, u, want)
+		}
+		gateway.SetArtifactsAt("")
+	}
+	t.Setenv("MAGPIE_PUBLIC_URL", "https://123.abc:666")
+	for web, want := range map[string]string{
+		"https://page.example:667/": "https://page.example:667",
+		"page.example":              "https://page.example",
+		"http://u:p@page.example":   "https://123.abc:666", // no plain address: MAGPIE_PUBLIC_URL's
+	} {
+		t.Setenv("MAGPIE_WEB_URL", web)
+		if got := ArtifactsAt(); got != want {
+			t.Errorf("MAGPIE_WEB_URL %q: %q, want %q", web, got, want)
 		}
 	}
+	t.Setenv("MAGPIE_WEB_URL", "")
 
 	dir := t.TempDir()
 	was := artifact.Dir

@@ -400,16 +400,19 @@ func newArtifactCaller(r *http.Request, rawMeta json.RawMessage) *artifactCaller
 	return c
 }
 
-// artifactBase is s when it is an http(s) address with a host and
-// nothing after it, without its trailing slash; else "".
+// artifactBase is s when it is an http(s) address with a host, and a
+// path at most (a proxy's https://example.com/magpie), without its
+// trailing slash; else "". The path is kept: MAGPIE_PUBLIC_URL behind a
+// proxy on a sub-path is where magpie is, and links at its host alone
+// would miss it.
 func artifactBase(s string) string {
 	s = strings.TrimRight(strings.TrimSpace(s), "/")
 	u, err := url.Parse(s)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil ||
-		u.Path != "" || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(u.Host, " \"\\<>") {
+		u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || strings.ContainsAny(u.Host, " \"\\<>") {
 		return ""
 	}
-	return u.Scheme + "://" + u.Host
+	return u.Scheme + "://" + u.Host + strings.TrimRight(u.EscapedPath(), "/")
 }
 
 // away: the caller is an agent on another computer (or in another

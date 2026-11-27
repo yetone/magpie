@@ -125,7 +125,7 @@ func StartWeb(addr, version string) (*Web, error) {
 	host, port, _ := net.SplitHostPort(w.Addr)
 	// artifacts' links name the page's address when it has a public one
 	// (#7665)
-	gateway.SetArtifactsAt(artifactsAtWeb(host, port))
+	gateway.SetArtifactsAt(ArtifactsAt())
 	if ip := net.ParseIP(host); ip == nil || ip.IsUnspecified() {
 		host = "127.0.0.1"
 	}

@@ -2,9 +2,9 @@ package gui
 
 import (
 	"crypto/subtle"
-	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/yetone/magpie/internal/gateway"
@@ -13,7 +13,7 @@ import (
 // An artifact (gateway's ArtifactPagePath) is served by the gateway to a
 // browser on this computer alone. magpie web on a server, at
 // MAGPIE_PUBLIC_URL, serves it to the browsers signed in to it too
-// (#7665): its links name the page's address (artifactsAtWeb), where
+// (#7665): its links name the page's address (ArtifactsAt), where
 // <base>/a/<id>/ takes the sign-in (webArtifactLinks) and sends the
 // browser on to webArtifactPrefix<token>/<id>/. The page is served there
 // in the same sandbox, an opaque origin whose own requests (a module
@@ -111,24 +111,42 @@ func webNoStore(rw http.ResponseWriter) {
 	rw.Header().Set("Referrer-Policy", "no-referrer")
 }
 
-// artifactsAtWeb is where artifacts' links point while magpie web serves
-// on port: the page's address when MAGPIE_PUBLIC_URL names it (a proxy's,
-// or the host the container's ports are published on, the page on its
-// own port there), "" otherwise. Without MAGPIE_PUBLIC_URL they stay on
-// this computer, where a desktop's or a LAN server's user opens them.
-// With MAGPIE_PUBLIC_URL at a port of its own, a page listening on
-// loopback alone isn't there.
-func artifactsAtWeb(host, port string) string {
+// WebURL is MAGPIE_WEB_URL, magpie web's own address behind a reverse
+// proxy (https:// when it names no scheme), without its trailing slash;
+// "" when it isn't set or isn't a plain http(s) address.
+func WebURL() string {
+	v := strings.TrimSpace(os.Getenv("MAGPIE_WEB_URL"))
+	if v == "" {
+		return ""
+	}
+	if !strings.Contains(v, "://") {
+		v = "https://" + v
+	}
+	u, err := url.Parse(v)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return ""
+	}
+	return strings.TrimRight(u.String(), "/")
+}
+
+// ArtifactsAt is where artifacts' links point when magpie is reached
+// from elsewhere: MAGPIE_WEB_URL, else MAGPIE_PUBLIC_URL (or a LazyCat
+// app's address), each as given, its scheme, host, port and path; ""
+// with neither. magpie web serves /a/ at its own address (onePort hands
+// it to the gateway, or its sign-in takes it), and the gateway at
+// MAGPIE_PUBLIC_URL's, so the address the user named is the one that
+// reaches it: a proxy's https://magpie.example.com:666/magpie as much as
+// a Docker host's http://nas.local:3425. Only its host, on the page's
+// own scheme and port, gave a proxy's users an address nothing answers
+// at (#8014). Without either the links stay on this computer, where a
+// desktop's or a LAN server's user opens them.
+func ArtifactsAt() string {
+	if u := WebURL(); u != "" {
+		return u
+	}
 	pub, err := url.Parse(gateway.PublicURL())
-	if err != nil || pub.Host == "" {
+	if err != nil || pub.Host == "" || (pub.Scheme != "http" && pub.Scheme != "https") {
 		return ""
 	}
-	if ip := net.ParseIP(host); pub.Port() != "" && (host == "localhost" || ip != nil && ip.IsLoopback()) {
-		return ""
-	}
-	links := NetworkLinks(port, "")
-	if len(links) == 0 {
-		return ""
-	}
-	return links[0]
+	return strings.TrimRight(pub.String(), "/")
 }

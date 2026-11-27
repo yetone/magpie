@@ -13,6 +13,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/artifact"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/gui"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -68,7 +69,7 @@ func artifactsTo(w io.Writer, args []string, now time.Time) error {
 			if a.Version(n) == nil {
 				return fmt.Errorf("%s has no version %d: it has 1 to %d", a.Title, n, a.Latest().N)
 			}
-			url := gateway.ArtifactURL(id, n)
+			url := gateway.ArtifactLocalURL(id, n)
 			if err := openArtifact(url); err != nil {
 				return fmt.Errorf("couldn't open %s: %w", url, err)
 			}
@@ -164,13 +165,13 @@ func artifactsListTo(w io.Writer, asJSON bool, now time.Time) error {
 		}
 		out := make([]row, 0, len(list))
 		for _, a := range list {
-			r := row{ID: a.ID, Title: a.Title, Description: a.Description, Updated: a.Updated, URL: gateway.ArtifactURL(a.ID, 0)}
+			r := row{ID: a.ID, Title: a.Title, Description: a.Description, Updated: a.Updated, URL: artifactLink(a.ID, 0)}
 			if sh, err := artifact.Shared(a.ID); err == nil && sh != nil {
 				r.Shared, r.SharedVersion = sh.URL, sh.Version
 			}
 			for i := len(a.Versions) - 1; i >= 0; i-- {
 				v := a.Versions[i]
-				r.Versions = append(r.Versions, ver{N: v.N, At: v.At, Label: v.Label, Agent: v.Agent, URL: gateway.ArtifactURL(a.ID, v.N)})
+				r.Versions = append(r.Versions, ver{N: v.N, At: v.At, Label: v.Label, Agent: v.Agent, URL: artifactLink(a.ID, v.N)})
 			}
 			out = append(out, r)
 		}
@@ -192,10 +193,23 @@ func artifactsListTo(w io.Writer, asJSON bool, now time.Time) error {
 		if len(a.Versions) > 1 {
 			bits = append(bits, plural(len(a.Versions), "version"))
 		}
-		fmt.Fprintf(w, "%s  %s\n  %s\n", a.Title, strings.Join(bits, " · "), gateway.ArtifactURL(a.ID, 0))
+		fmt.Fprintf(w, "%s  %s\n  %s\n", a.Title, strings.Join(bits, " · "), artifactLink(a.ID, 0))
 		if sh, err := artifact.Shared(a.ID); err == nil && sh != nil {
 			fmt.Fprintf(w, "  shared: %s\n", sh.URL)
 		}
 	}
 	return nil
+}
+
+// artifactLink is the address `magpie artifacts` lists artifact id's
+// page at (version 0: the newest): MAGPIE_WEB_URL's or MAGPIE_PUBLIC_URL's
+// as given, as magpie web's answers to agents name it (gui.ArtifactsAt),
+// so `docker exec magpie magpie artifacts` lists the addresses a browser
+// away opens (#8014); else this computer's. open opens this computer's
+// browser, so it keeps this computer's address (ArtifactLocalURL).
+func artifactLink(id string, version int) string {
+	if at := gui.ArtifactsAt(); at != "" {
+		return at + gateway.ArtifactPath(id, version)
+	}
+	return gateway.ArtifactLocalURL(id, version)
 }

@@ -147,8 +147,8 @@ func TestArtifactsAnswerAnAgentAway(t *testing.T) {
 		t.Errorf("delete away: %s", said)
 	}
 
-	// what isn't an address with a host alone is no base
-	for _, bad := range []string{"javascript:alert(1)", "http://x/a/", "http://u:p@x", "ftp://x", "http://x?a=1", "x:3425"} {
+	// what isn't an address with a host (and a path at most) is no base
+	for _, bad := range []string{"javascript:alert(1)", "http://u:p@x", "ftp://x", "http://x?a=1", "http://x/a#b", "x:3425"} {
 		if said, _ := awayCall(t, h, bad, home, artifactPublishTool, map[string]any{"html": "<p>"}); !strings.Contains(said, URL()+ArtifactPagePath) {
 			t.Errorf("base %q: %s", bad, said)
 		}
@@ -161,6 +161,40 @@ func TestArtifactsAnswerAnAgentAway(t *testing.T) {
 	}
 	if said, isErr := awayCall(t, h, "", home, artifactPublishTool, map[string]any{"file_path": "/workspace/out/report.html"}); !isErr || strings.Contains(said, "another computer") {
 		t.Errorf("a missing file here: %v %s", isErr, said)
+	}
+}
+
+// An agent away is given its links at MAGPIE_PUBLIC_URL whole: its
+// scheme, its port and the path a proxy serves magpie under. A proxy at
+// https://123.abc:666 was given http://123.abc:3430 (@Crazybiaobiao on
+// X), and one on a sub-path no base at all, so this computer's
+// 127.0.0.1 address.
+func TestArtifactLinksKeepThePublicURLWhole(t *testing.T) {
+	h := artifacts(t)
+	t.Setenv("LAZYCAT_APP_DOMAIN", "")
+	home := t.TempDir()
+	for _, c := range []struct{ public, at string }{
+		{"https://123.abc:666/magpie/", "https://123.abc:666/magpie"},
+		{"https://123.abc:666", "https://123.abc:666"},
+		{"https://magpie.example.com", "https://magpie.example.com"}, // 443 implied: no port added
+	} {
+		t.Setenv("MAGPIE_PUBLIC_URL", c.public)
+		// what the hub tells the server for a caller away (hubCall)
+		r := httptest.NewRequest(http.MethodPost, HubMCPAll, nil)
+		r.Host = "magpie:3425"
+		base := imageMCPBase(r)
+		said, isErr := awayCall(t, h, base, home, artifactPublishTool, map[string]any{"html": "<title>Whole</title><p>hi"})
+		if isErr || !strings.Contains(said, c.at+ArtifactPagePath) || strings.Contains(said, URL()) || strings.Contains(said, ":3430") ||
+			strings.Contains(said, "MAGPIE_PUBLIC_URL") || strings.Contains(said, "private to this computer") {
+			t.Fatalf("%s: publish away: %s", c.public, said)
+		}
+		id := publishedID(t, said)
+		link := c.at + ArtifactPagePath + id + "/"
+		for tool, args := range map[string]map[string]any{artifactReadTool: {"id": id}, artifactListTool: {}, artifactOpenTool: {"id": id}} {
+			if said, _ := awayCall(t, h, base, home, tool, args); !strings.Contains(said, link) {
+				t.Errorf("%s: %s away: %s", c.public, tool, said)
+			}
+		}
 	}
 }
 
