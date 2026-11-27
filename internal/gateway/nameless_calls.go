@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/yetone/magpie/internal/lazyre"
 )
@@ -24,10 +25,24 @@ import (
 //     wrote it, on Messages, Responses and Chat (namelessBlocksOut,
 //     namelessItemsOut, namelessChatCallsOut). The call and its answer go
 //     together, so what is left still pairs.
+//
+// A nameless call Gemini signed takes the step's thought signature with
+// it: Gemini signs the first call of a step, and turns the next request
+// away without that signature on it (400 "Function call is missing a
+// thought_signature"). So when a nameless call that carries one is left
+// out, the signature goes to the named call after it in the same step,
+// one that carries none of its own (Kisxndbskx on X: Codex on a relay
+// serving Gemini, a nameless signed call before a named one). A call
+// with no Gemini signature hands nothing on, so no other vendor's reply
+// or history changes.
 
 // withoutNamelessCalls leaves out of r's history every tool call that
 // names no function and every result answering one of them by its id. A
 // message left with nothing is left out too.
+//
+// A Gemini signature on a call left out goes to the next named call of
+// the same step with none (the assistant messages up to the next other
+// message): unsignCalls has put it on the call by then.
 func withoutNamelessCalls(r *Request) {
 	found := false
 	gone := map[string]bool{}
@@ -45,14 +60,26 @@ func withoutNamelessCalls(r *Request) {
 		return
 	}
 	msgs := make([]Message, 0, len(r.Messages))
+	sig := "" // a left-out call's signature, for the next named call of its step
 	for _, m := range r.Messages {
+		if m.Role != "assistant" {
+			sig = ""
+		}
 		parts := make([]Part, 0, len(m.Parts))
 		for _, p := range m.Parts {
 			switch {
 			case p.Kind == ToolCall && p.Name == "":
+				if sig == "" {
+					sig = p.Signature
+				}
 				continue
 			case p.Kind == ToolResult && p.Standalone == nil && p.CallID != "" && gone[p.CallID]:
 				continue
+			case p.Kind == ToolCall && sig != "":
+				if p.Signature == "" {
+					p.Signature = sig
+				}
+				sig = ""
 			}
 			parts = append(parts, p)
 		}
@@ -68,11 +95,13 @@ func withoutNamelessCalls(r *Request) {
 // namelessEncoder hands its encoder a reply without the calls in it that
 // name no function, nor their arguments. A reply whose only calls were
 // such ends "stop": told it stopped for tools with none to run, an agent
-// waits on nothing.
+// waits on nothing. A Gemini signature a left-out call's id carried goes
+// on the id of the named call after it (handedSignature).
 type namelessEncoder struct {
 	streamEncoder
-	dropping        bool // the open call named nothing: its arguments go nowhere
-	named, nameless bool // whether the reply made a call naming a function, one naming none
+	dropping        bool   // the open call named nothing: its arguments go nowhere
+	named, nameless bool   // whether the reply made a call naming a function, one naming none
+	sig             string // a left-out call's Gemini signature, for the next named call
 }
 
 func (e *namelessEncoder) event(ev Event) {
@@ -80,9 +109,16 @@ func (e *namelessEncoder) event(ev Event) {
 	case KToolStart:
 		if e.dropping = ev.Name == ""; e.dropping {
 			e.nameless = true
+			if e.sig == "" {
+				e.sig = callSignature(ev.ID)
+			}
 			return
 		}
 		e.named = true
+		if e.sig != "" {
+			ev.ID = handedSignature(ev.ID, e.sig)
+			e.sig = ""
+		}
 	case KToolArgs:
 		if e.dropping {
 			return
@@ -101,17 +137,27 @@ func (e *namelessEncoder) event(ev Event) {
 }
 
 // namelessResult is a whole reply without the calls in it that name no
-// function, ended "stop" when those were all its calls.
+// function, ended "stop" when those were all its calls. A Gemini
+// signature a left-out call's id carried goes on the id of the named
+// call after it (handedSignature).
 func namelessResult(res Result) Result {
 	dropped, named := false, false
+	sig := ""
 	var parts []Part
 	for _, p := range res.Parts {
 		if p.Kind == ToolCall {
 			if p.Name == "" {
 				dropped = true
+				if sig == "" {
+					sig = callSignature(p.ID)
+				}
 				continue
 			}
 			named = true
+			if sig != "" {
+				p.ID = handedSignature(p.ID, sig)
+				sig = ""
+			}
 		}
 		parts = append(parts, p)
 	}
@@ -123,6 +169,57 @@ func namelessResult(res Result) Result {
 		res.Stop = "stop"
 	}
 	return res
+}
+
+// callSignature is the Gemini thought signature a call's id carries
+// (signedID), or "" for an id that carries none, as every other vendor's
+// does.
+func callSignature(id string) string {
+	if !strings.Contains(id, sigMark) {
+		return ""
+	}
+	_, sig := unsignedID(id)
+	return sig
+}
+
+// handedSignature is the id of a named call given sig, the signature of a
+// nameless call before it in the same step: Gemini wants it on the step's
+// first call, and the nameless one goes nowhere. An id that carries a
+// signature of its own keeps it.
+func handedSignature(id, sig string) string {
+	if sig == "" || callSignature(id) != "" {
+		return id
+	}
+	return signedID(id, sig)
+}
+
+// signatureTail is the end of a call's id that carries its Gemini
+// signature (signedID's mark and what follows), to go on another call's
+// id as it is; "" for an id that carries none.
+func signatureTail(id string) string {
+	if !strings.Contains(id, sigMark) {
+		return ""
+	}
+	own, sig := unsignedID(id)
+	if sig == "" {
+		return ""
+	}
+	return id[len(own):]
+}
+
+// withMember is the JSON object raw with its member key set to the string
+// v; raw as it came when it isn't an object.
+func withMember(raw json.RawMessage, key, v string) json.RawMessage {
+	var whole map[string]json.RawMessage
+	if decodeJSON(raw, &whole) != nil || whole == nil {
+		return raw
+	}
+	whole[key], _ = marshalPlain(v)
+	out, err := marshalPlain(whole)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 // emptyName finds a name given as "" or null in a body: the only bodies a
@@ -222,7 +319,9 @@ func namelessBlocksOut(body []byte) []byte {
 // namelessItemsOut is a Responses request, relayed as the client wrote it,
 // without its function_call and custom_tool_call items that name nothing
 // and the outputs answering them. A body with none comes back byte for
-// byte.
+// byte. The Gemini signature a left-out call's id carried goes on the
+// next named call of its step (signatureTail), and on the output
+// answering that call, so the two still pair on any upstream.
 func namelessItemsOut(body []byte) []byte {
 	if !emptyName.Match(body) {
 		return body
@@ -255,10 +354,33 @@ func namelessItemsOut(body []byte) []byte {
 		return body
 	}
 	kept := make([]json.RawMessage, 0, len(items))
+	tail := ""                     // a left-out call's signature, for the next named call of its step
+	renamed := map[string]string{} // a call given that signature: its id, to the id carrying it
 	for _, el := range items {
 		var it item
-		if decodeJSONView(el, &it) == nil && (call(it) || (it.Type == "function_call_output" || it.Type == "custom_tool_call_output") && it.CallID != "" && gone[it.CallID]) {
+		if decodeJSONView(el, &it) != nil {
+			kept = append(kept, el)
 			continue
+		}
+		output := it.Type == "function_call_output" || it.Type == "custom_tool_call_output"
+		switch {
+		case call(it):
+			if tail == "" {
+				tail = signatureTail(it.CallID)
+			}
+			continue
+		case output && it.CallID != "" && gone[it.CallID]:
+			continue
+		case output && renamed[it.CallID] != "":
+			el = withMember(el, "call_id", renamed[it.CallID])
+		case it.Type == "function_call" || it.Type == "custom_tool_call":
+			if tail != "" && it.CallID != "" && callSignature(it.CallID) == "" {
+				renamed[it.CallID] = it.CallID + tail
+				el = withMember(el, "call_id", it.CallID+tail)
+			}
+			tail = ""
+		case it.Type != "reasoning":
+			tail = "" // the step ended with no named call after it
 		}
 		kept = append(kept, el)
 	}
@@ -272,7 +394,10 @@ func namelessItemsOut(body []byte) []byte {
 // namelessChatCallsOut is a Chat request, relayed as the client wrote it,
 // without its tool calls that name no function and the tool messages
 // answering them. An assistant message left with neither calls nor content
-// is left out. A body with none comes back byte for byte.
+// is left out. A body with none comes back byte for byte. The Gemini
+// signature a left-out call carried, in its id (signatureTail) or in
+// extra_content, goes on the next named call of its message that has
+// none, and an id given it on the tool message answering that call.
 func namelessChatCallsOut(body []byte) []byte {
 	if !emptyName.Match(body) || !bodyHas(body, `"tool_calls"`) {
 		return body
@@ -287,6 +412,7 @@ func namelessChatCallsOut(body []byte) []byte {
 		Function struct {
 			Name json.RawMessage `json:"name"`
 		} `json:"function"`
+		Extra json.RawMessage `json:"extra_content"`
 	}
 	gone := map[string]bool{}
 	seen := false
@@ -310,6 +436,7 @@ func namelessChatCallsOut(body []byte) []byte {
 		return body
 	}
 	out := make([]json.RawMessage, 0, len(msgs))
+	renamed := map[string]string{} // a call given a left-out call's signature: its id, to the id carrying it
 	for _, m := range msgs {
 		var msg struct {
 			Role       string            `json:"role"`
@@ -323,12 +450,43 @@ func namelessChatCallsOut(body []byte) []byte {
 		if msg.Role == "tool" && msg.ToolCallID != "" && gone[msg.ToolCallID] {
 			continue
 		}
+		if msg.Role == "tool" && renamed[msg.ToolCallID] != "" {
+			out = append(out, withMember(m, "tool_call_id", renamed[msg.ToolCallID]))
+			continue
+		}
 		var kept []json.RawMessage
+		var tail string           // a left-out call's signature in its id
+		var extra json.RawMessage // or in its extra_content
 		for _, c := range msg.ToolCalls {
 			var cl call
-			if decodeJSONView(c, &cl) == nil && namesNothing(cl.Function.Name) {
+			if decodeJSONView(c, &cl) != nil {
+				kept = append(kept, c)
 				continue
 			}
+			if namesNothing(cl.Function.Name) {
+				if tail == "" && extra == nil {
+					if tail = signatureTail(cl.ID); tail == "" && googleSignature(cl.Extra) != "" {
+						extra = cl.Extra
+					}
+				}
+				continue
+			}
+			if (tail != "" || extra != nil) && callSignature(cl.ID) == "" && googleSignature(cl.Extra) == "" {
+				switch {
+				case tail != "" && cl.ID != "":
+					renamed[cl.ID] = cl.ID + tail
+					c = withMember(c, "id", cl.ID+tail)
+				case extra != nil:
+					var whole map[string]json.RawMessage
+					if decodeJSON(c, &whole) == nil && whole != nil {
+						whole["extra_content"] = extra
+						if nc, err := marshalPlain(whole); err == nil {
+							c = nc
+						}
+					}
+				}
+			}
+			tail, extra = "", nil
 			kept = append(kept, c)
 		}
 		if len(kept) == len(msg.ToolCalls) {
