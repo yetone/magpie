@@ -681,6 +681,9 @@ func artifactPublish(c *artifactCaller, a artifactArgs) (string, error) {
 			fmt.Fprintf(&b, "The user shared it at %s, which still shows version %d: %v. Give the user the address, and say so.", sh.URL, sh.Version, err)
 		} else {
 			fmt.Fprintf(&b, "The user shared it: anyone with its link, %s, sees this version now. Give the user the address.", sh2.URL)
+			if sh2.Note != "" {
+				fmt.Fprintf(&b, " On the shared copy, %s: say so.", sh2.Note)
+			}
 		}
 	}
 	return b.String(), nil

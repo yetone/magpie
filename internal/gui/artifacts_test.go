@@ -107,6 +107,9 @@ func TestArtifactsShareAPI(t *testing.T) {
 			live = true
 			w.WriteHeader(http.StatusCreated)
 			w.Write([]byte(`{"id":"abcdefghijklmnop","url":"https://usemagpie.ai/a/abcdefghijklmnop","token":"tok","version":1}`))
+		case r.Method == http.MethodGet:
+			// its assets (none)
+			w.Write([]byte(`{"blobs":[]}`))
 		case r.Method == http.MethodDelete:
 			live = false
 			w.Write([]byte(`{"deleted":true}`))

@@ -2,7 +2,7 @@
 // node:sqlite and R2 by r2stub.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { api, page, content, prune, cleanPath, RATE, MAX_BYTES, CONTENT } from "./shares.js";
+import { api, page, content, prune, cleanPath, RATE, MAX_BYTES, CONTENT, MAX_BLOBS, BLOB_RATE } from "./shares.js";
 import worker from "./worker.js";
 import { bucket } from "./r2stub.mjs";
 import { d1 } from "./d1stub.mjs";
@@ -208,4 +208,93 @@ test("shares: the worker sends the content host, /a/ and /api/shares to shares.j
   // the content host serves nothing of the site's
   assert.equal((await worker.fetch(req("GET", "/", { host: CONTENT }), s.env, s.ctx)).status, 404);
   assert.equal((await worker.fetch(req("GET", "/api/latest", { host: CONTENT }), s.env, s.ctx)).status, 404);
+});
+
+// #7649: the page's assets go with its share, and the content host
+// serves each at /_blob/<id>, the address the page wrote, by its id alone
+const AID = "a".repeat(31) + "b", AID2 = "c".repeat(32);
+function blobReq(method, id, aid, { token, body, type, ip } = {}) {
+  const r = req(method, `/api/shares/${id}/blobs${aid === undefined ? "" : "/" + aid}`, { token, body, ip });
+  if (type) r.headers.set("Content-Type", type);
+  return r;
+}
+
+test("shares: a shared page's assets go up with its token, and show at /_blob/<id> on the content host", async () => {
+  const s = setup();
+  const got = await share(s);
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  // the token, or nothing
+  assert.equal((await api(blobReq("PUT", got.id, AID, { body: png, type: "image/png" }), s.env, s.ctx)).status, 403);
+  assert.equal((await api(blobReq("PUT", got.id, AID, { token: "nope", body: png, type: "image/png" }), s.env, s.ctx)).status, 403);
+  assert.equal((await api(blobReq("GET", got.id, undefined), s.env, s.ctx)).status, 403);
+  // a type an asset may be, a valid id, a body
+  assert.equal((await api(blobReq("PUT", got.id, AID, { token: got.token, body: png, type: "text/html" }), s.env, s.ctx)).status, 415);
+  assert.equal((await api(blobReq("PUT", got.id, "x", { token: got.token, body: png, type: "image/png" }), s.env, s.ctx)).status, 400);
+  assert.equal((await api(blobReq("PUT", got.id, AID, { token: got.token, body: new Uint8Array(), type: "image/png" }), s.env, s.ctx)).status, 400);
+  assert.equal((await api(blobReq("PUT", got.id, AID, { token: got.token, body: new Uint8Array(2 << 20 | 1), type: "image/svg+xml" }), s.env, s.ctx)).status, 413);
+  const put = await api(blobReq("PUT", got.id, AID, { token: got.token, body: png, type: "image/png" }), s.env, s.ctx);
+  assert.equal(put.status, 201, await put.clone().text());
+  // again is an update, not a second
+  assert.equal((await api(blobReq("PUT", got.id, AID, { token: got.token, body: png, type: "image/png" }), s.env, s.ctx)).status, 200);
+  const list = await (await api(blobReq("GET", got.id, undefined, { token: got.token }), s.env, s.ctx)).json();
+  assert.deepEqual(list.blobs, [{ id: AID, type: "image/png", bytes: png.length }]);
+  assert.equal(list.maxFiles, MAX_BLOBS);
+
+  // served as uploaded, sandboxed when opened as a document
+  const b = await content(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "image" }), s.env);
+  assert.equal(b.status, 200);
+  assert.deepEqual(new Uint8Array(await b.arrayBuffer()), png);
+  assert.equal(b.headers.get("Content-Type"), "image/png");
+  assert.equal(b.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.match(b.headers.get("Content-Security-Policy"), /^sandbox; default-src 'none'/);
+  // opened by itself in a tab too: the page may link to it
+  assert.equal((await content(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "document" }), s.env)).status, 200);
+  assert.equal((await content(req("GET", `/_blob/${AID2}`, { host: CONTENT, dest: "image" }), s.env)).status, 404);
+  // through the worker, on the content host only
+  assert.equal((await worker.fetch(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "image" }), s.env, s.ctx)).status, 200);
+
+  // deleted: gone there
+  const del = await (await api(blobReq("DELETE", got.id, AID, { token: got.token }), s.env, s.ctx)).json();
+  assert.equal(del.deleted, true);
+  assert.equal((await content(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "image" }), s.env)).status, 404);
+  assert.equal(s.env.SHARES.objs.has(`${got.id}/_blob/${AID}`), false);
+  assert.equal((await (await api(blobReq("DELETE", got.id, AID, { token: got.token }), s.env, s.ctx)).json()).deleted, false);
+});
+
+test("shares: an asset id another share holds is refused, and a takedown takes the assets with it", async () => {
+  const s = setup();
+  const one = await share(s), two = await share(s);
+  const body = new TextEncoder().encode("a,b\n1,2\n");
+  assert.equal((await api(blobReq("PUT", one.id, AID, { token: one.token, body, type: "text/csv" }), s.env, s.ctx)).status, 201);
+  // first claim wins: another share can't put over it, nor take it down
+  assert.equal((await api(blobReq("PUT", two.id, AID, { token: two.token, body: new TextEncoder().encode("x"), type: "text/plain" }), s.env, s.ctx)).status, 409);
+  assert.equal((await api(blobReq("DELETE", two.id, AID, { token: two.token }), s.env, s.ctx)).status, 409);
+  assert.equal(await (await content(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "empty" }), s.env)).text(), "a,b\n1,2\n");
+
+  const down = await api(req("DELETE", `/api/shares/${one.id}`, { token: one.token }), s.env, s.ctx);
+  assert.equal(down.status, 200);
+  await s.settle();
+  assert.equal((await content(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "image" }), s.env)).status, 404);
+  assert.equal(s.env.SHARES_DB.raw.prepare("SELECT COUNT(*) AS n FROM blobs").get().n, 0);
+  assert.equal([...s.env.SHARES.objs.keys()].some((k) => k.startsWith(`${one.id}/`)), false);
+  // the id is free again
+  assert.equal((await api(blobReq("PUT", two.id, AID, { token: two.token, body, type: "text/csv" }), s.env, s.ctx)).status, 201);
+  // a share gone: its assets' calls are 404s
+  assert.equal((await api(blobReq("PUT", one.id, AID2, { token: one.token, body, type: "text/csv" }), s.env, s.ctx)).status, 404);
+});
+
+test("shares: a share's assets keep to its budget and an address's hourly asks", async () => {
+  const s = setup();
+  const got = await share(s);
+  s.env.SHARES_DB.raw.prepare("INSERT INTO blobs (id, share, type, bytes, created) VALUES (?, ?, 'text/plain', ?, 0)").run(AID2, got.id, (100 << 20) - 3);
+  const four = new Uint8Array(4);
+  const r = await api(blobReq("PUT", got.id, AID, { token: got.token, body: four, type: "text/plain" }), s.env, s.ctx);
+  assert.equal(r.status, 413);
+  assert.match((await r.json()).error, /at most 256 files, 100 MB together/);
+  // replacing one counts its new size, not both
+  assert.equal((await api(blobReq("PUT", got.id, AID2, { token: got.token, body: four, type: "text/plain" }), s.env, s.ctx)).status, 200);
+  assert.equal((await api(blobReq("PUT", got.id, AID, { token: got.token, body: four, type: "text/plain" }), s.env, s.ctx)).status, 201);
+
+  for (let i = 0; i < BLOB_RATE; i++) await api(blobReq("DELETE", got.id, AID2, { token: got.token, ip: "203.0.113.9" }), s.env, s.ctx);
+  assert.equal((await api(blobReq("DELETE", got.id, AID2, { token: got.token, ip: "203.0.113.9" }), s.env, s.ctx)).status, 429);
 });

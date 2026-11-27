@@ -423,9 +423,8 @@ The store:
 - A shared copy on usemagpie.ai runs `SharedRuntime`: `window.claude` is
   there, `db`, `room` and `user` are served there by the site ([Live
   sharing](#live-sharing)), and every other capability resolves null, so
-  the page shows what it shows without them. Its assets aren't shared:
-  `/_blob/<id>` isn't served there, so an `<img>` of one shows nothing on
-  a shared copy (#7649).
+  the page shows what it shows without them. Its assets go with it
+  ([Sharing](#sharing)), so `/_blob/<id>` shows there as it does here.
 
 ## Comments
 
@@ -837,6 +836,18 @@ The site:
   no-transform`, without which Cloudflare injects its Web Analytics
   beacon into the HTML a worker answers: a shared page runs nothing of
   the site's, and the wrapper loads no analytics.
+- A share's assets (#7649): `GET /api/shares/<id>/blobs` lists them,
+  `PUT` and `DELETE /api/shares/<id>/blobs/<asset id>` (the token; the
+  body the bytes, its type the Content-Type, one of `AssetTypes` within
+  its `AssetLimit`) put one up and take it down. A page shows an asset at
+  `/_blob/<asset id>`, an address naming no share and no version, so the
+  content host serves it by its id alone, from D1's `blobs` (asset id →
+  share) and R2's `<share>/_blob/<asset id>`, with the gateway's headers
+  (its type, nosniff, a sandbox CSP for all but a PDF). The first share to
+  hold an id keeps it: another's PUT or DELETE of it is a 409, so a page
+  can't serve over another page's asset. A share holds 256 assets and
+  100 MB of them, and each address makes 600 asset calls an hour. A
+  takedown deletes its rows and its R2 prefix.
 
 magpie:
 
@@ -845,7 +856,17 @@ magpie:
   share.json that doesn't read is an error, never "not shared": sharing
   again would make a second link and lose the first one's token.
 - `ShareLatest` shares the newest version, at a new link or at the one it
-  has; the same version again asks nothing. The gateway's publish calls it
+  has; the same version again sends no version, only brings its assets up
+  to date.
+- The artifact's assets go with it (`syncAssets`, share_assets.go): those
+  the share lacks go up, those deleted here come down. For a shared link
+  they go before the new version, so the version viewers reload to finds
+  each asset it names; a new link's go right after its POST, before its
+  link is anywhere. An upload or delete while shared syncs in the
+  background (`assetsChanged`, at most one queued an artifact). An asset
+  the site refuses (its budget, or an id another share holds) is left out
+  and the rest go; `Share.Note` says which, and the CLI and the publish
+  tool's answer say it too. The GUI shows nothing of it. The gateway's publish calls it
   for a shared artifact, so the link follows each new version, and its
   answer says the link shows it (or that it still shows the version
   before, and why). list and read name the link.

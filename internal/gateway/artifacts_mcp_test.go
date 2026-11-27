@@ -296,7 +296,7 @@ func shareSite(t *testing.T) (puts func() int, up func() bool) {
 		defer mu.Unlock()
 		const id = "abcdefghijklmnop"
 		if r.Method != http.MethodPost && (!live || r.Header.Get("Authorization") != "Bearer tok") {
-			http.Error(w, `{"error":"no such share"}`, http.StatusNotFound)
+			http.Error(w, `{"error":"no such shared page: it was taken down"}`, http.StatusNotFound)
 			return
 		}
 		switch r.Method {
@@ -304,6 +304,9 @@ func shareSite(t *testing.T) (puts func() int, up func() bool) {
 			live = true
 			w.WriteHeader(http.StatusCreated)
 			w.Write([]byte(`{"id":"` + id + `","url":"https://usemagpie.ai/a/` + id + `","token":"tok","version":1}`))
+		case http.MethodGet:
+			// its assets (none)
+			w.Write([]byte(`{"blobs":[]}`))
 		case http.MethodPut:
 			n++
 			w.Write([]byte(`{"id":"` + id + `","url":"https://usemagpie.ai/a/` + id + `","version":2}`))

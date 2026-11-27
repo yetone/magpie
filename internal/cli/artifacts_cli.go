@@ -85,6 +85,9 @@ func artifactsTo(w io.Writer, args []string, now time.Time) error {
 				return err
 			}
 			fmt.Fprintf(w, "✓ shared %s: anyone with its link opens it, and each new version shows there too\n%s\n", a.Title, sh.URL)
+			if sh.Note != "" {
+				fmt.Fprintf(w, "! %s\n", sh.Note)
+			}
 			return nil
 		case "open-shared":
 			// a one-time code in the link: usemagpie.ai trades it for an

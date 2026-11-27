@@ -216,6 +216,7 @@ func UploadAsset(id string, body []byte, t string) (*Asset, error) {
 	}
 	kept = true
 	blobs.Store(aid, id)
+	assetsChanged(id)
 	return &a, nil
 }
 
@@ -261,6 +262,7 @@ func DeleteAsset(id, aid string) (deleted bool, err error) {
 		return false, err
 	}
 	blobs.Delete(aid)
+	assetsChanged(id)
 	if err := os.Remove(assetPath(id, aid)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return true, err
 	}

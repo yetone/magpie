@@ -66,6 +66,9 @@ type Share struct {
 	// page's data, which goes back to the store here when it stops being
 	// shared, whatever the version shown then declares
 	Data bool `json:"data,omitempty"`
+	// Note is what didn't go with it (assets left out), for the user;
+	// never kept
+	Note string `json:"-"`
 }
 
 // shareMu is held over each share's talk with usemagpie.ai, so two at
@@ -135,12 +138,26 @@ func ShareLatest(ctx context.Context, id string) (*Share, error) {
 		return nil, err
 	}
 	v := a.Latest()
-	if old != nil && old.Version == v.N {
-		return old, nil
+	var body []byte
+	var ctype string
+	if old == nil || old.Version != v.N {
+		if body, ctype, err = shareBody(a, v); err != nil {
+			return nil, err
+		}
 	}
-	body, ctype, err := shareBody(a, v)
-	if err != nil {
-		return nil, err
+	// its assets go up before the version pointing at them does
+	note := ""
+	if old != nil {
+		if err := syncAssets(ctx, site, id, old); err != nil {
+			if gone, err := sharedGone(id, err); gone {
+				return nil, err
+			}
+			note = err.Error()
+		}
+		if old.Version == v.N {
+			old.Note = note
+			return old, nil
+		}
 	}
 	method, u := http.MethodPost, site+"/api/shares"
 	if old != nil {
@@ -154,11 +171,8 @@ func ShareLatest(ctx context.Context, id string) (*Share, error) {
 	}
 	status, err := shareAsk(ctx, method, u, old, body, ctype, &got)
 	if status == http.StatusNotFound && old != nil {
-		// taken down there: not shared again behind the user's back
-		if err := writeShare(id, nil); err != nil {
-			return nil, err
-		}
-		return nil, ErrSharedGone
+		_, err := sharedGone(id, errShareNotFound)
+		return nil, err
 	}
 	if err != nil {
 		return nil, err
@@ -174,7 +188,30 @@ func ShareLatest(ctx context.Context, id string) (*Share, error) {
 	if err := writeShare(id, s); err != nil {
 		return nil, err
 	}
+	if old == nil {
+		// shared just now: its link isn't out yet
+		if err := syncAssets(ctx, site, id, s); err != nil {
+			note = err.Error()
+		}
+	}
+	s.Note = note
 	return s, nil
+}
+
+// errShareNotFound is usemagpie.ai's 404 for a share's own address.
+var errShareNotFound = errors.New("usemagpie.ai: no such shared page")
+
+// sharedGone is whether err says the share was taken down there; if so
+// it isn't shared here any more either (never shared again behind the
+// user's back), and the error is ErrSharedGone.
+func sharedGone(id string, err error) (bool, error) {
+	if !errors.Is(err, errShareNotFound) {
+		return false, err
+	}
+	if err := writeShare(id, nil); err != nil {
+		return true, err
+	}
+	return true, ErrSharedGone
 }
 
 // Unshare takes the artifact's shared link down; one not shared, or taken

@@ -20,6 +20,13 @@
 //     version up in its place, at the same link.
 //   - DELETE /api/shares/<id>, with the token (or the site's admin token,
 //     SHARE_ADMIN, for a page reported), takes it down for good.
+//   - GET /api/shares/<id>/blobs, PUT and DELETE /api/shares/<id>/blobs/
+//     <asset id>, with the token: the files the page uploaded through
+//     claude.use("assets"), which are the artifact's and not a version's.
+//     The page shows one at /_blob/<asset id>, an address naming no
+//     share, so the content host serves it by its id alone (as magpie
+//     does): blobs keeps which share holds each id, and an id another
+//     share holds already is refused.
 //
 // SHARES (R2) holds the files, at <id>/<version>/<path>; SHARES_DB (D1)
 // the shares and each address's asks, kept only hashed and for an hour,
@@ -34,6 +41,19 @@ export const CONTENT = "a.usemagpie.ai";
 export const MAX_BYTES = 32 << 20; // a version's files together
 export const MAX_FILES = 256; // the page included
 export const RATE = 30; // shares and updates an address makes in an hour
+// a share's assets (internal/artifact assets.go): each as magpie takes
+// it, and together at most MAX_BLOBS files, MAX_BLOB_BYTES
+export const MAX_BLOBS = 256;
+export const MAX_BLOB_BYTES = 100 << 20;
+export const BLOB_RATE = 600; // asset uploads and deletes an address makes in an hour
+const BLOB_TYPES = {
+  "image/png": 20 << 20, "image/jpeg": 20 << 20, "image/gif": 20 << 20, "image/webp": 20 << 20, "image/svg+xml": 2 << 20,
+  "video/mp4": 20 << 20, "video/webm": 20 << 20, "application/pdf": 20 << 20,
+  "font/woff2": 20 << 20, "font/woff": 20 << 20, "font/ttf": 20 << 20, "font/otf": 20 << 20,
+  "text/csv": 20 << 20, "text/markdown": 20 << 20, "application/json": 20 << 20, "text/plain": 20 << 20,
+  "text/css": 16 << 20, "text/javascript": 16 << 20,
+};
+const BLOB_ID = /^[a-z2-7]{32}$/;
 const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 1000;
 const MAX_PATH = 512;
@@ -48,6 +68,8 @@ const REPORT_TO = "yetoneful@gmail.com";
 const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, token TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, version INTEGER NOT NULL, files TEXT NOT NULL, bytes INTEGER NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS asks (who TEXT NOT NULL, hour INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (who, hour))",
+  "CREATE TABLE IF NOT EXISTS blobs (id TEXT PRIMARY KEY, share TEXT NOT NULL, type TEXT NOT NULL, bytes INTEGER NOT NULL, created INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS blobs_share ON blobs (share)",
 ];
 // columns added since the table was made: a live share's capabilities,
 // and its owner's id and name (live.js)
@@ -140,13 +162,13 @@ export function same(a, b) {
 // held counts the caller's ask of a kind (shares, visitors: sign-ins
 // don't spend what sharing has), and reports whether it has made RATE
 // this hour already
-export async function held(db, req, now, kind = "shares") {
+export async function held(db, req, now, kind = "shares", most = RATE) {
   const who = (await sha256("magpie-" + kind + ":" + (req.headers.get("CF-Connecting-IP") || ""))).slice(0, 24);
   const row = await db
     .prepare("INSERT INTO asks (who, hour, n) VALUES (?1, ?2, 1) ON CONFLICT (who, hour) DO UPDATE SET n = n + 1 RETURNING n")
     .bind(who, Math.floor(now / 36e5))
     .first();
-  return (row?.n ?? 0) > RATE;
+  return (row?.n ?? 0) > most;
 }
 
 // version reads a share's version from the request: its meta and files,
@@ -254,10 +276,12 @@ async function authorized(req, env, row) {
 export async function api(req, env, ctx, now = Date.now()) {
   const path = new URL(req.url).pathname;
   const one = path.match(/^\/api\/shares\/([a-z2-7]{16})$/);
-  if (path !== "/api/shares" && !one) return null;
+  const blob = path.match(/^\/api\/shares\/([a-z2-7]{16})\/blobs(?:\/([^/]*))?$/);
+  if (path !== "/api/shares" && !one && !blob) return null;
   const db = env.SHARES_DB, bucket = env.SHARES;
   if (!db || !bucket) return refuse(503, "sharing isn't set up here");
   await schema(db);
+  if (blob) return blobAPI(req, env, ctx, now, blob[1], blob[2]);
   if (!one) {
     if (req.method !== "POST") return refuse(405, "POST shares a page");
     if (await held(db, req, now)) return refuse(429, `at most ${RATE} shares or updates an hour; try again later`);
@@ -287,7 +311,7 @@ export async function api(req, env, ctx, now = Date.now()) {
   if (!row) return refuse(404, "no such shared page: it was taken down");
   if (!(await authorized(req, env, row))) return refuse(403, "that isn't this page's token");
   if (req.method === "DELETE") {
-    await db.prepare("DELETE FROM shares WHERE id = ?1").bind(id).run();
+    await db.batch([db.prepare("DELETE FROM shares WHERE id = ?1").bind(id), db.prepare("DELETE FROM blobs WHERE share = ?1").bind(id)]);
     ctx.waitUntil(dropPrefix(bucket, `${id}/`));
     ctx.waitUntil(Live.drop(env, id));
     return json({ deleted: true });
@@ -323,6 +347,54 @@ export async function api(req, env, ctx, now = Date.now()) {
   // no object to tell
   if (Live.live(v.caps) || Live.live(capsOf(row))) ctx.waitUntil(Live.version(env, id, n, v.caps));
   return json({ id, url: shareURL(id), version: n });
+}
+
+// blobAPI answers a share's assets: GET lists them, PUT puts one up (its
+// bytes the body, its type the Content-Type), DELETE takes one down
+async function blobAPI(req, env, ctx, now, id, aid) {
+  const db = env.SHARES_DB, bucket = env.SHARES;
+  if (aid === undefined ? req.method !== "GET" : req.method !== "PUT" && req.method !== "DELETE")
+    return refuse(405, aid === undefined ? "GET lists a shared page's assets" : "PUT puts an asset up, DELETE takes it down");
+  if (aid !== undefined && !BLOB_ID.test(aid)) return refuse(400, "an asset's id is 32 of a-z and 2-7");
+  const row = await db.prepare("SELECT token FROM shares WHERE id = ?1").bind(id).first();
+  if (!row) return refuse(404, "no such shared page: it was taken down");
+  if (!(await authorized(req, env, row))) return refuse(403, "that isn't this page's token");
+  if (aid === undefined) {
+    const got = (await db.prepare("SELECT id, type, bytes FROM blobs WHERE share = ?1 ORDER BY created, id").bind(id).all()).results || [];
+    return json({ blobs: got, maxFiles: MAX_BLOBS, maxBytes: MAX_BLOB_BYTES });
+  }
+  if (await held(db, req, now, "blobs", BLOB_RATE)) return refuse(429, `at most ${BLOB_RATE} asset uploads or deletes an hour; try again later`);
+  const had = await db.prepare("SELECT share FROM blobs WHERE id = ?1").bind(aid).first();
+  if (had && had.share !== id) return refuse(409, "another shared page holds that asset");
+  if (req.method === "DELETE") {
+    if (had) {
+      await db.prepare("DELETE FROM blobs WHERE id = ?1 AND share = ?2").bind(aid, id).run();
+      await bucket.delete(`${id}/_blob/${aid}`);
+    }
+    return json({ deleted: !!had });
+  }
+  const type = req.headers.get("Content-Type") || "";
+  const most = BLOB_TYPES[type];
+  if (!most) return refuse(415, "not a type an asset may be");
+  if (+(req.headers.get("Content-Length") || 0) > most) return refuse(413, `a ${type} asset is ${most >> 20} MB at most`);
+  const body = new Uint8Array(await req.arrayBuffer());
+  if (!body.length) return refuse(400, "the asset is empty");
+  if (body.length > most) return refuse(413, `a ${type} asset is ${most >> 20} MB at most`);
+  const sum = await db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS b FROM blobs WHERE share = ?1 AND id != ?2").bind(id, aid).first();
+  if (sum.n + 1 > MAX_BLOBS || sum.b + body.length > MAX_BLOB_BYTES)
+    return refuse(413, `a shared page's assets are at most ${MAX_BLOBS} files, ${MAX_BLOB_BYTES >> 20} MB together`);
+  await bucket.put(`${id}/_blob/${aid}`, body, { httpMetadata: { contentType: type } });
+  // the row last, and only while no other share took the id and this
+  // share is still up: a takedown that ran meanwhile leaves no row
+  const done = await db
+    .prepare("INSERT INTO blobs (id, share, type, bytes, created) SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM shares WHERE id = ?2) ON CONFLICT (id) DO UPDATE SET type = ?3, bytes = ?4 WHERE share = ?2")
+    .bind(aid, id, type, body.length, now)
+    .run();
+  if (!done.meta?.changes) {
+    ctx.waitUntil(bucket.delete(`${id}/_blob/${aid}`));
+    return refuse(409, "the page was taken down, or another one holds that asset");
+  }
+  return json({ id: aid, type, bytes: body.length }, had ? 200 : 201);
 }
 
 const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -661,6 +733,8 @@ export async function content(req, env) {
   const url = new URL(req.url);
   const m = url.pathname.match(/^\/([a-z2-7]{16})\/([1-9][0-9]{0,8})\/(.*)$/);
   if (req.method !== "GET" && req.method !== "HEAD") return new Response("not found", { status: 404 });
+  const b = url.pathname.match(/^\/_blob\/([a-z2-7]{32})$/);
+  if (b) return blobContent(req, env, b[1]);
   const bare = url.pathname.match(/^\/([a-z2-7]{16})\/?$/);
   if (bare) return Response.redirect(shareURL(bare[1]), 302);
   if (!m) return new Response("not found", { status: 404 });
@@ -699,6 +773,29 @@ export async function content(req, env) {
       "Access-Control-Allow-Origin": "*",
     },
   });
+}
+
+// blobContent serves an asset at /_blob/<id>, from the share holding it,
+// as magpie's artifactBlob does: its own type, and opened as a document
+// sandboxed (no scripts, not even an SVG's), a PDF left to the browser
+async function blobContent(req, env, aid) {
+  if (!env.SHARES_DB || !env.SHARES) return new Response("not found", { status: 404 });
+  await schema(env.SHARES_DB);
+  const row = await env.SHARES_DB.prepare("SELECT b.share, b.type FROM blobs b JOIN shares s ON s.id = b.share WHERE b.id = ?1").bind(aid).first();
+  if (!row) return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  const obj = await env.SHARES.get(`${row.share}/_blob/${aid}`);
+  if (!obj) return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  const h = {
+    "Content-Type": row.type,
+    "Cache-Control": "public, max-age=3600, no-transform",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+    "Access-Control-Allow-Origin": "*",
+  };
+  if (row.type !== "application/pdf")
+    h["Content-Security-Policy"] = "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; font-src 'self'; media-src 'self'";
+  return new Response(req.method === "HEAD" ? null : obj.body, { headers: h });
 }
 
 // prune drops the addresses' counts from before the hour before

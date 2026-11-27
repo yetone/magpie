@@ -26,6 +26,14 @@ type fakeSite struct {
 	asks   int
 	// dataFail answers GET …/data with this status
 	dataFail int
+	// blobs holds which share holds each asset, as shares.js's table;
+	// maxBlobs is a share's budget in files (0: shares.js's)
+	blobs    map[string]string
+	maxBlobs int
+	// said is each ask, "METHOD sub"
+	said []string
+	// noBlobs answers the asset calls as a site without them does
+	noBlobs bool
 }
 
 type fakeShare struct {
@@ -39,11 +47,13 @@ type fakeShare struct {
 	// then what its viewers wrote (a test sets it)
 	docs   []SharedDoc
 	seeded bool
+	// assets is what the share holds of the artifact's: id → type, body
+	assets map[string][2]string
 }
 
 func newFakeSite(t *testing.T) *fakeSite {
 	t.Helper()
-	f := &fakeSite{shares: map[string]*fakeShare{}}
+	f := &fakeSite{shares: map[string]*fakeShare{}, blobs: map[string]string{}}
 	f.Server = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.Close)
 	t.Setenv("MAGPIE_SHARE_SITE", f.URL)
@@ -60,10 +70,11 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	// "/api/shares" (a new share), "/api/shares/<id>" or "/api/shares/<id>/<sub>"
 	id, sub, _ := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/api/shares"), "/"), "/")
+	f.said = append(f.said, r.Method+" "+sub)
 	sh := f.shares[id]
 	if r.Method != http.MethodPost || sub != "" {
 		if sh == nil {
-			http.Error(w, `{"error":"no such share"}`, http.StatusNotFound)
+			http.Error(w, `{"error":"no such shared page: it was taken down"}`, http.StatusNotFound)
 			return
 		}
 		if r.Header.Get("Authorization") != "Bearer "+sh.token {
@@ -83,6 +94,46 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 			docs = []SharedDoc{}
 		}
 		json.NewEncoder(w).Encode(map[string]any{"held": sh.seeded, "docs": docs})
+		return
+	case f.noBlobs && (sub == "blobs" || strings.HasPrefix(sub, "blobs/")):
+		http.Error(w, `{"error":"no such call"}`, http.StatusNotFound)
+		return
+	case sub == "blobs" && r.Method == http.MethodGet:
+		list := []map[string]any{}
+		for aid, x := range sh.assets {
+			list = append(list, map[string]any{"id": aid, "type": x[0], "bytes": len(x[1])})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"blobs": list})
+		return
+	case strings.HasPrefix(sub, "blobs/"):
+		aid := strings.TrimPrefix(sub, "blobs/")
+		if other, ok := f.blobs[aid]; ok && other != id {
+			http.Error(w, `{"error":"another shared page holds that asset"}`, http.StatusConflict)
+			return
+		}
+		if r.Method == http.MethodDelete {
+			_, had := sh.assets[aid]
+			delete(sh.assets, aid)
+			delete(f.blobs, aid)
+			json.NewEncoder(w).Encode(map[string]bool{"deleted": had})
+			return
+		}
+		most := f.maxBlobs
+		if most == 0 {
+			most = 256
+		}
+		if _, had := sh.assets[aid]; !had && len(sh.assets)+1 > most {
+			http.Error(w, `{"error":"a shared page's assets are at most `+strconv.Itoa(most)+` files"}`, http.StatusRequestEntityTooLarge)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		if sh.assets == nil {
+			sh.assets = map[string][2]string{}
+		}
+		sh.assets[aid] = [2]string{r.Header.Get("Content-Type"), string(b)}
+		f.blobs[aid] = id
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]any{"id": aid})
 		return
 	case sub == "owner" && r.Method == http.MethodPost:
 		json.NewEncoder(w).Encode(map[string]string{"code": "c0de", "url": "https://usemagpie.ai/a/" + id + "#owner=c0de"})
@@ -160,6 +211,11 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"id": id, "url": "https://usemagpie.ai/a/" + id, "version": sh.version})
 	case http.MethodDelete:
 		delete(f.shares, id)
+		for aid, holder := range f.blobs {
+			if holder == id {
+				delete(f.blobs, aid)
+			}
+		}
 		json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
 	}
 }
@@ -212,13 +268,13 @@ func TestShareFollowsNewVersions(t *testing.T) {
 	if fi, err := os.Stat(filepath.Join(folder(a.ID), shareName)); err != nil || runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("share.json: %v %v", fi.Mode(), err)
 	}
-	// sharing it again asks nothing
+	// sharing it again sends no version, only asks after its assets
 	_, asks := site.count()
 	if again, err := ShareLatest(context.Background(), a.ID); err != nil || again.URL != sh.URL {
 		t.Fatalf("shared again: %+v %v", again, err)
 	}
-	if _, now := site.count(); now != asks {
-		t.Fatalf("sharing it again asked the site %d times", now-asks)
+	if _, now := site.count(); now != asks+1 || got.version != 1 {
+		t.Fatalf("sharing it again asked the site %d times, version %d", now-asks, got.version)
 	}
 	// a new version goes to the same link
 	if _, err := PublishPage(Publish{ID: a.ID, Page: []byte("<!doctype html><p>two")}); err != nil {
