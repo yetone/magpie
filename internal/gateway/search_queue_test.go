@@ -22,11 +22,21 @@ import (
 func TestSearchQueueKeepsCodexAlive(t *testing.T) {
 	keepFast(t, 10*time.Millisecond, 20*time.Millisecond, 100*time.Millisecond)
 	held, quiet, watch, silent := keepHeldAfter, agentQuietMost, watchEvery, translatedQuietLongest
-	keepHeldAfter, agentQuietMost, watchEvery, translatedQuietLongest = 10*time.Millisecond, 50*time.Millisecond, 5*time.Millisecond, 40*time.Millisecond
+	keepHeldAfter, agentQuietMost, watchEvery = 10*time.Millisecond, 50*time.Millisecond, 5*time.Millisecond
 	t.Cleanup(func() { keepHeldAfter, agentQuietMost, watchEvery, translatedQuietLongest = held, quiet, watch, silent })
 	for _, mode := range []string{"comments", "progress", "cancel", "silent"} {
 		t.Run(mode, func(t *testing.T) {
 			fresh(t)
+			// #7090: only silent's upstream goes quiet, and it is ended by
+			// the quiet bar (endStuck) before its pings run away. The
+			// others speak every 20ms, and a 40ms bar ended them too
+			// whenever a loaded race runner put 56ms between two of them
+			// ("Fake sent nothing for 56ms", pings=1); a second is room
+			// for that, still under the 5s hard cap
+			translatedQuietLongest = time.Second
+			if mode == "silent" {
+				translatedQuietLongest = 40 * time.Millisecond
+			}
 			release, stopped := make(chan struct{}), make(chan struct{})
 			proceed := make(chan struct{})
 			var once, onceGo sync.Once
