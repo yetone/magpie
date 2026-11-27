@@ -99,14 +99,16 @@ func TestOllamaModelRoutes(t *testing.T) {
 		t.Fatalf("show seer: %d %+v", c, s)
 	}
 	// a client from before Ollama 0.5 names it "name"; a window magpie
-	// doesn't know is told as the one VS Code's Copilot assumes, never 0
+	// doesn't know is left out, never told as 32768 (which Hermes takes
+	// as the window and refuses under its 64K floor, @noting_ever on X)
+	// or 0, so the client takes its own default
 	c, s = show(`{"name":"plan/plain"}`)
-	if c != 200 || !slices.Equal(s.Capabilities, []string{"completion", "tools"}) || s.ModelInfo[arch+".context_length"] != float64(32768) {
+	if _, told := s.ModelInfo[arch+".context_length"]; c != 200 || !slices.Equal(s.Capabilities, []string{"completion", "tools"}) || told {
 		t.Fatalf("show plain: %d %+v", c, s)
 	}
 	// the ollama CLI before 0.7 reads these as numbers unchecked, and
 	// panics on one missing ("ollama show" with 0.6.8)
-	for _, k := range []string{"general.parameter_count", arch + ".context_length", arch + ".embedding_length"} {
+	for _, k := range []string{"general.parameter_count", arch + ".embedding_length"} {
 		if _, ok := s.ModelInfo[k].(float64); !ok {
 			t.Fatalf("model_info %s: %v", k, s.ModelInfo[k])
 		}

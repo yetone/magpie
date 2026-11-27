@@ -317,7 +317,7 @@ magpie provider fallback ollama-cloud ollama/qwen3</pre></div>
     <ul>
       <li><b>Routes.</b> magpie answers <code>/api/version</code>, <code>/api/tags</code>, <code>/api/show</code>, <code>/api/chat</code> and <code>/api/generate</code>.</li>
       <li><b>The same path.</b> A chat there is served as <code>/v1/chat/completions</code> is, so key limits, routing, fallbacks and usage are the same. A gateway key held to some models lists only those.</li>
-      <li><b>What it tells.</b> <code>/api/tags</code> and <code>/api/show</code> mark tools, vision when the model reads images, and thinking when it reasons. <code>/api/show</code> also gives the model’s window, or 32768 for one magpie doesn’t know. The <code>ollama</code> CLI’s <code>name:latest</code> finds a model called <code>name</code>.</li>
+      <li><b>What it tells.</b> <code>/api/tags</code> and <code>/api/show</code> mark tools, vision when the model reads images, and thinking when it reasons. <code>/api/show</code> also gives the model’s window, and leaves it out for one magpie doesn’t know, so the client uses its own default. The <code>ollama</code> CLI’s <code>name:latest</code> finds a model called <code>name</code>.</li>
     </ul>
 
     <h2 id="trouble"><a class="anchor" href="#trouble">Troubleshooting</a></h2>

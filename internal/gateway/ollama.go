@@ -61,8 +61,13 @@ func ollamaName(r *http.Request, id string) string {
 
 // ollamaShow is one model as Ollama's /api/show tells it. A client reads
 // what it takes from capabilities, its window from model_info's
-// "<general.architecture>.context_length" (VS Code's Copilot takes 32768
-// without it) and its name from "general.basename".
+// "<general.architecture>.context_length" and its name from
+// "general.basename". A window magpie doesn't know is left out, as
+// ollamaDetails leaves it, so the client takes its own default: VS Code's
+// Copilot 32768, Hermes its table or 256K. Told as 32768, it was the
+// model's window to every client, and Hermes, which takes the window
+// /api/show gives over its own and refuses one under 64K, turned the
+// model away (Devin's SWE-2.1, @noting_ever on X).
 func (s *Server) ollamaShow(w http.ResponseWriter, r *http.Request) {
 	body, ok := s.requestBody(w, r, provider.Chat)
 	if !ok {
@@ -90,18 +95,17 @@ func (s *Server) ollamaShow(w http.ResponseWriter, r *http.Request) {
 		ollamaError(w, http.StatusNotFound, "model '"+id+"' not found")
 		return
 	}
-	// every key here is sent: the ollama CLI before 0.7 reads
-	// parameter_count, context_length and embedding_length without
-	// checking them and panics on one missing ("ollama show", 0.6.8)
-	window := e.Context
-	if window <= 0 {
-		// what VS Code's Copilot assumes without one; a 0 it would take
-		// as the window
-		window = ollamaDefaultContext
-	}
+	// parameter_count and embedding_length are always sent: the ollama
+	// CLI before 0.7 reads them without checking and panics on one
+	// missing ("ollama show", 0.6.8). It reads context_length so too, but
+	// a made-up window misleads every client that trusts it, and a CLI
+	// that old (May 2025) shows a model, never chats on one, through it
 	info := map[string]any{
 		"general.architecture": ollamaArch, "general.basename": provider.LabelsFor(agentOf(r), []provider.Entry{e})[0],
-		"general.parameter_count": 0, ollamaArch + ".context_length": window, ollamaArch + ".embedding_length": 0,
+		"general.parameter_count": 0, ollamaArch + ".embedding_length": 0,
+	}
+	if e.Context > 0 {
+		info[ollamaArch+".context_length"] = e.Context
 	}
 	writeJSON(w, 200, map[string]any{
 		"modelfile": "", "parameters": "", "template": "",
@@ -127,10 +131,6 @@ func ollamaCapabilities(e provider.Entry) []string {
 // ollamaArch is the architecture every model is told as: model_info's
 // keys are named after it.
 const ollamaArch = "magpie"
-
-// ollamaDefaultContext is the window told for a model whose own magpie
-// doesn't know: the one VS Code's Copilot takes when none is told.
-const ollamaDefaultContext = 32768
 
 // ollamaModified stands in for when a model was pulled, which no model
 // here was.

@@ -317,7 +317,7 @@ magpie provider fallback ollama-cloud ollama/qwen3</pre></div>
     <ul>
       <li><b>路由。</b>magpie 响应 <code>/api/version</code>、<code>/api/tags</code>、<code>/api/show</code>、<code>/api/chat</code> 和 <code>/api/generate</code>。</li>
       <li><b>同一条路径。</b>这里的对话和 <code>/v1/chat/completions</code> 走同一套处理，所以 Key 限制、路由、备用模型和用量统计都一样。只允许用部分模型的网关 Key，只会列出那些模型。</li>
-      <li><b>告诉客户端的信息。</b><code>/api/tags</code> 和 <code>/api/show</code> 会标明工具调用、读图（模型能读图片时）和思考（模型会推理时）。<code>/api/show</code> 还会给出模型的窗口，magpie 不认识的模型给 32768。<code>ollama</code> 命令行的 <code>name:latest</code> 会找到名为 <code>name</code> 的模型。</li>
+      <li><b>告诉客户端的信息。</b><code>/api/tags</code> 和 <code>/api/show</code> 会标明工具调用、读图（模型能读图片时）和思考（模型会推理时）。<code>/api/show</code> 还会给出模型的窗口；magpie 不知道窗口的模型不给，由客户端用自己的默认值。<code>ollama</code> 命令行的 <code>name:latest</code> 会找到名为 <code>name</code> 的模型。</li>
     </ul>
 
     <h2 id="trouble"><a class="anchor" href="#trouble">常见报错</a></h2>

@@ -317,7 +317,7 @@ magpie provider fallback ollama-cloud ollama/qwen3</pre></div>
     <ul>
       <li><b>ルート。</b>magpie は <code>/api/version</code>・<code>/api/tags</code>・<code>/api/show</code>・<code>/api/chat</code>・<code>/api/generate</code> に応答します。</li>
       <li><b>同じ経路。</b>ここでのチャットは <code>/v1/chat/completions</code> と同じ処理を通るので、キーの制限・ルーティング・フォールバック・使用量の集計も同じです。一部のモデルに限ったゲートウェイキーには、そのモデルだけが表示されます。</li>
-      <li><b>伝える情報。</b><code>/api/tags</code> と <code>/api/show</code> は、ツール、画像を読めるモデルなら vision、推論するモデルなら thinking を示します。<code>/api/show</code> はモデルのウィンドウも伝え、magpie が知らないモデルは 32768 とします。<code>ollama</code> CLI の <code>name:latest</code> は <code>name</code> という名前のモデルに当たります。</li>
+      <li><b>伝える情報。</b><code>/api/tags</code> と <code>/api/show</code> は、ツール、画像を読めるモデルなら vision、推論するモデルなら thinking を示します。<code>/api/show</code> はモデルのウィンドウも伝えます。magpie がウィンドウを知らないモデルでは省き、ツールは自分の既定値を使います。<code>ollama</code> CLI の <code>name:latest</code> は <code>name</code> という名前のモデルに当たります。</li>
     </ul>
 
     <h2 id="trouble"><a class="anchor" href="#trouble">うまくいかないとき</a></h2>
