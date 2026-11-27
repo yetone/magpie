@@ -54,6 +54,15 @@ const BLOB_TYPES = {
   "text/css": 16 << 20, "text/javascript": 16 << 20,
 };
 const BLOB_ID = /^[a-z2-7]{32}$/;
+// An id a share has held, or asked for, stays the share's while the share
+// is up: a row with no type (and no bytes) keeps it when the asset is
+// taken down, or was refused. The content host serves /_blob/<id> by the
+// id alone, so a page still naming one it no longer has (its data, an
+// older copy, an asset refused for its size) would otherwise show
+// whatever another share put up under that id next: an image swapped, or
+// a script, a stylesheet or an SVG of a stranger's run as this page's.
+// A share keeps this many ids in all; past it a taken-down id is let go.
+const MAX_KEPT_IDS = 4096;
 const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 1000;
 const MAX_PATH = 512;
@@ -360,29 +369,37 @@ async function blobAPI(req, env, ctx, now, id, aid) {
   if (!row) return refuse(404, "no such shared page: it was taken down");
   if (!(await authorized(req, env, row))) return refuse(403, "that isn't this page's token");
   if (aid === undefined) {
-    const got = (await db.prepare("SELECT id, type, bytes FROM blobs WHERE share = ?1 ORDER BY created, id").bind(id).all()).results || [];
+    const got = (await db.prepare("SELECT id, type, bytes FROM blobs WHERE share = ?1 AND type != '' ORDER BY created, id").bind(id).all()).results || [];
     return json({ blobs: got, maxFiles: MAX_BLOBS, maxBytes: MAX_BLOB_BYTES });
   }
   if (await held(db, req, now, "blobs", BLOB_RATE)) return refuse(429, `at most ${BLOB_RATE} asset uploads or deletes an hour; try again later`);
-  const had = await db.prepare("SELECT share FROM blobs WHERE id = ?1").bind(aid).first();
+  const had = await db.prepare("SELECT share, type FROM blobs WHERE id = ?1").bind(aid).first();
   if (had && had.share !== id) return refuse(409, "another shared page holds that asset");
   if (req.method === "DELETE") {
     if (had) {
-      await db.prepare("DELETE FROM blobs WHERE id = ?1 AND share = ?2").bind(aid, id).run();
+      // kept as the share's, with no type, unless it keeps too many
+      const kept = await db.prepare("SELECT COUNT(*) AS n FROM blobs WHERE share = ?1").bind(id).first();
+      if ((kept?.n ?? 0) < MAX_KEPT_IDS) await db.prepare("UPDATE blobs SET type = '', bytes = 0 WHERE id = ?1 AND share = ?2").bind(aid, id).run();
+      else await db.prepare("DELETE FROM blobs WHERE id = ?1 AND share = ?2").bind(aid, id).run();
       await bucket.delete(`${id}/_blob/${aid}`);
     }
-    return json({ deleted: !!had });
+    return json({ deleted: !!had?.type });
   }
+  // an id refused is still kept for this share: its page names it
+  const refused = async (status, message) => {
+    await keepID(db, aid, id, now);
+    return refuse(status, message);
+  };
   const type = req.headers.get("Content-Type") || "";
   const most = BLOB_TYPES[type];
-  if (!most) return refuse(415, "not a type an asset may be");
-  if (+(req.headers.get("Content-Length") || 0) > most) return refuse(413, `a ${type} asset is ${most >> 20} MB at most`);
+  if (!most) return refused(415, "not a type an asset may be");
+  if (+(req.headers.get("Content-Length") || 0) > most) return refused(413, `a ${type} asset is ${most >> 20} MB at most`);
   const body = new Uint8Array(await req.arrayBuffer());
-  if (!body.length) return refuse(400, "the asset is empty");
-  if (body.length > most) return refuse(413, `a ${type} asset is ${most >> 20} MB at most`);
-  const sum = await db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS b FROM blobs WHERE share = ?1 AND id != ?2").bind(id, aid).first();
+  if (!body.length) return refused(400, "the asset is empty");
+  if (body.length > most) return refused(413, `a ${type} asset is ${most >> 20} MB at most`);
+  const sum = await db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS b FROM blobs WHERE share = ?1 AND id != ?2 AND type != ''").bind(id, aid).first();
   if (sum.n + 1 > MAX_BLOBS || sum.b + body.length > MAX_BLOB_BYTES)
-    return refuse(413, `a shared page's assets are at most ${MAX_BLOBS} files, ${MAX_BLOB_BYTES >> 20} MB together`);
+    return refused(413, `a shared page's assets are at most ${MAX_BLOBS} files, ${MAX_BLOB_BYTES >> 20} MB together`);
   await bucket.put(`${id}/_blob/${aid}`, body, { httpMetadata: { contentType: type } });
   // the row last, and only while no other share took the id and this
   // share is still up: a takedown that ran meanwhile leaves no row
@@ -394,7 +411,16 @@ async function blobAPI(req, env, ctx, now, id, aid) {
     ctx.waitUntil(bucket.delete(`${id}/_blob/${aid}`));
     return refuse(409, "the page was taken down, or another one holds that asset");
   }
-  return json({ id: aid, type, bytes: body.length }, had ? 200 : 201);
+  return json({ id: aid, type, bytes: body.length }, had?.type ? 200 : 201);
+}
+
+// keepID keeps aid as share's, with no asset, while the share is up, no
+// other share holds it and share keeps fewer than MAX_KEPT_IDS
+async function keepID(db, aid, share, now) {
+  await db
+    .prepare("INSERT INTO blobs (id, share, type, bytes, created) SELECT ?1, ?2, '', 0, ?3 WHERE EXISTS (SELECT 1 FROM shares WHERE id = ?2) AND (SELECT COUNT(*) FROM blobs WHERE share = ?2) < ?4 ON CONFLICT (id) DO NOTHING")
+    .bind(aid, share, now, MAX_KEPT_IDS)
+    .run();
 }
 
 const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -781,7 +807,7 @@ export async function content(req, env) {
 async function blobContent(req, env, aid) {
   if (!env.SHARES_DB || !env.SHARES) return new Response("not found", { status: 404 });
   await schema(env.SHARES_DB);
-  const row = await env.SHARES_DB.prepare("SELECT b.share, b.type FROM blobs b JOIN shares s ON s.id = b.share WHERE b.id = ?1").bind(aid).first();
+  const row = await env.SHARES_DB.prepare("SELECT b.share, b.type FROM blobs b JOIN shares s ON s.id = b.share WHERE b.id = ?1 AND b.type != ''").bind(aid).first();
   if (!row) return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
   const obj = await env.SHARES.get(`${row.share}/_blob/${aid}`);
   if (!obj) return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });

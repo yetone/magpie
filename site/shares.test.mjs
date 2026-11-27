@@ -283,6 +283,39 @@ test("shares: an asset id another share holds is refused, and a takedown takes t
   assert.equal((await api(blobReq("PUT", one.id, AID2, { token: one.token, body, type: "text/csv" }), s.env, s.ctx)).status, 404);
 });
 
+// The content host serves /_blob/<id> by the id alone: an id a share's
+// page still names after its asset went (its data, an older copy, one
+// refused for its size) must never be another share's to fill, or its
+// page shows a stranger's image, or runs their script or SVG.
+test("shares: an id a share took down or was refused stays that share's, while it is up", async () => {
+  const s = setup();
+  const one = await share(s), two = await share(s);
+  const js = new TextEncoder().encode("parent.postMessage('owned', '*')");
+  const ok = new TextEncoder().encode("console.log(1)");
+  const put = (sh, aid, body, type = "text/javascript") => api(blobReq("PUT", sh.id, aid, { token: sh.token, body, type }), s.env, s.ctx);
+  assert.equal((await put(one, AID, ok)).status, 201);
+  assert.equal((await (await api(blobReq("DELETE", one.id, AID, { token: one.token }), s.env, s.ctx)).json()).deleted, true);
+  // taken down: not served, not listed, and not another share's to take
+  assert.equal((await content(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "script" }), s.env)).status, 404);
+  assert.deepEqual((await (await api(blobReq("GET", one.id, undefined, { token: one.token }), s.env, s.ctx)).json()).blobs, []);
+  assert.equal((await put(two, AID, js)).status, 409);
+  assert.equal((await api(blobReq("DELETE", two.id, AID, { token: two.token }), s.env, s.ctx)).status, 409);
+  assert.equal((await content(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "script" }), s.env)).status, 404);
+  // refused for its type or size: the same
+  assert.equal((await put(one, AID2, ok, "text/html")).status, 415);
+  assert.equal((await put(two, AID2, js)).status, 409);
+  const id3 = "d".repeat(32);
+  assert.equal((await put(one, id3, new Uint8Array(2 << 20 | 1), "image/svg+xml")).status, 413);
+  assert.equal((await put(two, id3, js, "image/svg+xml")).status, 409);
+  // the share itself puts it up again
+  assert.equal((await put(one, AID, ok)).status, 201);
+  assert.equal(await (await content(req("GET", `/_blob/${AID}`, { host: CONTENT, dest: "script" }), s.env)).text(), "console.log(1)");
+  // a takedown lets them go
+  assert.equal((await api(req("DELETE", `/api/shares/${one.id}`, { token: one.token }), s.env, s.ctx)).status, 200);
+  await s.settle();
+  assert.equal(s.env.SHARES_DB.raw.prepare("SELECT COUNT(*) AS n FROM blobs").get().n, 0);
+});
+
 test("shares: a share's assets keep to its budget and an address's hourly asks", async () => {
   const s = setup();
   const got = await share(s);
