@@ -171,7 +171,7 @@ func (l *launchSpec) function(kind, prog string) string {
 			"    if (-not $real) { Write-Error '" + l.bin + " is not installed'; return }\n" +
 			"    $start = @{}\n" +
 			"    if (Test-Path -LiteralPath " + q + ") {\n" +
-			"        foreach ($l in @(& " + q + " " + l.id + " env)) { $k, $v = \"$l\" -split '=', 2; if ($v) { $start[$k] = $v } }\n" +
+			psReadEnv(q, l.id) + "\n" +
 			"    }\n" +
 			"    if (-not $start.model" + plain + ") { & $real @args; return }\n" +
 			set +
@@ -181,6 +181,18 @@ func (l *launchSpec) function(kind, prog string) string {
 	}
 	q := posixQuote(prog)
 	return l.posixHead() + "  if [ -x " + q + " ]; then " + q + " " + l.id + ` run "$@"; else command ` + l.bin + ` "$@"; fi` + "\n}"
+}
+
+// psReadEnv is the line of a PowerShell function that reads `prog <id>
+// env`, NAME=value lines, into $start. The app is linked as a GUI program,
+// and PowerShell runs one that ends a pipeline in the background: it
+// neither waits for it nor reads what it prints (NativeCommandProcessor,
+// a Windows application at the pipeline's end), so @(& prog <id> env) was
+// empty, and agy started on the user's own sign-in with none of magpie's
+// models (CyberCaius on Discord). Piped on into ForEach-Object, it is
+// waited for and read, with or without the magpie.com beside it.
+func psReadEnv(prog, id string) string {
+	return "        & " + prog + " " + id + ` env | ForEach-Object { $k, $v = "$_" -split '=', 2; if ($v) { $start[$k] = $v } }`
 }
 
 // distroFunction is the function in a WSL distro's shell of kind: while

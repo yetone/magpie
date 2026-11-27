@@ -102,7 +102,7 @@ func TestAgyFunction(t *testing.T) {
 	for kind, want := range map[string]string{
 		"posix":      `if [ -x '/Users/o'\''neil/magpie' ]; then '/Users/o'\''neil/magpie' agy run "$@"; else command agy "$@"; fi`,
 		"fish":       `'/Users/o\'neil/magpie' agy run $argv`,
-		"powershell": `foreach ($l in @(& '/Users/o''neil/magpie' agy env))`,
+		"powershell": `& '/Users/o''neil/magpie' agy env | ForEach-Object {`,
 	} {
 		if got := agyFunction(kind, prog); !strings.Contains(got, want) {
 			t.Errorf("%s:\n%s\nwant it to have %s", kind, got, want)
