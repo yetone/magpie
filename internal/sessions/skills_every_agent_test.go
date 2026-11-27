@@ -49,6 +49,7 @@ var skillsCounted = map[string]struct {
 	"hermes":       {none: "its skill_view tool is not read; hermes is not run in a sandbox (it rewrites the live launcher)"},
 	"openmausbot":  {none: "a bot finds a skill with skills_list and reads its SKILL.md with its file tools, no tool of its own; the real sample has no such turn"},
 	"catpaw":       {none: "a skill reaches CatPaw's agent as a skill_chunk message whose fields were not seen in a real conversation (no signed-in CatPaw to have one)"},
+	"dim":          {none: "Dim's skills reach its model through its own skills capability, whose events were not seen in a real session (no Dim store on a test machine to read one from)"},
 	"cursor":       {none: "selected skills live in selectedContext; needs a signed-in Cursor for a real session"},
 	"agy":          {none: "skill_lookup's keys are not known from a real session"},
 	"antigravity":  {none: "its steps' payloads are encrypted at rest; only the usage in steps.metadata is read"},

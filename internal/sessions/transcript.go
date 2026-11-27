@@ -41,7 +41,7 @@ var ErrNoTranscript = errors.New("this agent's conversations can't be shown")
 // transcript.
 func HasTranscript(agent string) bool {
 	switch agent {
-	case "claude", "qoder", "qoder-cn", "codex", "pi", "raft", "cindy", "omp", "cursor", "opencode", "kimi", "agy", "antigravity", "openmausbot", "catpaw", "liveagent", "workbuddy", "workbuddy-ai", "codebuddy", "hermes":
+	case "claude", "qoder", "qoder-cn", "codex", "pi", "raft", "cindy", "omp", "cursor", "opencode", "kimi", "agy", "antigravity", "openmausbot", "catpaw", "dim", "liveagent", "workbuddy", "workbuddy-ai", "codebuddy", "hermes":
 		return true
 	}
 	return false
@@ -242,6 +242,8 @@ func readTranscriptOf(s Session, keep func([]byte) bool, add func(bool, Part) bo
 		return hermesTranscript(s, add)
 	case "catpaw":
 		return catpawTranscript(s, add)
+	case "dim":
+		return dimTranscript(s, add)
 	case "liveagent":
 		return liveagentTranscript(s.Path, add)
 	case "workbuddy", "workbuddy-ai", "codebuddy":

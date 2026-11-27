@@ -22,6 +22,8 @@ var readsEnv = regexp.MustCompile(`(?:Getenv|LookupEnv|getenv)\("([A-Z][A-Z_0-9]
 var notAnAgent = map[string]string{
 	"APPDATA":               "Windows' own folder, which a sandbox sets to one of its own rather than clears",
 	"LOCALAPPDATA":          "the same",
+	"HOME":                  "the home folder, which a sandbox sets to one of its own rather than clears; Dim's sessions reader takes it by name to test Windows' default on any system",
+	"USERPROFILE":           "the same, on Windows",
 	"PATH":                  "the process' own",
 	"USER":                  "the process' own",
 	"XDG_CONFIG_HOME":       "magpie's own folder's, which appdir decides",

@@ -51,6 +51,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/update"
 )
 
@@ -59,11 +60,9 @@ func dimFile() string { return filepath.Join(appdir.Config(), "dim.json") }
 
 // dimDir is Dim alpha's folder: $DIMCODE_HOME as given, else
 // ~/.dimcode-alpha (dim-cli's default_home; ~/.dimcode is the older dimcode).
+// Sessions reads Dim's sessions from the same folder (sessions.DimDirIn).
 func dimDir(at place) string {
-	if d := strings.TrimSpace(at.getenv("DIMCODE_HOME")); d != "" {
-		return d
-	}
-	return at.join(".dimcode-alpha")
+	return sessions.DimDirIn(at.getenv("DIMCODE_HOME"), at.join)
 }
 
 // dimContext and dimOutput are the limits Dim is given for a model the
