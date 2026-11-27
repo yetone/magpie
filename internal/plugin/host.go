@@ -32,6 +32,7 @@ import (
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/steady"
 )
 
 //go:embed host.js
@@ -997,17 +998,20 @@ func hostScript(name string, js []byte) (string, error) {
 	sum := sha256.Sum256(js)
 	dir := filepath.Join(filepath.Dir(catalog.CachePath()), "plugin-host")
 	p := filepath.Join(dir, name+"-"+hex.EncodeToString(sum[:6])+".js")
-	if b, err := os.ReadFile(p); err == nil && string(b) == string(js) {
+	if b, err := steady.ReadFile(p); err == nil && bytes.Equal(b, js) {
 		return p, nil
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, js, 0o644); err != nil {
-		return "", err
+	if err := steady.WriteFile(p, js, 0o644); err != nil {
+		// Another instance may have put the same script there and opened
+		// it for Bun, so Windows won't let us rename ours over it.
+		if b, readErr := steady.ReadThere(p); readErr != nil || !bytes.Equal(b, js) {
+			return "", err
+		}
 	}
-	return p, os.Rename(tmp, p)
+	return p, nil
 }
 
 // get is the running host, started (Bun downloaded, the plugins loaded)
