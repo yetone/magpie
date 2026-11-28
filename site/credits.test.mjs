@@ -200,6 +200,44 @@ test("a body paragraph that opens with who said it, or a bracket of their handle
   ]) assert.deepEqual(parseBody(t), [], t);
 });
 
+test("a body paragraph that names who said it with a bracket, a channel, a comma or a verb credits them", () => {
+  const who = (t) => parseBody(t).map((n) => `${n.name}/${n.via}`);
+  // a80a920f5 (v0.1.4264): a bracket before the colon
+  assert.deepEqual(body("gateway: a turn on a Codex WebSocket says where its time went",
+    "buhaodeshiyehao on X (Codex through Lody's ACP): the Routing page's\n\"Where the time went\" showed only the request's masking. Codex's turns\nto the ChatGPT backend, and to a Responses provider with Socket, go over\na WebSocket (codexSocket)."), ["buhaodeshiyehao/X"]);
+  // 322ec8b7c: a channel
+  assert.deepEqual(who("PaulT on Discord #feedback: an OpenAI API-key provider answering 402 out\nof credit showed \"Resting · 402 out of credit\"."), ["PaulT/Discord"]);
+  // e63275fb3: a comma
+  assert.deepEqual(who("@tourweint on X, with pi's tool search (Responses tool_search with\nexecution \"client\"): only a Codex account kept the prompt-cache prefix;"), ["tourweint/X"]);
+  // 2d7e7bd14, 45de2ddb9: a verb
+  assert.deepEqual(who("jinpwng on X (v0.1.4599) sets up three machines from the CLI. The GUI's\nLibrary can turn a plugin on or off for one project."), ["jinpwng/X"]);
+  assert.deepEqual(who("jiabubu asked on Discord #help for a way to mark a provider, model or key\nas free, so that Free first routing spends it first."), ["jiabubu/Discord"]);
+  // 97e6ac36c: a bracket after the name is an alias; c4d64a70b: an issue's author is on GitHub
+  assert.deepEqual(who("elis_pina (LoveEcho1145) on X: some APIs list a model more than once in\ntheir /models, and each copy was a row of its own."), ["elis_pina/X"]);
+  assert.deepEqual(who("hatanokokoroyo (#6828) and Nietzsche_Li on X: Codex 0.169 warns on\nevery launch that `disable_response_storage` is ignored."), ["hatanokokoroyo/GitHub", "Nietzsche_Li/X"]);
+  // 488e20ad9: who asked is in the bracket
+  assert.deepEqual(who("Asked on X (@xuanbo1889245): subagents in Library -> Subagents run at\nthe agent's default effort."), ["xuanbo1889245/X"]);
+  // 2c5e4e9ee, aa4973c78, 24d315fa8: the platform in a bracket after the name
+  assert.deepEqual(who("BigFish (Discord #feedback, 11-27): under heavy use the gateway's CPU sat\nin withoutPassthroughIf."), ["BigFish/Discord"]);
+  assert.deepEqual(who("Passings_z (X) reached the MCP router of a Docker magpie from its host\nwith a gateway key that has a model limit."), ["Passings_z/X"]);
+  assert.deepEqual(who("acezan (#help on Discord) asked to see API use on the Routing page the way\nit shows each agent's."), ["acezan/Discord"]);
+  // 52195b6b0, 9c58c87e8, b437e4adb: "Asked for by", "Thanks to", "Credit:"
+  assert.deepEqual(who("They asked for backups made on a schedule.\n\nAsked for by jwaitq on Discord."), ["jwaitq/Discord"]);
+  assert.deepEqual(who("Thanks to Milktea on Discord for the report."), ["Milktea/Discord"]);
+  assert.deepEqual(who("Credit: 微雨南山 on Discord (#feedback), who asked for macOS-style\naddress / username / password fields."), ["微雨南山/Discord"]);
+  // prose that only mentions a platform or a name
+  for (const t of [
+    "Reports on X under the masking demo (10-28): two people saw names kept.",
+    "A user on Discord (#feedback) found the panel blank.",
+    "Settings (X, Windows) opens blank.", // a word that is never a name
+    "The editor (Discord, X and GitHub links) shows them.",
+    "Thanks to the cache, the second read is free.",
+    "Thanks to this, the list is shorter.",
+    "the request (X) went out",
+    "Seen on X (10-28): a blank page.",
+  ]) assert.deepEqual(parseBody(t), [], t);
+});
+
 test("commit authors and co-authors are credited, agents and machines not, and no email is given", () => {
   const per = credit([
     { subject: "gui: a group's Save no longer leaves the Routing page blank (#884)", author: "wizzy-yang", email: "244719629+wizzy-yang@users.noreply.github.com", coauthors: [{ name: "magpie-fix", email: "fix@localhost" }] },

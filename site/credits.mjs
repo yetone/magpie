@@ -80,10 +80,21 @@ function personName(s) {
 // A sentence in a commit's body that says who reported or asked for it.
 // It starts a paragraph or follows a sentence's end or a semicolon:
 // "a model asked by its bare id" in the middle of a sentence is no credit.
-const BODY_BY = /(?:^|(?<=[.;!?]\s))(?:[-*]\s+)?(?:reported|requested|suggested|asked)(?:\s+on\s+([^\s,.;:()]+))?\s+by\s+/gimu;
+// "Asked for by jwaitq on Discord.", "Thanks to Milktea on Discord for the
+// report.", "Credit: axelburks on Discord." say it too.
+const BODY_BY = /(?:^|(?<=[.;!?]\s))(?:[-*]\s+)?(?:(?:reported|requested|suggested|asked)(?:\s+for)?(?:\s+on\s+([^\s,.;:()]+))?\s+by|thanks\s+to|credit:)\s+/gimu;
 // a body name with no platform after it: one word, never an English one
 const BODY_NAME = /^[\p{L}\p{N}][\p{L}\p{N}_.\-]{0,38}$/u;
-const NOT_NAME = new Set("default hand name id itself himself herself themselves design mistake email mail them him her".split(" "));
+const NOT_NAME = new Set("default hand name id itself himself herself themselves design mistake email mail them him her this that it".split(" "));
+
+// A paragraph's opener: who, " on <platform>", a channel or a bracket, then
+// a colon, a comma or the verb of what they said or saw.
+const OPENER = /^(?:[-*]\s+)?([^:]{1,120}?)\s+on\s+([^\s:,.()#]+)(?:\s+#[\w-]+)?(?:\s+\(([^()]*)\))?(:\s|,\s|\s(?=\p{Ll}))/u;
+// "NAME (Discord #feedback, 11-27): …": a bracket whose first part is where
+const OPENER_BRACKET = /^(?:[-*]\s+)?@?([^\s:()]{1,40})\s+\(([^()]*)\)(:\s|,\s|\s(?=\p{Ll}))/u;
+// what opens a paragraph in a name's place: "Reported on X by @…" (read
+// above), "Reports on X under the masking demo:"
+const OPENER_VERB = /^(?:reported|reports|requested|suggested|asked|posted|seen|said|replies|feedback|thanks)$/i;
 
 function bodyName(s, placed) {
   s = s.trim().replace(/^@/, "");
@@ -142,7 +153,7 @@ export function parseBody(text) {
     const paren = end >= 0 && rest.slice(end).match(/^\s\(([^()]*)\)/);
     const tail = paren ? bracketPlatform(paren[1]) : null;
     // "EncodeTS in #7958", "yetone on #736", "1939323749 with a custom provider …"
-    clause = clause.replace(/\s+(?:in|on)\s+[\w./-]*#\d+.*$/, "").replace(/\s+with\s.*$/, "");
+    clause = clause.replace(/\s+(?:in|on)\s+[\w./-]*#\d+.*$/, "").replace(/\s+(?:with|for)\s.*$/, "");
     const got = [];
     // a list ends at the first part that isn't a name: "willywang,
     // confirmed again …", "ChangQiu on Discord and filed as #4853 by …"
@@ -161,14 +172,48 @@ export function parseBody(text) {
   }
   for (const p of flat.split("\n")) {
     // a paragraph that opens with who said it: "ZhouYimingsjtu on X: with
-    // an Ultra 20x plan, …", "zzstar101 and m0eaki on X: …"
-    const m = p.match(/^([^:()]{1,80}?)\s+on\s+([^\s:]+):\s/);
+    // an Ultra 20x plan, …", "zzstar101 and m0eaki on X: …"; a channel or
+    // a bracket may sit before the colon, "buhaodeshiyehao on X (Codex
+    // through Lody's ACP): …", "PaulT on Discord #feedback: …"
+    const b = p.match(OPENER_BRACKET);
+    const bv = b && b[2].split(",")[0].trim().match(/^(?:(?:on\s+)?([^\s#]+)(?:\s+(?:#[\w-]+|DM))?|#[\w-]+\s+on\s+(\S+))$/i);
+    const bvia = bv && PLATFORMS[lower(bv[1] || bv[2])];
+    if (bvia) {
+      // "BigFish (Discord #feedback, 11-27): …", "Passings_z (X) reached …"
+      const name = !OPENER_VERB.test(b[1]) && (b[3][0] === ":" ? personName(b[1]) : bodyName(b[1], false));
+      if (name) out.push({ name, via: bvia, sure: true });
+      continue;
+    }
+    const m = p.match(OPENER);
     const via = m && PLATFORMS[lower(m[2])];
     if (!via) continue;
     // "Ported for nylesssssssss on X:", "ZeroClover asked on X:"
-    const who = m[1].replace(/^(?:reported|requested|suggested|asked|ported)\s+(?:by|for)\s+/i, "").replace(/\s+asked$/i, "");
-    const names = who.split(/,\s*|\s+(?:and|&)\s+/).map(personName);
-    if (names.every(Boolean)) for (const name of names) out.push({ name, via, sure: true });
+    const who = m[1].replace(/^(?:reported|requested|suggested|asked|ported)(?:\s+for)?\s+(?:by|for)\s+/i, "").replace(/\s+asked$/i, "");
+    // "Asked on X (@xuanbo1889245): …": the bracket's handle said it
+    if (OPENER_VERB.test(who)) {
+      const h = m[3] && m[3].trim().match(/^@([\w.-]+)$/);
+      if (h) out.push({ name: h[1], via, sure: true });
+      continue;
+    }
+    const got = [];
+    for (let part of who.split(/,\s*|\s+(?:and|&)\s+/)) {
+      // "elis_pina (LoveEcho1145) on X:": a bracket after a name is an
+      // alias or a detail, never a second person; "hatanokokoroyo (#6828)
+      // and Nietzsche_Li on X:" names an issue's author, on GitHub
+      const issue = /\(#\d+[^()]*\)/.test(part);
+      part = part.replace(/\s*\([^()]*\)/g, "");
+      // with no colon, "jinpwng on X (v0.1.4599) sets up three machines", a
+      // name is one word: "Thanks to Milktea on Discord for …" is no opener
+      const name = m[4][0] === ":" ? personName(part) : bodyName(part, false);
+      if (!name) { got.length = 0; break; }
+      got.push({ name, via: issue ? "GitHub" : via, sure: true });
+    }
+    // "Reported by gua2100 (ggbdpq) on GitHub, #2197": BODY_BY read the
+    // name above, and the opener says where
+    for (const g of got) {
+      const had = out.find((o) => o.name === g.name && (!o.via || o.via === g.via));
+      if (had) had.via = g.via; else out.push(g);
+    }
   }
   // a bracket of handles and nothing else: "(@ZhouYimingsjtu, @Lmohn39 on X)"
   for (const m of flat.matchAll(/\((@[\w.-]+(?:(?:,\s*|\s+(?:and|&)\s+)@[\w.-]+)*)\s+on\s+([^\s()]+)\)/gu)) {
