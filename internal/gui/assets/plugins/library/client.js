@@ -7504,6 +7504,12 @@ magpie.plugin("library", (ctx) => {
     box.append(above, below);
     let items = [], tops = [0], from = 0, to = 0;
     let live = new Map(); // key → its row, for the items from…to
+    // placed: drawn where the view is since the items were set. A list set
+    // before its page was in the window (render) has only its first rows,
+    // and its first look at the view is a placing, not a scroll that
+    // outran the filling: taken for one, it drew every row at once, all
+    // 150 skills before the tab's first frame (gandli on X)
+    let placed = false;
     const w = { el: box, shown: false };
     // the first item whose bottom is below y
     const at = (y) => {
@@ -7565,6 +7571,7 @@ magpie.plugin("library", (ctx) => {
       tops = [0];
       for (const it of items) tops.push(tops[tops.length - 1] + it.h);
       // placed, what's near the view; until then the first rows, enough for one
+      placed = false;
       if (box.isConnected && !page.hidden) w.sync(page.getBoundingClientRect(), true);
       else show(0, Math.min(items.length, 12), true);
       if (!w.full()) queueFill(w);
@@ -7581,7 +7588,7 @@ magpie.plugin("library", (ctx) => {
       // the rows in view and half a view about it
       const a = top - view / 2 > total ? items.length : at(Math.max(0, top - view / 2));
       const b = bottom + view / 2 < 0 ? 0 : Math.min(items.length, at(bottom + view / 2) + 1);
-      if (fresh) { show(a, Math.max(a, b), true); return; }
+      if (fresh || !placed) { placed = true; show(a, Math.max(a, b), true); return; }
       // a scroll past what's filled in: the rest, now
       if (from === to || (a < b && (a < from || b > to))) show(0, items.length, from === to);
     };
