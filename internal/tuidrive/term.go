@@ -72,7 +72,17 @@ type Term struct {
 	// Undrawn, when set, says why an agent that drew nothing hasn't
 	// (LastScreen), "" when it can't say.
 	Undrawn func() string
+	// Replies answers more of what the agent asks of the terminal than
+	// where the cursor is and what terminal it is (read), for an agent
+	// that waits for the answer before it draws: agy asks for the
+	// secondary device attributes and draws nothing until it has them.
+	// Set before Start or Attach.
+	Replies []Reply
 }
+
+// Reply is an answer the terminal gives: Answer, each time the agent
+// draws Ask.
+type Reply struct{ Ask, Answer string }
 
 // New is a terminal with no program in it yet: Start runs one, or Attach
 // reads one already started.
@@ -164,6 +174,11 @@ func (t *Term) read() {
 			}
 			if bytes.Contains(d, []byte("\x1b[c")) || bytes.Contains(d, []byte("\x1b[0c")) {
 				_, _ = io.WriteString(t.pty, "\x1b[?62;c")
+			}
+			for _, r := range t.Replies {
+				if bytes.Contains(d, []byte(r.Ask)) {
+					_, _ = io.WriteString(t.pty, r.Answer)
+				}
 			}
 			t.Feed(d)
 		}

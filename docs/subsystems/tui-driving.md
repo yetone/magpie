@@ -31,8 +31,9 @@ read from belong to that agent's driver.
   - `EndSignals` are the signals a driver ends on, its agent with it.
   - `Attach(rw)` reads a terminal a program already runs in. Tests use it.
 - **Reading** (`read`). It keeps what the agent draws, answers the
-  cursor-position (`ESC[6n`) and device-attributes (`ESC[c`) queries, and
-  goes on past EAGAIN from a non-blocking master (#4834). `Ended` records
+  cursor-position (`ESC[6n`) and device-attributes (`ESC[c`) queries, then
+  the driver's own `Replies` (each `Ask` seen is answered with its
+  `Answer`; Claude Code's driver sets none), and goes on past EAGAIN from a non-blocking master (#4834). `Ended` records
   the exit only once what the agent wrote before it has been read. On a
   terminal that stays open (Windows) that means until it goes quiet. Either
   way it waits 2s at most (#5283).
@@ -74,7 +75,38 @@ read from belong to that agent's driver.
   marks, `imagePad`, `cutHint` on top of `OldConsole`);
 - where its answers come from. Claude Code's driver reads its transcript and
   the tap, never the screen;
-- the words of its errors, and `Undrawn` (Claude Code names a Keychain wait).
+- the words of its errors, and `Undrawn` (Claude Code names a Keychain wait);
+- any terminal query its agent waits on beyond the two the package answers
+  (`Replies`). agy 1.5.17 asks for the secondary device attributes
+  (`ESC[>c`) and draws nothing until it has them.
+
+## Another agent: agy
+
+`TestDrivesAgy` ([`agy_test.go`](../../internal/tuidrive/agy_test.go))
+drives a real agy (Antigravity's CLI) with the package and nothing of
+Claude Code's. It runs when `MAGPIE_TEST_AGY_BIN` names an agy. agy starts
+in a sandbox HOME, on an API key, against a fake Gemini on loopback. Every
+other host goes to a proxy that isn't there, and `SSH_CONNECTION` keeps
+agy's sign-in out of the system keyring. The test:
+
+1. waits for agy's prompt (`? for shortcuts` in the footer, no
+   `esc to cancel`);
+2. pastes a message with paste marks, then Enter;
+3. reads the answer from agy's transcript
+   (`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript_full.jsonl`,
+   the `PLANNER_RESPONSE` row);
+4. checks the answer on `Now`.
+
+agy draws in place with relative cursor moves, not on the alternate
+screen, so `Plain` and `Seen` have its answer in pieces; the grid has it as
+shown.
+
+Magpie serves Antigravity through the agy-cli plugin, which runs the real
+agy over ACP (`agy acp`). On an API key, the TUI, `-p` and ACP send the same
+main request, headers included, and the TUI and ACP both send the title
+request first. `-p` is the one that can be told apart. The Google sign-in
+path was not compared, as that needs a real account. So no agy driver
+serves requests yet. The test shows the package carries one.
 
 ## Contracts
 
@@ -96,6 +128,7 @@ GOOS=windows go vet ./internal/tuidrive/ ./internal/claudetui/
 ```
 
 `TestEndedAfterLastWordsRead` and `TestReadPastEAGAIN` cover reading.
+`TestDrivesAgy` (with `MAGPIE_TEST_AGY_BIN`) drives a real agy.
 `TestGridDrawsInPlace` covers the grid. `TestDescendants` and `TestEtime`
 cover `Waiting`. The Claude Code driver's own suite (`internal/claudetui`
 and the gateway's `claude_tui_*` tests) runs the whole path against a fake
