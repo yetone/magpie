@@ -613,7 +613,12 @@ func firstJSON(xs ...json.RawMessage) string {
 }
 
 // jsonSchema turns Gemini's OpenAPI-flavoured schema into JSON Schema:
-// type names come lowercased and its own extras drop out.
+// type names come lowercased, nullable is a "null" type beside the one
+// there is (a null branch of an anyOf where there is none), and its own
+// extras drop out. A schema's keywords are read only where a schema has
+// them: under properties (and JSON Schema's other maps of schemas by
+// name) the keys are names, so a property named type, example or
+// nullable is a property like any other.
 func jsonSchema(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 {
 		return nil
@@ -646,13 +651,30 @@ func jsonSchema(raw json.RawMessage) json.RawMessage {
 					default:
 						out[k] = val
 					}
-				case "nullable":
-					if b, ok := val.(bool); ok && b {
-						out["x-nullable"] = true
+				case "nullable", "propertyOrdering", "example":
+				case "default", "const", "enum", "examples":
+					// These hold JSON data, whose keys are never keywords
+					out[k] = val
+				case "properties", "patternProperties", "$defs", "definitions":
+					named, ok := val.(map[string]any)
+					if !ok {
+						out[k] = val
+						break
 					}
-				case "propertyOrdering", "example":
+					schemas := make(map[string]any, len(named))
+					for name, s := range named {
+						schemas[name] = walk(s)
+					}
+					out[k] = schemas
 				default:
 					out[k] = walk(val)
+				}
+			}
+			if x["nullable"] == true {
+				if t, ok := out["type"].(string); ok && t != "null" {
+					out["type"] = []any{t, "null"}
+				} else if alts, ok := out["anyOf"].([]any); ok && out["type"] == nil {
+					out["anyOf"] = append(alts, map[string]any{"type": "null"})
 				}
 			}
 			return out
