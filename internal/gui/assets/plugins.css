@@ -75,8 +75,10 @@
 .pm-more { display: inline-flex; align-items: center; gap: 2px; padding: 1px 4px; border: 0; border-radius: 5px; background: none; font: inherit; font-size: 11.5px; color: var(--accent); cursor: pointer; }
 .pm-more:hover { background: var(--accent-soft); }
 .pm-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; padding: 0 2px; }
-.pm-foot .pm-trust { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11.5px; color: var(--muted); }
-.pm-foot .pm-trust svg { flex: none; color: var(--green); }
+/* the shield is centred on the sentence's first line, which wraps in a
+   narrow window, not on the middle of its lines (app.css .row's rule) */
+.pm-foot .pm-trust { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 11.5px; color: var(--muted); }
+.pm-foot .pm-trust svg { flex: none; margin-top: 2px; color: var(--green); }
 .pm-foot .pm-write { font-size: 12px; }
 @media (max-width: 1180px) {
   .pm-rec, .pm-rec.two { grid-template-columns: 1fr 1fr; }

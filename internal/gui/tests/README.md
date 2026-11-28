@@ -2904,6 +2904,21 @@ px below its count in the real app. Against the digits, headless Chromium
 and WebKit read the same row 0.4 to 1.3px apart by language (each picks
 its own font for the digits), so a screenshot bound of 1px held either way.
 
+`icon-text-top.test.cjs` holds the rule beside it (the owner, 11-28): an
+icon beside words of two or more lines, taller than the icon, meets the
+top of the first line's capitals, and beside one line it stays centred. It
+finds the pairs by geometry on eleven pages (Agents, Providers, the Add
+sheet, the three Plugins tabs, Library, Sessions, Usage, Settings and the
+tray panel), in Chromium and WebKit, all five languages, at 1180px and
+420px, with the Installed list the owner showed: a five-line Providers Hub
+among two- and three-line rows. It reads the capitals' top off an H put
+before the first line's words, at 4x, and allows 0.75px, as a row at a
+fractional height has its text and its picture snapped to device pixels
+apart. Its `ALLOW` leaves the Add sheet's partner tiles and the Usage rows
+to partner-tile-top and usage-row-logo-top, which hold a logo to its
+name's own letters. `SHOW=1` prints every pair; `PAGES`, `LANGS`, `WIDTHS` and
+`BROWSER` narrow a run.
+
 ## Requests' In without the cache
 
 `ledger-in-uncached.test.cjs` checks Settings › Usage › Advanced › In
