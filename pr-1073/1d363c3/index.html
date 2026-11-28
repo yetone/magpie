@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1073 界面预览 · 1d363c3</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1073 界面预览</h1><p class="m">commit 1d363c3 · <a href="https://github.com/yetone/magpie/pull/1073">回到 PR</a> · 这个 PR 把设置里几个模型选择的保存校验，从「任何写在已开启供应商下的模型名」改成「各自选择器里列出的模型」：图像识别模型按 provider.Served 校验，生图模型按供应商实际能生图的模型（gateway.Drawers）校验，Codex 的标题/描述/预测模型也按 Served 校验；不合法时返回 400、保留原值。设置页每次保存都会把自己的选择一起发回，与已存值相同的选择不再重新校验，而是保留并在页面上标为缺失。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-settings-models-tab.png" alt="设置›模型：图像识别与生图模型的选项，保存时按这里的列表校验"><figcaption>设置里的模型选择 · 设置›模型：图像识别与生图模型的选项，保存时按这里的列表校验</figcaption></figure>
+</main></html>

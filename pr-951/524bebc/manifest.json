@@ -1,0 +1,34 @@
+{
+  "summary": "这个 PR 只改文案：界面里原来叫「到期前用完」的中文（简体与繁体）路由方式，现在改叫「按配速」，中文路由说明开头的前缀、「智能以外的路由方式」那一句里的名字，以及中文文档里的相应措辞一并同步。路由逻辑和其他语言的字符串没有改动。",
+  "scenes": [
+    {
+      "title": "Codex 两个账号的路由方式",
+      "shots": [
+        {
+          "file": "01-codex-expanded.png",
+          "caption": "展开后 Codex 的两个 ChatGPT 账号与多账号路由",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "Sub2API Relay 的多 Key 路由",
+      "shots": [
+        {
+          "file": "02-relay-expanded.png",
+          "caption": "展开后：多个 Key 与路由方式那一行说明",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述说中文选项名会改成「额度均衡」，说明也会重写成「根据剩余周额度和重置时间分配使用……」，但 diff 里实际改成的名字是「按配速」，说明正文只换了开头的前缀，其余照旧。描述还说英文名保持 Weekly pace、英文说明重写、日文和德文说明随英文重译、英文文档和 README、magpie group 帮助文本同步更新，diff 里都没有这些改动，只有中文文档页改名。",
+  "unseen": "路由页里「按配速：{who} 的剩余额度 ÷ 距重置小时数最高……」这类决策说明，要等某个供应商或路由组真的按这个方式路由并产生请求才出现；沙盒这次显示的请求只启用了一个 Key，看不到这一行。日文、德文和英文的文案改动也不在 diff 里，因此没有可展示的界面变化。",
+  "interactive": true,
+  "pages": 1
+}

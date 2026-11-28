@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#978 界面预览 · 6dfd48c</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#978 界面预览</h1><p class="m">commit 6dfd48c · <a href="https://github.com/yetone/magpie/pull/978">回到 PR</a> · 这次改动让窄的原生窗口（body.window:not(.web)）里用量页的 KPI 小字换行、六项统计在容器 961–1100px 时改排三列，并让图表横轴日期在原生窗口里也会因与相邻标签碰撞而隐藏（含字体就绪后再量一次），同时把托盘面板「用量」的周期按钮改为跨重绘复用，避免回答重绘吞掉点击或让高亮回跳。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-panel-usage-period.png" alt="面板「用量」里的周期按钮"><figcaption>托盘面板的用量周期按钮 · 面板「用量」里的周期按钮</figcaption></figure>
+<figure><img src="02-panel-usage-7d.png" alt="面板「用量」的周期按钮与总量"><figcaption>托盘面板的用量周期按钮 · 面板「用量」的周期按钮与总量</figcaption></figure>
+<figure><img src="03-usage-head.png" alt="用量页顶部：周期、刷新与总额"><figcaption>用量页的头部与图表日期 · 用量页顶部：周期、刷新与总额</figcaption></figure>
+<figure><img src="04-usage-chart.png" alt="用量概览的柱状图与横轴日期标签"><figcaption>用量页的头部与图表日期 · 用量概览的柱状图与横轴日期标签</figcaption></figure>
+<figure><img src="05-sessions-kpis.png" alt="会话页顶部的六项统计"><figcaption>会话页的六项统计与 Agent 标签条 · 会话页顶部的六项统计</figcaption></figure>
+<figure><img src="06-sessions-agents.png" alt="会话页的 Agent 标签条"><figcaption>会话页的六项统计与 Agent 标签条 · 会话页的 Agent 标签条</figcaption></figure>
+</main></html>

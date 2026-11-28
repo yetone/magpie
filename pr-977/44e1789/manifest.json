@@ -1,0 +1,39 @@
+{
+  "summary": "PR 在用量页的额度卡片和菜单栏托盘的额度卡片上新增预测行：撑得到重置（带余量倍数/历史标记）、预计用完或已用完，并补齐 zh、zh-TW、ja、de 文案与样式。",
+  "scenes": [
+    {
+      "title": "用量页的额度预测",
+      "shots": [
+        {
+          "file": "01-usage-verdict-card.png",
+          "caption": "Codex 额度卡片：每个窗口的重置与配速后多出的预测行",
+          "width": 1125
+        },
+        {
+          "file": "02-usage-history-verdict.png",
+          "caption": "「7 天」窗口的预测行末尾带「历史」标记",
+          "width": 1120
+        }
+      ]
+    },
+    {
+      "title": "托盘额度页的预测行",
+      "shots": [
+        {
+          "file": "03-panel-verdicts.png",
+          "caption": "托盘额度卡片圆环下方的按窗口预测行",
+          "width": 2552
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒的实时额度只出现「撑得到重置」这类预测，无法展示「预计用完」「已用完」、无预测或 state 为 none 时不显示的分支，也无法展示托盘 440px 德语长句换行；这些需要构造额度历史或切换语言才能看到。",
+  "interactive": true,
+  "pages": 2
+}

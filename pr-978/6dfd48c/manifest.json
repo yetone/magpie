@@ -1,0 +1,59 @@
+{
+  "summary": "这次改动让窄的原生窗口（body.window:not(.web)）里用量页的 KPI 小字换行、六项统计在容器 961–1100px 时改排三列，并让图表横轴日期在原生窗口里也会因与相邻标签碰撞而隐藏（含字体就绪后再量一次），同时把托盘面板「用量」的周期按钮改为跨重绘复用，避免回答重绘吞掉点击或让高亮回跳。",
+  "scenes": [
+    {
+      "title": "托盘面板的用量周期按钮",
+      "shots": [
+        {
+          "file": "01-panel-usage-period.png",
+          "caption": "面板「用量」里的周期按钮",
+          "width": 2560
+        },
+        {
+          "file": "02-panel-usage-7d.png",
+          "caption": "面板「用量」的周期按钮与总量",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "用量页的头部与图表日期",
+      "shots": [
+        {
+          "file": "03-usage-head.png",
+          "caption": "用量页顶部：周期、刷新与总额",
+          "width": 2168
+        },
+        {
+          "file": "04-usage-chart.png",
+          "caption": "用量概览的柱状图与横轴日期标签",
+          "width": 2168
+        }
+      ]
+    },
+    {
+      "title": "会话页的六项统计与 Agent 标签条",
+      "shots": [
+        {
+          "file": "05-sessions-kpis.png",
+          "caption": "会话页顶部的六项统计",
+          "width": 2168
+        },
+        {
+          "file": "06-sessions-agents.png",
+          "caption": "会话页的 Agent 标签条",
+          "width": 1120
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述说用量页头部「现在」把刷新和总额作为一组换行（.usage-head、#usageReload 与 #usageCost 的关系），但 diff 里没有任何 .usage-head 相关的 CSS 或标记改动，这条只出现在文档和新增测试的断言里。",
+  "unseen": "两处布局规则只作用于原生窗口（body.window:not(.web)）：预览环境运行的是 magpie web、宽 1280px 且没有调整窗口大小的动作，因此 KPI 小字换行、六项统计改排三列、以及窄窗口下相邻图表日期被隐藏，都无法在这里拍到；Sessions 的 Agent 标签条按描述保持原样（水平滚动、不换行），diff 也未改动它。面板周期按钮的「回答重绘 / 按下与松开之间到达的响应不吞点击、高亮不回跳」是时序行为，静态截图也拍不到。",
+  "interactive": true,
+  "pages": 3
+}

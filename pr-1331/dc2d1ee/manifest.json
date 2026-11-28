@@ -1,0 +1,48 @@
+{
+  "summary": "在「设置 › 网络与共享」里新增「Microsoft 365」一节：一个开关，以及开启后显示的仅本机 HTTPS 地址、证书状态与信任操作、网关密钥复制和自动加入的允许网页。",
+  "scenes": [
+    {
+      "title": "设置中的 Microsoft 365 一节",
+      "shots": [
+        {
+          "file": "01-m365-section-off.png",
+          "caption": "未开启时这一节显示的内容",
+          "width": 2168
+        }
+      ]
+    },
+    {
+      "title": "开启 Claude for Microsoft 365",
+      "shots": [
+        {
+          "file": "02-m365-section-on.png",
+          "caption": "开启后这一节显示的内容：地址、证书、密钥、允许的网页",
+          "width": 2168
+        },
+        {
+          "file": "03-m365-toggle-result.png",
+          "caption": "点击「开启」后，Microsoft 365 这一节的显示",
+          "width": 2168
+        },
+        {
+          "file": "04-m365-copy-key.png",
+          "caption": "点「复制密钥」后这一节的样子",
+          "width": 2168
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "设置中的 Microsoft 365 一节 · scroll : nothing visible matches #m365List (1 in the page)",
+    "开启 Claude for Microsoft 365 · click #m365List button.text: nothing visible matches #m365List button.text with \"复制密钥\" (0 in the page)",
+    "开启 Claude for Microsoft 365 · shot #status: nothing visible matches #status (1 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒大概不是 macOS，所以「信任证书 / 移除信任」这类自动信任按钮不会出现，只能看到证书路径那一行；Word、Excel、PowerPoint 里的 Claude 加载项本身在沙盒中无法运行，这个 HTTPS 监听器真正被加载项调用也看不到。另外若 127.0.0.1:8787 已被占用或本进程没有在提供网关，开启会失败并在这一节显示错误，而不是显示地址、证书与密钥。",
+  "interactive": true,
+  "pages": 1
+}
