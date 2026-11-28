@@ -23,6 +23,7 @@ var keySurfaceNeither = []string{
 	// usage, a key's own limits and slots, the Library's skills
 	"GET /v1/magpie/usage", "GET /v1/magpie/usage/requests", "POST /v1/magpie/usage/requests",
 	"GET /v1/magpie/limit", "GET /v1/magpie/concurrency", "GET /v1/magpie/library",
+	"GET " + SkillsArchivePath, "GET " + SkillsPullPath,
 	// pages and files answered without a key, joins and proofs
 	"GET " + KeyPagePath, "GET " + keyPageData, "GET " + ChatPagePath, "GET " + ChatPagePath + "/{path...}",
 	"GET " + JoinPagePath, "GET " + joinData, "POST " + joinData, "GET " + CAPath,

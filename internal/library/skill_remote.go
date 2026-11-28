@@ -12,7 +12,7 @@ import (
 // no magpie, served by one in Docker or elsewhere. They are read from the
 // Library as it is, on each ask: no list of the agents here (Targets) is
 // made for them. Whether the router is on, and who is given them, is the
-// gateway's (hubSkillsFor).
+// gateway's (remoteSkillsFor): the pull script is given them with it off.
 
 // remoteSkill says whether the agent agentID on another computer is given
 // s: for "" (the address any app is given) every skill on here; for an

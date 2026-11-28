@@ -1207,6 +1207,8 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("GET /v1/magpie/quotas/history", s.quotasHistory)
 	mux.HandleFunc("GET "+provider.RemoteCardsPath, s.quotaCards)
 	mux.HandleFunc("GET "+provider.RemoteLibraryPath, s.sharedLibrary)
+	mux.HandleFunc("GET "+SkillsArchivePath, s.skillsArchive)
+	mux.HandleFunc("GET "+SkillsPullPath, s.skillsPull)
 	mux.HandleFunc("GET "+provider.RemoteAgentModelsPath, s.sharedAgentModels)
 	mux.HandleFunc("POST "+provider.RemoteRefreshPath, s.quotaCardsRefresh)
 	mux.HandleFunc("POST "+provider.RemoteCodexResetPath, s.codexReset)

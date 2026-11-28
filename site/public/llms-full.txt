@@ -10872,7 +10872,7 @@ Without `web --addr 0.0.0.0:3430 --no-open` the container runs the gateway alone
 
 Open the link from the log. The key in it is traded for a cookie and taken out of the address; a page opened without it is turned away (401). With `MAGPIE_WEB_KEY` set (16 or more letters, digits or `- . _ ~`; `openssl rand -hex 16` makes one) the key stays the same across restarts, and a browser stays signed in for 400 days. Without it, every start makes a new key: a browser stays signed in, closed and opened again too, until magpie starts again, and then needs the new link.
 
-The page is in **gateway mode**: Providers, Gateway, Routing, Usage, Sessions, Plugins and Settings, with no Agents, since there are no agents in the container. Library has its MCP servers, with the MCP router: other computers’ apps connect at the router’s address with a gateway key. Beside them are its Skills and Instructions: a magpie on another computer that adds this one as an Another computer’s magpie provider, with Use its skills and prompts on, takes them and gives them to its own agents, since a skill is a folder on the agent’s computer. Sessions lists only the sessions of agents on other computers that came through this gateway, never this machine’s agents’ files. Settings → General → Gateway mode turns it off.
+The page is in **gateway mode**: Providers, Gateway, Routing, Usage, Sessions, Plugins and Settings, with no Agents, since there are no agents in the container. Library has its MCP servers, with the MCP router: other computers’ apps connect at the router’s address with a gateway key. Beside them are its Skills and Instructions: a magpie on another computer that adds this one as an Another computer’s magpie provider, with Use its skills and prompts on, takes them and gives them to its own agents, since a skill is a folder on the agent’s computer. An agent on a computer with no magpie gets them as in Skills on other computers. Sessions lists only the sessions of agents on other computers that came through this gateway, never this machine’s agents’ files. Settings → General → Gateway mode turns it off.
 
 On a NAS or a server you reach over SSH, open the page through a tunnel rather than publishing 3430: `ssh -L 3430:127.0.0.1:3430 you@nas`, then the log’s link on your own computer.
 
@@ -10905,6 +10905,21 @@ The Library’s MCP servers run in the container, and the image has what they st
 The image has no browser. Chrome DevTools’ and Playwright’s MCP servers start a Chrome of their own, so in the container their row in the Library says no Chrome here. Use Magpie Browser instead, which acts in your own browser, or point the server at a Chrome it can reach: `--browserUrl http://host:9222` for Chrome DevTools, `--cdp-endpoint` for Playwright.
 
 An app on the host or another machine reaches the [MCP router](https://usemagpie.ai/docs/mcp-router) from outside the container. With a gateway key that has a model, account or spend limit, it is given only the Library’s URL servers, not the ones the container runs as programs (`npx`, `uvx` and the like). Give it a key with no such limit to get those too; the router tells the app which servers it left out and why ([From another computer](https://usemagpie.ai/docs/mcp-router#away)).
+
+## Skills on other computers
+
+An agent on a computer with no magpie of its own gets the Library’s skills from the container in two ways. Both need a gateway key with no model, account, spend or MCP limit (a key for MCP servers only is fine); a key with such a limit is told it gets none (the pull below stops at `curl: (22) … 403`; at `401`, the key isn’t one of that magpie’s).
+
+**Through the MCP router.** An agent connected to the [MCP router](https://usemagpie.ai/docs/mcp-router) is told the skills in its instructions and given a `get_skill` tool, which gives a skill’s `SKILL.md` and each of its files. Nothing is installed on that computer. At `/mcp/magpie/hub/claude` it gets the skills ticked for Claude Code and those ticked for no agent, which in a container is every skill.
+
+**As folders on that computer.** For an agent that reads skills only from its own folder, or a skill whose scripts run there, pull them on that computer:
+
+```
+export MAGPIE_KEY=sk-magpie-key-…
+curl -fsSL -H "Authorization: Bearer $MAGPIE_KEY" http://192.168.1.20:3425/v1/magpie/skills/pull.sh | sh
+```
+
+It copies every skill into `~/.agents/skills`, and into `~/.claude/skills` when Claude Code is there (`MAGPIE_SKILLS_DIRS`, folders joined by `:`, says others). Run it again, by hand or from cron, to bring them up to date. A folder of your own with the same name is never written over, nor a pulled skill you changed; a skill gone from the Library is removed only if you haven’t changed it. Each pulled folder has a `.magpie-pulled` file saying where it came from. It needs `sh`, `curl` and `tar`; on Windows, run it in Git Bash or WSL.
 
 ## Your own browser
 

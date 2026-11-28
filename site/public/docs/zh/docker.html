@@ -136,6 +136,7 @@
     <a href="#web">Web 界面</a>
     <a href="#signin">登录订阅</a>
     <a href="#mcp">MCP 服务器</a>
+    <a href="#skills">其他电脑上的技能</a>
     <a href="#browser">你自己的浏览器</a>
     <a href="#volume">保存了什么</a>
     <a href="#env">环境变量</a>
@@ -187,7 +188,7 @@ docker logs magpie</pre>
 
     <h2 id="web"><a class="anchor" href="#web">Web 界面</a></h2>
     <p>打开日志里的链接。链接里的 key 会换成一个 cookie，并从地址栏里去掉；不带 key 打开会被拒绝（401）。设置了 <code>MAGPIE_WEB_KEY</code>（16 个以上的字母、数字或 <code>- . _ ~</code>；<code>openssl rand -hex 16</code> 可以生成一个）时，重启后 key 不变，浏览器保持登录 400 天。不设置时每次启动都会生成新 key：浏览器关掉再打开也保持登录，直到 magpie 再次启动，之后要用新的链接。</p>
-    <p>这个页面处于<b>网关模式</b>：只有 <span class="ui">供应商</span>、<span class="ui">网关</span>、<span class="ui">路由</span>、<span class="ui">用量</span>、<span class="ui">会话</span>、<span class="ui">插件</span>、<span class="ui">资源库</span>和 <span class="ui">设置</span>，没有 Agent，因为容器里没有 Agent。<span class="ui">资源库</span>里有 MCP 服务器和 MCP 路由：其他电脑上的应用用网关密钥连接路由地址。旁边是<span class="ui">技能</span>和<span class="ui">指令</span>：其他电脑上的 magpie 把这个 magpie 添加为<span class="ui">另一台电脑上的 magpie</span> 供应商并打开<span class="ui">使用它的技能和提示词</span>后，会拿到它们，交给自己的 Agent，因为技能是 Agent 所在电脑上的文件夹。<span class="ui">会话</span>只列出其他电脑上通过这个网关的 Agent 会话，从不读这台机器上 Agent 的会话文件。<span class="ui">设置</span> → <span class="ui">常规</span> → <span class="ui">网关模式</span> 可以关掉它。</p>
+    <p>这个页面处于<b>网关模式</b>：只有 <span class="ui">供应商</span>、<span class="ui">网关</span>、<span class="ui">路由</span>、<span class="ui">用量</span>、<span class="ui">会话</span>、<span class="ui">插件</span>、<span class="ui">资源库</span>和 <span class="ui">设置</span>，没有 Agent，因为容器里没有 Agent。<span class="ui">资源库</span>里有 MCP 服务器和 MCP 路由：其他电脑上的应用用网关密钥连接路由地址。旁边是<span class="ui">技能</span>和<span class="ui">指令</span>：其他电脑上的 magpie 把这个 magpie 添加为<span class="ui">另一台电脑上的 magpie</span> 供应商并打开<span class="ui">使用它的技能和提示词</span>后，会拿到它们，交给自己的 Agent，因为技能是 Agent 所在电脑上的文件夹。没装 magpie 的电脑上的 Agent 见<a href="#skills">其他电脑上的技能</a>。<span class="ui">会话</span>只列出其他电脑上通过这个网关的 Agent 会话，从不读这台机器上 Agent 的会话文件。<span class="ui">设置</span> → <span class="ui">常规</span> → <span class="ui">网关模式</span> 可以关掉它。</p>
     <p>NAS 或通过 SSH 访问的服务器上，用隧道打开页面，不要发布 3430：<code>ssh -L 3430:127.0.0.1:3430 you@nas</code>，然后在自己电脑上打开日志里的链接。</p>
     <div class="callout"><b>拿到链接的人都能修改 magpie、看到它的密钥。</b>让 3430 只在回环地址或 VPN 上。要跨网络访问，就用 HTTPS：用 <code>MAGPIE_TLS_CERT</code> 和 <code>MAGPIE_TLS_KEY</code> 给 magpie 一张证书，或者放在带 TLS 的反向代理（如 Caddy）后面。</div>
 
@@ -212,6 +213,18 @@ docker logs magpie</pre>
     <p>资源库里的 MCP 服务器在容器里运行，镜像里带着它们启动要用的命令：<code>npx</code>、<code>node</code> 和 <code>npm</code>（Node 24），以及 <code>uvx</code>、<code>uv</code>、<code>python</code> 和 <code>python3</code>。用 <code>uvx</code> 或 <code>python</code> 启动的服务器第一次会把 Python 下载到数据卷里，要几秒钟。用 <code>docker</code> 启动的服务器跑不起来：容器里没有它自己的 Docker。</p>
     <p>镜像里没有浏览器。Chrome DevTools 和 Playwright 的 MCP 服务器要启动自己的 Chrome，所以在容器里，它们在资源库里的那一行会显示 <span class="ui">这里没有 Chrome</span>。请改用 <a href="#browser">Magpie Browser</a>，它在你自己的浏览器里操作；或者让服务器连接一个它能访问到的 Chrome：Chrome DevTools 用 <code>--browserUrl http://host:9222</code>，Playwright 用 <code>--cdp-endpoint</code>。</p>
     <p>主机或其他机器上的应用是从容器外面连到 <a href="/docs/zh/mcp-router">MCP 路由</a>的。它用的网关密钥如果限定了模型、账号或花费，就只拿到资源库里的 URL 服务器，拿不到容器里以程序运行的服务器（<code>npx</code>、<code>uvx</code> 之类）。换一个不限这些的密钥就都能拿到；路由会告诉应用少了哪些服务器、为什么（<a href="/docs/zh/mcp-router#away">从另一台电脑连接</a>）。</p>
+
+    <h2 id="skills"><a class="anchor" href="#skills">其他电脑上的技能</a></h2>
+    <p>没装 magpie 的电脑上的 Agent，有两种办法从容器拿到资源库里的技能。两种都要用一个不限模型、账号、花费和 MCP 服务器的网关密钥（只开 MCP 服务器的密钥也可以）；有这些限制的密钥会被告知拿不到技能（下面的拉取会停在 <code>curl: (22) … 403</code>；停在 <code>401</code> 则是这个密钥不属于那个 magpie）。</p>
+    <p><b>通过 MCP 路由。</b>连到 <a href="/docs/zh/mcp-router">MCP 路由</a>的 Agent 会在说明里看到这些技能，并拿到一个 <code>get_skill</code> 工具，用它读技能的 <code>SKILL.md</code> 和其中每个文件。那台电脑上不用装任何东西。在 <code>/mcp/magpie/hub/claude</code> 上，它拿到勾给 Claude Code 的技能和没勾给任何 Agent 的技能；在容器里就是全部技能。</p>
+    <p><b>作为那台电脑上的文件夹。</b>Agent 只从自己的文件夹读技能，或者技能的脚本要在那台电脑上运行时，就在那台电脑上把它们拉下来：</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-skills">复制</button>
+      <pre id="ex-skills">export MAGPIE_KEY=sk-magpie-key-…
+curl -fsSL -H "Authorization: Bearer $MAGPIE_KEY" http://192.168.1.20:3425/v1/magpie/skills/pull.sh | sh</pre>
+    </div>
+    <p>它把每个技能复制到 <code>~/.agents/skills</code>，装了 Claude Code 时也复制到 <code>~/.claude/skills</code>（<code>MAGPIE_SKILLS_DIRS</code> 可以指定别的文件夹，用 <code>:</code> 隔开）。再运行一次（手动或用 cron）就会更新。同名的你自己的文件夹不会被覆盖，拉下来后你改过的技能也不会；资源库里删掉的技能，只有你没改过才会删除。每个拉下来的文件夹里有一个 <code>.magpie-pulled</code> 文件，记着它从哪里来。需要 <code>sh</code>、<code>curl</code> 和 <code>tar</code>；在 Windows 上请在 Git Bash 或 WSL 里运行。</p>
 
     <h2 id="browser"><a class="anchor" href="#browser">你自己的浏览器</a></h2>
     <p>Magpie Browser 通过它的扩展，让 Agent 在你自己的浏览器里操作。容器里的文件夹没法直接加载成扩展，所以在浏览器界面打开 <span class="ui">资源库</span> → <span class="ui">Magpie Browser</span>，点 <span class="ui">下载扩展</span>。下载的 zip 指向这个页面自己的地址，并带一个名为 <b>Magpie Browser</b> 的专用网关密钥。解压后打开 <code>chrome://extensions</code>，打开开发者模式，点 <span class="ui">加载已解压的扩展程序</span>，选择解压出的文件夹。已经加载过的扩展，也可以在它的弹窗里填地址（<code>http://localhost:3430</code>，或网关发布到主机的端口）和网关密钥。</p>

@@ -49,7 +49,8 @@ func TestRemoteSkills(t *testing.T) {
 		}
 		return out
 	}
-	// the router's switch is the gateway's to read (hubSkillsFor)
+	// the router's switch is the gateway's to read (hubSkillsFor): the
+	// pull script is given the skills with it off
 	remote := func(agent string) []gateway.RemoteSkill {
 		t.Helper()
 		ks, err := theHub{}.RemoteSkills(agent)

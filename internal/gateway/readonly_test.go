@@ -20,7 +20,7 @@ import (
 // classified before it ships: the guard refuses it until then.
 var readOnlyRefused = []string{
 	// the Library's skills and prompts: a held key is a display, not a client
-	"GET /v1/magpie/library",
+	"GET /v1/magpie/library", "GET " + SkillsArchivePath, "GET " + SkillsPullPath,
 	// the models this computer's agents are on: a client's picks to follow
 	"GET /v1/magpie/agent-models",
 	// model lists and their Ollama spellings: what the key could use

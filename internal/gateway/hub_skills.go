@@ -21,7 +21,9 @@ import (
 // skill's SKILL.md and each of its other files. An agent on this computer
 // has them in its own folder already (the Library links them there), and
 // another magpie's router takes them as a whole from /v1/magpie/library
-// (borrow.go), so neither is given them here.
+// (borrow.go), so neither is given them here. A copy on that computer's
+// disk, for an agent to run a skill's scripts, is the pull script's
+// (skills_pull.go).
 
 // hubSkillTool is the tool that gives a skill; a server's tool is
 // <server>__<tool>, so it is never one of their names.
@@ -47,7 +49,8 @@ type RemoteSkillFiles struct {
 type HubRemoteSkills interface {
 	// RemoteSkills are the skills agent is given, by name: every one for
 	// agent "" (HubMCPAll's). An error is a Library it couldn't read,
-	// never told as one with no skills.
+	// never told as one with no skills (the pull script would take that
+	// as every skill gone).
 	RemoteSkills(agent string) ([]RemoteSkill, error)
 	// RemoteSkill is the skill called name agent is given, with its
 	// files; false when it isn't given one by that name.
@@ -84,15 +87,17 @@ func hubSkillsFor(r *http.Request) (bool, string) {
 }
 
 // remoteSkillsFor is whether r is given the Library's skills, by the
-// router's get_skill, and why not
+// router's get_skill or the pull script (skills_pull.go), and why not
 // when it is an agent on another computer that isn't: a request from
-// another computer, with a gateway key (the hub takes no other from
-// there: lanGuard), not a web page's or another magpie's
+// another computer, with a gateway key (the hub and the pull take no
+// other from there: lanGuard), not a web page's or another magpie's
 // router, its key held to nothing. A key for MCP servers only
 // (ModelsOff) is held to no model, as hubVisitor reads it. This computer
 // is given none: its agents have the skills in their own folders.
 func remoteSkillsFor(r *http.Request) (bool, string) {
-	if hubRemoteSkills() == nil || local(r) || hubFromPage(r) || FromRouter(r.Context()) {
+	// The header too, not FromRouter alone: only the hub's handler turns
+	// it into the context, and the pull's routes are outside it.
+	if hubRemoteSkills() == nil || local(r) || hubFromPage(r) || FromRouter(r.Context()) || r.Header.Get(RouterHeader) != "" {
 		return false, ""
 	}
 	who := access.Caller(r.Context())
