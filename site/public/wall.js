@@ -48,51 +48,55 @@
       if (p.held === k && !p.cut) p.el.classList.remove("cw-drawn");
     }));
   }
-  // Each part is drawn once soon after the page loads, a few at a time, so
-  // the size it keeps off screen is its own, not the guess. One drawn at
-  // its own size only when scrolled to would move the rows being read
-  // (WebKit doesn't anchor the scroll for it); one above the screen
-  // drawn here is scrolled by what it changed, in the same task.
-  let pass = 0, width = 0;
+  // A part never drawn has the size credits.mjs guessed for it. Below the
+  // screen that moves nothing; above it, the page jumps when the part is
+  // first drawn as one scrolls back up (WebKit doesn't anchor it). So a
+  // part above the screen that hasn't been drawn at this width, which only
+  // a jump past it leaves (a link to a row, the finder, the scroll bar),
+  // is drawn once, nearest first, a few at a time, holding what is on
+  // screen in place. Read in order from the top, nothing is left to do.
+  let width = 0, soon = 0, busy = false;
+  const top = () => parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+  const io = window.IntersectionObserver && new IntersectionObserver((es) => {
+    for (const e of es) { const p = e.target._part; p.on = e.isIntersecting; if (p.on) p.w = width; }
+  });
+  for (const p of parts) { p.el._part = p; p.w = 0; p.on = false; if (io) io.observe(p.el); }
   function measure() {
-    const k = ++pass;
-    delete wrap.dataset.drawn;
-    // nearest the screen first: what is read next
-    const order = parts.map((p) => {
-      const r = p.el.getBoundingClientRect();
-      return { p, far: r.bottom < 0 ? -r.bottom : r.top > innerHeight ? r.top - innerHeight : 0 };
-    }).sort((a, b) => a.far - b.far).map((o) => o.p);
+    if (busy) return;
+    const y0 = top();
+    const todo = parts.filter((p) => p.w !== width && !p.el.hidden && !p.cut && p.el.getBoundingClientRect().bottom <= y0).reverse();
+    if (!todo.length) return;
+    busy = true;
     let i = 0;
     const step = () => {
-      if (k !== pass) return;
-      const t = performance.now();
-      const top = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
-      while (i < order.length && performance.now() - t < 8) {
-        const p = order[i++];
-        if (p.el.hidden || p.cut) continue;
-        // what is on screen below a part above it is held where it was,
-        // by how far it moved: a browser that anchors moved it back itself
-        const above = p.el.getBoundingClientRect().bottom <= top;
-        const next = above && p.el.nextElementSibling;
-        const y = next && next.getBoundingClientRect().top;
+      const t = performance.now(), y = top();
+      while (i < todo.length && performance.now() - t < 6) {
+        const p = todo[i++];
+        if (p.w === width || p.el.hidden || p.cut) continue;
+        const next = p.el.nextElementSibling;
+        const at = next && next.getBoundingClientRect().top;
         hold(p);
-        if (next) { const d = next.getBoundingClientRect().top - y; if (Math.abs(d) >= .5) scrollBy(0, d); }
+        p.w = width;
+        // a browser that anchors has moved it back itself
+        if (next && p.el.getBoundingClientRect().bottom <= y) { const d = next.getBoundingClientRect().top - at; if (Math.abs(d) >= .5) scrollBy(0, d); }
       }
-      if (i < order.length) setTimeout(step, 40); else wrap.dataset.drawn = "";
+      if (i < todo.length) setTimeout(step, 50);
+      else { busy = false; later(); }
     };
     step();
   }
-  const start = () => setTimeout(measure, 400);
-  if (document.readyState === "complete") start(); else addEventListener("load", start);
-  // a new width wraps the rows anew
+  // once scrolling stops: a part a jump went past
+  const later = () => { clearTimeout(soon); soon = setTimeout(measure, 250); };
+  addEventListener("scroll", later, { passive: true });
+  if (document.readyState === "complete") later(); else addEventListener("load", later);
+  // a new width wraps every row anew: only what is on screen is drawn at it
   if (window.ResizeObserver) {
-    let soon = 0;
     new ResizeObserver(() => {
       const w = wrap.clientWidth;
       if (!w || w === width) return;
-      const first = !width;
       width = w;
-      if (!first) { clearTimeout(soon); soon = setTimeout(measure, 200); }
+      for (const p of parts) if (p.on) p.w = w;
+      later();
     }).observe(wrap);
   }
   let lastRow = null;

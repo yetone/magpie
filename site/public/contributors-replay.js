@@ -565,7 +565,8 @@
       if (music && sound) on ? music.play(pos) : music.pause();
       wake();
     };
-    btn.addEventListener("click", () => play(!playing));
+    let chosen = false; // the reader has played, paused or moved it
+    btn.addEventListener("click", () => { chosen = true; play(!playing); });
     // sound on: the history from the start, unless it is playing now
     const withMusic = () => {
       if (!sound) return;
@@ -577,7 +578,7 @@
       else { seek(0, performance.now()); play(true); }
     };
     snd.addEventListener("click", () => {
-      sound = !sound; setBtn();
+      sound = !sound; setBtn(); chosen = true;
       if (!sound) { if (music) music.pause(); return; }
       // made and resumed inside the click, or Safari keeps it silent
       if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -593,7 +594,7 @@
       return toStep(((e.clientX - b.left) / Math.max(1, b.width)) * END);
     };
     hist.addEventListener("pointerdown", (e) => {
-      dragging = true; was = playing;
+      chosen = true; dragging = true; was = playing;
       if (playing) play(false);
       hist.setPointerCapture(e.pointerId);
       seek(at(e), performance.now());
@@ -603,6 +604,7 @@
     hist.addEventListener("pointerup", drop);
     hist.addEventListener("pointercancel", drop);
     hist.addEventListener("keydown", (e) => {
+      if (e.key in { ArrowLeft: 1, ArrowRight: 1, PageDown: 1, PageUp: 1, Home: 1, End: 1, " ": 1 }) chosen = true;
       const days = { ArrowLeft: -1, ArrowRight: 1, PageDown: -7, PageUp: 7 }[e.key];
       if (days) seek(toStep(T + days * 1440), performance.now());
       else if (e.key === "Home") seek(0, performance.now());
@@ -694,8 +696,33 @@
       seek(STEPS, performance.now());
     } else {
       seek(0, performance.now());
+      // The first bars wait for the page to settle: its load, then the
+      // analytics it loads after (PostHog, and its recorder half a second
+      // later), then a run of smooth frames. Each of those is a long task
+      // that, on a slower Mac in Safari, would stall the opening by a
+      // tenth of a second or more. Never longer than SETTLE after load.
+      const SETTLE = 3000, QUIET = 300;
+      let calm = false, seenOnce = false;
+      const settle = () => {
+        let since = 0, ph = 0, smooth = 0, prev = 0;
+        const tick = (t) => {
+          since ||= t;
+          // PostHog's stub has no __loaded until its own script has run
+          const p = window.posthog;
+          if (p && p.__loaded && !ph) ph = t;
+          const analytics = !p || (ph && ((p.sessionRecording && p.sessionRecording.started) || t - ph > 1200));
+          smooth = prev && t - prev < 40 ? smooth + (t - prev) : 0;
+          prev = t;
+          if ((analytics && smooth >= QUIET) || t - since > SETTLE) { calm = true; go(); }
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      };
+      // not if someone has already played, paused or moved it
+      const go = () => { if (calm && seenOnce && !chosen) play(true); };
+      if (document.readyState === "complete") settle(); else addEventListener("load", settle, { once: true });
       const io = new IntersectionObserver((es) => {
-        if (es.some((x) => x.isIntersecting)) { io.disconnect(); play(true); }
+        if (es.some((x) => x.isIntersecting)) { io.disconnect(); seenOnce = true; go(); }
       }, { threshold: .35 });
       io.observe(stage);
     }
