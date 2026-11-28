@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"log"
 	"maps"
 	"mime"
 	"net"
@@ -1333,6 +1334,7 @@ type chatDecoder struct {
 	started   bool
 	tool      int       // index of the open tool call, -1 for none
 	toolID    string    // id of the open tool call, as some relays repeat it on every fragment
+	toolName  string    // and its name
 	toolWhole jsonWhole // where the open call's arguments stand in their JSON
 	toolDone  bool      // they are whole JSON: a call that starts now comes after it
 	held      []*heldCall
@@ -1695,6 +1697,19 @@ func (d *chatDecoder) toolCall(idx int, tc cToolCall, emit func(Event)) {
 		d.toolArgs(args, emit)
 		return
 	}
+	// the open call's id and name again at another index, while its
+	// arguments are still coming and no call is held: the same call. The
+	// Devin plugin opens an index for each of Devin's frames that names the
+	// tool, under the id Devin gave it; read as a second call it was held
+	// to the reply's end, and the agent's input stopped mid-call. Said in
+	// the log, in words that name nothing of the call, so how often it
+	// comes can be counted
+	if d.tool >= 0 && !d.toolDone && len(d.held) == 0 && tc.ID != "" && tc.ID == d.toolID && tc.Function.Name == d.toolName {
+		log.Printf("chat: a tool call's id and name came again at another index before its arguments were whole; read as the same call")
+		d.tool = idx
+		d.toolArgs(args, emit)
+		return
+	}
 	// a call Gemini signed goes to the client with an id carrying the
 	// signature, which comes back with it
 	sent := signedID(tc.ID, googleSignature(tc.ExtraContent))
@@ -1704,7 +1719,7 @@ func (d *chatDecoder) toolCall(idx int, tc cToolCall, emit func(Event)) {
 		d.held = append(d.held, h)
 		return
 	}
-	d.tool, d.toolID, d.toolWhole, d.toolDone = idx, tc.ID, jsonWhole{}, false
+	d.tool, d.toolID, d.toolName, d.toolWhole, d.toolDone = idx, tc.ID, tc.Function.Name, jsonWhole{}, false
 	emit(Event{Kind: KToolStart, ID: sent, Name: tc.Function.Name})
 	d.toolArgs(args, emit)
 }
@@ -1730,7 +1745,7 @@ func (d *chatDecoder) giveHeld(emit func(Event)) {
 			emit(Event{Kind: KToolArgs, Text: h.args.String()})
 		}
 	}
-	d.held, d.tool, d.toolID, d.toolWhole, d.toolDone = nil, -1, "", jsonWhole{}, false
+	d.held, d.tool, d.toolID, d.toolName, d.toolWhole, d.toolDone = nil, -1, "", "", jsonWhole{}, false
 }
 
 // chatChoiceIndex accepts numeric indexes and numeric strings without
