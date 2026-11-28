@@ -97,6 +97,8 @@ func TestGeminiCapGetsThinkingRoom(t *testing.T) {
 		{ID: "gnative", Name: "Gemini API", Key: "k", Models: models, Gemini: "http://generativelanguage.googleapis.com/v1beta"},
 		{ID: "or", Name: "OpenRouter", Preset: "openrouter", Key: "k", Models: []string{"google/gemini-4-hydrogen"}, Chat: "http://openrouter.ai/api/v1"},
 		{ID: "relay", Name: "Relay", Key: "k", Models: []string{"gemini-4-hydrogen"}, Chat: "http://relay.example.com/v1"},
+		{ID: "cp", Name: "Copilot", Key: "k", Models: []string{"gemini-4-hydrogen"}, Chat: "http://api.githubcopilot.com/v1", Account: &provider.Account{Agent: "copilot"}},
+		{ID: "cpe", Name: "Copilot Enterprise", Key: "k", Models: []string{"gemini-4-hydrogen"}, Chat: "http://api.business.githubcopilot.com/v1", Account: &provider.Account{Agent: "copilot"}},
 		{ID: "tencent", Name: "Tencent", Key: "k", Models: []string{"deepseek/deepseek-flash"}, Chat: "http://tokenhub.tencentmaas.com/plan/v3"},
 	} {
 		if err := provider.Save(p); err != nil {
@@ -140,6 +142,8 @@ func TestGeminiCapGetsThinkingRoom(t *testing.T) {
 		{"gemini client's own", [2]string{"/v1beta/models/gnative/gemini-4-hydrogen:generateContent", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"maxOutputTokens":8192}}`}, 8192},
 		{"openrouter's gemini", chat("or/google/gemini-4-hydrogen", `"max_tokens":8192,`), 8192},
 		{"a relay's gemini", chat("relay/gemini-4-hydrogen", `"max_tokens":8192,`), 8192},
+		{"Copilot's gemini", chat("cp/gemini-4-hydrogen", `"max_tokens":4096,`), 4096 + room},
+		{"Copilot Enterprise's gemini", chat("cpe/gemini-4-hydrogen", `"max_tokens":4096,`), 4096 + room},
 		// an Anthropic client is read the same way for Tencent's DeepSeek
 		{"messages to tencent's deepseek", [2]string{"/v1/messages", `{"model":"tencent/deepseek/deepseek-flash","max_tokens":4096,` + msgs + `}`}, 4096 + room},
 	} {

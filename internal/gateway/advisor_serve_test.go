@@ -5,9 +5,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tidwall/gjson"
 
@@ -27,12 +30,16 @@ type advisedUpstream struct {
 }
 
 func (u *advisedUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/models" {
+		io.WriteString(w, `{"data":[{"id":"gemini-4-hydrogen","name":"gemini-4-hydrogen","model_picker_enabled":true,"policy":{"state":"enabled"},"supported_endpoints":["/chat/completions"],"capabilities":{"type":"chat"}}]}`)
+		return
+	}
 	b, _ := io.ReadAll(r.Body)
 	q := gjson.ParseBytes(b)
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	w.Header().Set("Content-Type", "text/event-stream")
-	if q.Get("model").String() == "adv-pro" {
+	if q.Get("model").String() == "adv-pro" || q.Get("model").String() == "gemini-4-hydrogen" {
 		u.advisor = append(u.advisor, string(b))
 		if u.fail != 0 {
 			w.WriteHeader(u.fail)
@@ -65,6 +72,11 @@ func (u *advisedUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // advisedSetup saves an executor provider (v, glm-5.1) and an advisor's
 // (adv, adv-pro) at one advisedUpstream.
 func advisedSetup(t *testing.T) *advisedUpstream {
+	u, _ := advisedSetupWithURL(t)
+	return u
+}
+
+func advisedSetupWithURL(t *testing.T) (*advisedUpstream, string) {
 	t.Helper()
 	fresh(t)
 	u := &advisedUpstream{}
@@ -78,7 +90,7 @@ func advisedSetup(t *testing.T) *advisedUpstream {
 			t.Fatal(err)
 		}
 	}
-	return u
+	return u, srv.URL
 }
 
 // sendAdvised is Claude Code's advised turn, body, streamed or not, and
@@ -196,6 +208,40 @@ func TestAdvisorServedForAVendorModel(t *testing.T) {
 		if !strings.Contains(exec[1], "Check the tests first.") {
 			t.Fatalf("stream=%t: the advice never reached the model: %s", stream, exec[1])
 		}
+	}
+}
+
+// A Copilot Gemini advisor gets the same thinking room as an ordinary
+// Copilot request. adviceFor starts at 4096, then the translated Chat
+// request must leave room for Gemini's default thinking.
+func TestAdvisorCopilotGeminiGetsThinkingRoom(t *testing.T) {
+	u, apiURL := advisedSetupWithURL(t)
+	os.MkdirAll(filepath.Dir(provider.Path()), 0o755)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), mustJSON([]map[string]any{
+		{"agent": "copilot", "user": "hubot", "plan": "Pro", "on": true, "seen": time.Now(), "auth": map[string]string{"oauth_token": "gho_hubot_advisor"}},
+	}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			json.NewEncoder(w).Encode(map[string]any{"token": "sess-advisor", "expires_at": time.Now().Add(time.Hour).Unix(), "endpoints": map[string]string{"api": apiURL}})
+			return
+		}
+		io.WriteString(w, `{"copilot_plan":"individual"}`)
+	}))
+	t.Cleanup(gh.Close)
+	oldTok, oldUser := provider.CopilotTokenURL, provider.CopilotUserURL
+	provider.CopilotTokenURL, provider.CopilotUserURL = gh.URL+"/token", gh.URL+"/user"
+	t.Cleanup(func() { provider.CopilotTokenURL, provider.CopilotUserURL = oldTok, oldUser })
+
+	sendAdvised(t, New(), advisorTurn("v/glm-5.1", "copilot/gemini-4-hydrogen"), false)
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if len(u.advisor) != 1 {
+		t.Fatalf("%d advisor requests, want 1", len(u.advisor))
+	}
+	if got := gjson.Get(u.advisor[0], "max_tokens").Int(); got != adviceMaxTokens+24000 {
+		t.Fatalf("advisor max_tokens %d, want %d: %s", got, adviceMaxTokens+24000, u.advisor[0])
 	}
 }
 

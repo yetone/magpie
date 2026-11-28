@@ -352,7 +352,9 @@ func outputFillRefused(model string) string { return "filled-output:" + model }
 // response can generate, including thought tokens", aistudio.google.com/
 // docs/thinking). Nowledge Mem's max_tokens of 8192 to Gemini 4 Hydrogen
 // at AI Studio was spent on reasoning alone, every reply a 502 with no
-// answer (fwxkogaia on X).
+// answer (fwxkogaia on X). GitHub Copilot's Gemini models have the same
+// default and count thoughts in max_tokens on both its public and
+// enterprise endpoints.
 func thinksByDefault(p provider.Provider, model string) bool {
 	if strings.HasSuffix(p.VendorHost(), "tencentmaas.com") && strings.Contains(strings.ToLower(model), "deepseek") {
 		return true
@@ -362,18 +364,23 @@ func thinksByDefault(p provider.Provider, model string) bool {
 
 // googleGemini is whether p serves model as Google serves it: one of
 // Google's hosts (AI Studio's OpenAI-compatible and Gemini APIs, Vertex
-// AI's, Code Assist's), Vertex AI, or a Google sign-in. OpenRouter's Gemini
-// isn't: it holds a request's whole max_tokens against the balance ("can
-// only afford"), so a raised limit would turn a small balance away. Nor
-// is a relay, a proxy on this computer or the LAN included (which
-// geminiCompat reads as AI Studio's for the request's shape): it may hold
-// or cap the limit too, and its void is asked again for room (voidRoom).
+// AI's, Code Assist's), Vertex AI, a Google sign-in, or a Copilot account.
+// OpenRouter's Gemini isn't: it holds a request's whole max_tokens against
+// the balance ("can only afford"), so a raised limit would turn a small
+// balance away. Nor is a relay, a proxy on this computer or the LAN
+// included (which geminiCompat reads as AI Studio's for the request's
+// shape): it may hold or cap the limit too, and its void is asked again for
+// room (voidRoom).
 func googleGemini(p provider.Provider, model string) bool {
 	if !strings.Contains(strings.ToLower(model), "gemini") {
 		return false
 	}
+	if p.Account != nil && p.Account.Agent == "copilot" {
+		return true
+	}
 	h := strings.ToLower(p.VendorHost())
 	return h == "googleapis.com" || strings.HasSuffix(h, ".googleapis.com") ||
+		h == "githubcopilot.com" || strings.HasSuffix(h, ".githubcopilot.com") ||
 		p.IsVertex() || googleAccount(p) || googlePlugin(p)
 }
 
