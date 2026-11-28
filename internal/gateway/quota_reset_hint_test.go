@@ -182,3 +182,38 @@ func TestQuotaResetHintPreservesError(t *testing.T) {
 		t.Fatalf("expired hint: %s", expired)
 	}
 }
+
+// An account held at its cap by the turn before it, after the plan let
+// the turn in (nearCapHeld), is refused with the same countdown: the
+// window's renewal, as when the plan holds it.
+func TestQuotaResetHintNearCap(t *testing.T) {
+	codexSignedIn(t)
+	b := newNearCapBackend(t, map[string]float64{"acct-1": 89}, map[string]float64{"acct-1": 92}, map[string]float64{"acct-1": 92})
+	nearCapAccounts(t, 90, 89)
+	srv := New()
+	out := make(chan *httptest.ResponseRecorder, 2)
+	for range 2 {
+		go func() {
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"codex/gpt-5.5","max_tokens":50,"messages":[{"role":"user","content":"ping"}]}`)))
+			out <- rec
+		}()
+	}
+	waitFor(t, "one turn sent, one waiting", func() bool { return len(b.sent()) == 1 && srv.nearCap.waiting() == 1 })
+	close(b.open)
+	var held *httptest.ResponseRecorder
+	for range 2 {
+		if rec := <-out; rec.Code == http.StatusTooManyRequests {
+			held = rec
+		} else if rec.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body)
+		}
+	}
+	if held == nil || len(b.sent()) != 1 {
+		t.Fatalf("sent %v; want one answered, one held at the cap", b.sent())
+	}
+	if !strings.Contains(held.Body.String(), "usage cap") {
+		t.Fatalf("held as %s", held.Body)
+	}
+	checkQuotaResetHint(t, held, time.Unix(b.five, 0))
+}
