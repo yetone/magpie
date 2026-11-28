@@ -18,6 +18,7 @@ import (
 	"github.com/yetone/magpie/internal/masking"
 	"github.com/yetone/magpie/internal/maskrec"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -47,6 +48,21 @@ func maskingFor(ctx context.Context) (context.Context, gwmw.Masker, error) {
 	}
 	m, err := gwmw.Masking(redactionWanted())
 	return ctx, m, err
+}
+
+// scrubOptionsFor is what the archive and OTLP bodies take out of a request's
+// kept text: every secret, the user's words and personal data by their own
+// switches, and their rules only where this key's masking has them on.
+func scrubOptionsFor(ctx context.Context) redact.Options {
+	st := settings.Shared()
+	o := st.Scrubbing()
+	switch access.Caller(ctx).Redact {
+	case access.RedactOff:
+		o.Rules = nil
+	case access.RedactOn:
+		o.Rules = st.RedactRules
+	}
+	return o
 }
 
 // redacted masks a request's secrets, as the settings say, before it goes

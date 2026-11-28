@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -41,6 +42,43 @@ func TestGatewayConversationManyTurnsShareFile(t *testing.T) {
 	tr, err := GatewayTranscript("pi", "s")
 	if err != nil || tr.Captured != gatewayReadMax || !tr.Cut || tr.Parts[len(tr.Parts)-1].Text != "4199" {
 		t.Fatalf("recent turns missing: %+v %v", tr, err)
+	}
+}
+
+func TestGatewayTurnKeepsTheUsersRules(t *testing.T) {
+	gatewayHome(t)
+	if err := SetGatewayRecording(true, false); err != nil {
+		t.Fatal(err)
+	}
+	const key = "rz_TurnKey1122334455"
+	o := redact.Options{Secrets: true, Rules: []redact.Rule{{Kind: "RELAY", Prefix: "rz_"}}}
+	turn := GatewayTurn{Agent: "pi", Session: "s", Time: time.Now(),
+		Input:  []Part{{Role: "user", Kind: "text", Text: "send it to " + key}},
+		Output: []Part{{Role: "assistant", Kind: "text", Text: "sent to " + key}}}
+	if err := SaveGatewayTurnGenerationWith(turn, GatewayRecordingGeneration(), o); err != nil {
+		t.Fatal(err)
+	}
+	tr, err := GatewayTranscript("pi", "s")
+	if err != nil || tr.Captured != 1 {
+		t.Fatalf("turn missing: %+v %v", tr, err)
+	}
+	var kept strings.Builder
+	for _, p := range tr.Parts {
+		kept.WriteString(p.Text)
+		kept.WriteString("\n")
+	}
+	if strings.Contains(kept.String(), key) || !strings.Contains(kept.String(), "[REDACTED:RELAY]") {
+		t.Fatalf("saved turn with masking on: %s", kept.String())
+	}
+	// A rule is the user's own masking, not a secret magpie always knows:
+	// the plain saver keeps what the rule would match.
+	if err := SaveGatewayTurn(GatewayTurn{Agent: "pi", Session: "plain", Time: time.Now(),
+		Output: []Part{{Role: "assistant", Kind: "text", Text: "sent to " + key}}}); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := GatewayTranscript("pi", "plain")
+	if err != nil || plain.Captured != 1 || !strings.Contains(plain.Parts[0].Text, key) {
+		t.Fatalf("plain save took the rule's match out: %+v %v", plain, err)
 	}
 }
 

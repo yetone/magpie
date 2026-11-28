@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/testenv"
@@ -57,6 +58,29 @@ func TestSessionTraceWirePrivacyAndTokenOwnership(t *testing.T) {
 	cfg.BodiesWhole = true
 	if got := sessionBody(long, cfg); got != long {
 		t.Fatal("whole body truncated")
+	}
+}
+
+func TestSessionBodyKeepsTheUsersRules(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	const key = "rz_SessKey11223344"
+	cfg := settings.OTel{Bodies: true}
+	body := `{"prompt":"send it to ` + key + `","note":"keep this"}`
+	if err := settings.Save(settings.Settings{Redact: true,
+		RedactRules: []redact.Rule{{Kind: "RELAY", Prefix: "rz_"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := sessionBody(body, cfg); strings.Contains(got, key) || !strings.Contains(got, "[REDACTED:RELAY]") || !strings.Contains(got, "keep this") {
+		t.Fatalf("session body with masking on: %s", got)
+	}
+	// A rule is the user's own masking, not a secret magpie always knows:
+	// with Redact off the body keeps what the rule would match.
+	if err := settings.Save(settings.Settings{
+		RedactRules: []redact.Rule{{Kind: "RELAY", Prefix: "rz_"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := sessionBody(body, cfg); !strings.Contains(got, key) {
+		t.Fatalf("session body with masking off took the rule's match out: %s", got)
 	}
 }
 

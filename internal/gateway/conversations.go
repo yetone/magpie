@@ -64,6 +64,7 @@ func recordConversation(w http.ResponseWriter, r *http.Request, proto provider.P
 	if !settings.Shared().GatewayConversations || id == "" {
 		return w, func() {}
 	}
+	o := scrubOptionsFor(r.Context())
 	at := time.Now()
 	// pictures show as [image]: their base64 out first, so a turn of
 	// pictures isn't cut past conversationBodyMax (leanImages)
@@ -80,14 +81,14 @@ func recordConversation(w http.ResponseWriter, r *http.Request, proto provider.P
 			log.Printf("gateway conversation capture failed: %v", err)
 			return
 		}
-		turn := conversationTurn(proto, input, output)
+		turn := conversationTurnWith(proto, input, output, o)
 		turn.Agent, turn.Session, turn.Time = usage.AgentOf(callerOf(r).agent), id, at
 		turn.Status = sink.status
 		if turn.Status == 0 {
 			turn.Status = http.StatusOK
 		}
 		turn.Cut = turn.Cut || cut
-		if err := sessions.SaveGatewayTurnGeneration(turn, generation); err != nil {
+		if err := sessions.SaveGatewayTurnGenerationWith(turn, generation, o); err != nil {
 			log.Printf("gateway conversation save failed: %v", err)
 		}
 	}
@@ -123,8 +124,14 @@ func conversationParts(role string, parts []Part) []sessions.Part {
 }
 
 func conversationTurn(proto provider.Protocol, input, output []byte) sessions.GatewayTurn {
+	return conversationTurnWith(proto, input, output, redact.Options{Secrets: true})
+}
+
+// conversationTurnWith is conversationTurn with what o covers taken out of the
+// kept text, as the request's own key has it.
+func conversationTurnWith(proto provider.Protocol, input, output []byte, o redact.Options) sessions.GatewayTurn {
 	t := sessions.GatewayTurn{Input: []sessions.Part{}, Output: []sessions.Part{}}
-	input, output = redact.ScrubJSON(input), redact.ScrubJSON(output)
+	input, output = redact.ScrubJSONWith(input, o), redact.ScrubJSONWith(output, o)
 	q, err := parse(proto, input)
 	if err != nil {
 		t.Cut = true

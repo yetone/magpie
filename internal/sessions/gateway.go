@@ -57,7 +57,7 @@ func gatewayIdentity(agent, id string) string {
 // SaveGatewayTurn keeps a bounded, scrubbed exchange. Recording is checked again
 // under the same lock as disable-and-clear, so in-flight requests cannot refill it.
 func SaveGatewayTurn(turn GatewayTurn) error {
-	return saveGatewayTurn(turn, GatewayRecordingGeneration())
+	return saveGatewayTurn(turn, GatewayRecordingGeneration(), redact.Options{Secrets: true})
 }
 
 // GatewayRecordingGeneration returns the current consent generation. A
@@ -70,10 +70,17 @@ func GatewayRecordingGeneration() uint64 {
 }
 
 func SaveGatewayTurnGeneration(turn GatewayTurn, generation uint64) error {
-	return saveGatewayTurn(turn, generation)
+	return saveGatewayTurn(turn, generation, redact.Options{Secrets: true})
 }
 
-func saveGatewayTurn(turn GatewayTurn, generation uint64) error {
+// SaveGatewayTurnGenerationWith is SaveGatewayTurnGeneration with what o
+// covers taken out of the kept text: every secret, and the user's masking
+// rules where the request's own key has them on.
+func SaveGatewayTurnGenerationWith(turn GatewayTurn, generation uint64, o redact.Options) error {
+	return saveGatewayTurn(turn, generation, o)
+}
+
+func saveGatewayTurn(turn GatewayTurn, generation uint64, o redact.Options) error {
 	gatewayMu.Lock()
 	allowed := settings.Shared().GatewayConversations && generation == gatewayGeneration
 	gatewayMu.Unlock()
@@ -94,8 +101,8 @@ func saveGatewayTurn(turn GatewayTurn, generation uint64) error {
 				turn.Cut = true
 				break
 			}
-			p.Text = string(redact.ScrubJSON([]byte(p.Text)))
-			p.Name = redact.Scrub(p.Name)
+			p.Text = string(redact.ScrubJSONWith([]byte(p.Text), o))
+			p.Name = redact.ScrubWith(p.Name, o)
 			if len(p.Text) > min(left, 64<<10) {
 				n := min(left, 64<<10)
 				for n > 0 && !utf8.ValidString(p.Text[:n]) {
