@@ -182,3 +182,143 @@ func TestPredictionJSON(t *testing.T) {
 		}
 	}
 }
+
+// orcaPredictionPrompt is Orca's PREDICTION_PROMPT as v1.4.278 to v1.4.281
+// build it (stablyai/orca
+// src/main/codex/structured/turns/codex-composer-predictions.ts): plain
+// text, NO_PREDICTION for none, no schema.
+const orcaPredictionPrompt = "Do not call any tools and do not continue the task. " +
+	"Write the message the user is most likely to send you next, worded the way they write to " +
+	"you: a short, direct request of at most 20 words. Prefer a concrete next step that follows " +
+	"from your last reply. Reply with only that message, no quotes or preamble. " +
+	"Reply NO_PREDICTION only if the user has said they are done."
+
+// samplePredictionRequest is a composer prediction as Codex's
+// thread/sample sends it (codex-rs app-server thread_sample.rs): the
+// prompt is the user's message of a turn on a fork of the thread, with
+// no text.format. Orca (agent orca_desktop, #8017) and ChatGPT.app's
+// Codex both ask this way; only the prompt tells them apart. The earlier
+// turn quotes "suggestion" as the user might.
+func samplePredictionRequest(t *testing.T, s *Server, agent, prompt string) *httptest.ResponseRecorder {
+	t.Helper()
+	in, _ := json.Marshal(prompt)
+	body := `{"model":"fake/m1","stream":true,"input":[` +
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":"帮我算两组数的平均值，先算第一组 (key \"suggestion\" in the config)"}]},` +
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"第一组的平均值是 4。"}]},` +
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":` + string(in) + `}]}]}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	req.Header.Set("originator", agent)
+	req.Header.Set("session_id", "prediction-fork")
+	req.Header.Set("x-codex-turn-metadata", `{"thread_source":"composer_predictions","forked_from_thread_id":"main-chat"}`)
+	s.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+// Orca asks for the predicted message as plain text and shows whatever
+// text comes back (#8017, Jasyl0519; L0NE-6's reading): its suggestion
+// goes back as that text, and NO_PREDICTION or nothing goes back as no
+// message, which thread/sample hands Orca as no text, so its composer
+// stays empty instead of showing {"suggestion":null}.
+func TestOrcaPredictionIsPlainText(t *testing.T) {
+	for _, c := range []struct {
+		said, want string
+		items      int
+		failed     bool
+	}{
+		{"算第二组的平均值", "算第二组的平均值", 1, false},
+		{"<think>they want the second set</think>\n  算第二组的平均值  ", "算第二组的平均值", 1, false},
+		{"NO_PREDICTION", "", 0, false},
+		{"`NO_PREDICTION`.", "", 0, false},
+		{"", "", 0, true},
+	} {
+		t.Run(c.said, func(t *testing.T) {
+			f := &fake{t: t, reply: predictionReply(c.said)}
+			setup(t, provider.Chat, f)
+			s := New()
+			rec := samplePredictionRequest(t, s, "orca_desktop", orcaPredictionPrompt)
+			text, n := outputText(t, rec.Body.String())
+			if rec.Code != 200 || text != c.want || n != c.items || f.calls != 1 {
+				t.Fatalf("Orca got %d %q in %d items (calls %d), want %q in %d", rec.Code, text, n, f.calls, c.want, c.items)
+			}
+			var last usage.Record
+			for _, u := range usage.Load(time.Time{}) {
+				last = u
+			}
+			if last.Kind != "composer_predictions" || last.Failed() != c.failed {
+				t.Errorf("ledger %+v, failed want %v", last, c.failed)
+			}
+		})
+	}
+
+	// Off answers Orca with no message, not the object
+	f := &fake{t: t, reply: predictionReply("x")}
+	setup(t, provider.Chat, f)
+	saveCodexPredictions(t, "off")
+	rec := samplePredictionRequest(t, New(), "orca_desktop", orcaPredictionPrompt)
+	if text, n := outputText(t, rec.Body.String()); rec.Code != 200 || n != 0 || text != "" || f.calls != 0 {
+		t.Fatalf("off: %d %q in %d items, calls %d", rec.Code, text, n, f.calls)
+	}
+}
+
+// ChatGPT.app's Codex asks through thread/sample too, with no text.format:
+// its prompt ends in the schema (the bundle's "Return only JSON matching
+// this schema: …", $schema left out). Its rule stays strict, byte for
+// byte: a talking model's words never reach the composer, and Off is
+// {"suggestion":null}, whatever the client's name.
+func TestCodexSamplePredictionStaysJSON(t *testing.T) {
+	var shape map[string]any
+	json.Unmarshal([]byte(predictionSchema), &shape)
+	delete(shape, "$schema")
+	schema, _ := json.Marshal(shape)
+	prompt := "Predict the user's next message.\n\nReturn only JSON matching this schema: " + string(schema) + "."
+	for said, want := range map[string]string{
+		`{"suggestion":"Run the tests again"}`:                         `{"suggestion":"Run the tests again"}`,
+		"```json\n{\"suggestion\": \"  Commit it  \"}\n```":            `{"suggestion":"Commit it"}`,
+		`{"suggestion":null}`:                                          `{"suggestion":null}`,
+		"Sure! The user will probably ask you to run the tests again.": `{"suggestion":null}`,
+		"NO_PREDICTION": `{"suggestion":null}`,
+		"":              `{"suggestion":null}`,
+	} {
+		for _, agent := range []string{"Codex Desktop", "orca_desktop"} {
+			f := &fake{t: t, reply: predictionReply(said)}
+			setup(t, provider.Chat, f)
+			rec := samplePredictionRequest(t, New(), agent, prompt)
+			if text, n := outputText(t, rec.Body.String()); rec.Code != 200 || n != 1 || text != want {
+				t.Errorf("%s, %q: %d %q in %d items, want %s", agent, said, rec.Code, text, n, want)
+			}
+		}
+	}
+	f := &fake{t: t, reply: predictionReply("x")}
+	setup(t, provider.Chat, f)
+	saveCodexPredictions(t, "off")
+	rec := samplePredictionRequest(t, New(), "Codex Desktop", prompt)
+	if text, n := outputText(t, rec.Body.String()); n != 1 || text != `{"suggestion":null}` || f.calls != 0 {
+		t.Fatalf("off: %q in %d items, calls %d", text, n, f.calls)
+	}
+}
+
+func TestPredictionWantsObject(t *testing.T) {
+	msg := func(role, text string) string {
+		b, _ := json.Marshal(text)
+		return `{"type":"message","role":"` + role + `","content":[{"type":"input_text","text":` + string(b) + `}]}`
+	}
+	for name, c := range map[string]struct {
+		body string
+		want bool
+	}{
+		"text.format's schema":    {`{"input":[` + msg("user", "hi") + `],"text":{"format":{"type":"json_schema","schema":` + predictionSchema + `}}}`, true},
+		"the prompt's schema":     {`{"input":[` + msg("user", `Return only JSON matching this schema: {"type":"object","properties":{"suggestion":{}}}.`) + `]}`, true},
+		"a note after the prompt": {`{"input":[` + msg("user", `{"suggestion"}`) + `,` + msg("developer", "snapshot") + `]}`, true},
+		"a string input":          {`{"input":"Return {\"suggestion\": …}"}`, true},
+		"unreadable":              {`{"input":`, true},
+		"Orca's prompt":           {`{"input":[` + msg("user", orcaPredictionPrompt) + `]}`, false},
+		"quoted before the fork":  {`{"input":[` + msg("user", `the "suggestion" key`) + `,` + msg("assistant", "ok") + `,` + msg("user", orcaPredictionPrompt) + `]}`, false},
+		"after a tool call":       {`{"input":[` + msg("user", `"suggestion"`) + `,{"type":"function_call_output","call_id":"c","output":"x"},` + msg("user", orcaPredictionPrompt) + `]}`, false},
+	} {
+		if got := predictionWantsObject([]byte(c.body)); got != c.want {
+			t.Errorf("%s: %v, want %v", name, got, c.want)
+		}
+	}
+}

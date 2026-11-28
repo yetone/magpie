@@ -250,7 +250,18 @@ the same two entrypoints. A model's answer reaches Codex only as the
 `{"suggestion": string|null}` object it asked for (`predictionJSON`): plain
 text is never taken as a suggestion, as Codex would put it in the user's
 composer as their next message, so it gives no prediction and the call is
-recorded as a prediction failure (`noPrediction`).
+recorded as a prediction failure (`noPrediction`). That object is the
+request's own contract, not every `composer_predictions` request's
+(`predictionWantsObject`): it is asked for in `text.format`'s schema or in
+the words of the turn that asks (the Codex app's thread/sample prompt ends
+"Return only JSON matching this schema: …"suggestion"…"). A client that
+asks for neither, as Orca (`orca_desktop`) asks for the message as plain
+text or `NO_PREDICTION`, gets the model's text as it is, its reasoning left
+out (`predictionText`), and no message at all for `NO_PREDICTION`, an empty
+answer or `off`, which thread/sample hands on as no text (#8017; before it,
+Orca showed `{"suggestion":null}` in its composer). Only the input after the
+forked conversation is read, so a "suggestion" quoted earlier asks for
+nothing.
 
 The Codex app's prompt suggestions (`thread_source` `ambient_suggestions`,
 and `ambient_suggestion_safety` for the check of what they found; usage's

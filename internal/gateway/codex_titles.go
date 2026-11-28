@@ -424,18 +424,30 @@ func (s *Server) codexShaped(w http.ResponseWriter, r *http.Request, body []byte
 // {"suggestion": string|null} its prompt and schema ask for, and takes a
 // reply without one as a failed request, so an answer with no
 // suggestion in it goes back as {"suggestion": null}, no prediction, and
-// is in the Usage and Routing views as the failure it is.
+// is in the Usage and Routing views as the failure it is. A request that
+// asks for no object (predictionWantsObject), as Orca's doesn't, is
+// answered in the plain text it asked for, and with no message at all
+// when there is no prediction (#8017).
 func (s *Server) codexPrediction(w http.ResponseWriter, r *http.Request, body []byte, to string) {
+	object := predictionWantsObject(body)
 	if to == "off" {
+		var out []any
+		if object {
+			out = []any{predictionItem(fmt.Sprintf("resp_magpie_%d", time.Now().UnixNano()), noSuggestion)}
+		}
 		s.sentNowhere(w, r, body, "Predictions off",
-			"Codex composer predictions are off in Codex's settings on magpie's Agents page: answered with no prediction, sent nowhere", []any{predictionItem(fmt.Sprintf("resp_magpie_%d", time.Now().UnixNano()), noSuggestion)})
+			"Codex composer predictions are off in Codex's settings on magpie's Agents page: answered with no prediction, sent nowhere", out)
 		return
 	}
 	body, _ = codexInput(body, true)
 	rec := &recorder{header: http.Header{}, status: 200}
 	check := func(reply string) string {
 		if res, err := compactReply([]byte(reply)); err == nil {
-			if _, ok := predictionJSON(messageText(res)); !ok {
+			if !object {
+				if strings.TrimSpace(afterThought(strings.TrimSpace(messageText(res)))) == "" {
+					return noPrediction("")
+				}
+			} else if _, ok := predictionJSON(messageText(res)); !ok {
 				return noPrediction(messageText(res))
 			}
 		}
@@ -463,8 +475,82 @@ func (s *Server) codexPrediction(w http.ResponseWriter, r *http.Request, body []
 	if id == "" {
 		id = fmt.Sprintf("resp_magpie_%d", time.Now().UnixNano())
 	}
+	if !object {
+		var out []any
+		if p := predictionText(messageText(res)); p != "" {
+			out = []any{predictionItem(id, p)}
+		}
+		writeTitleReply(w, id, out, res.Usage)
+		return
+	}
 	p, _ := predictionJSON(messageText(res))
 	writeTitleReply(w, id, []any{predictionItem(id, p)}, res.Usage)
+}
+
+// predictionWantsObject is whether a composer_predictions request asks
+// for the {"suggestion": …} object: in its text.format's schema, as the
+// Codex app's hidden turn did, or in the words of the turn that asks for
+// the prediction, as the app's thread/sample prompt does ("Return only
+// JSON matching this schema: {…"suggestion"…}"). A client that asks for
+// neither wants the message itself: Orca's prompt asks for "only that
+// message", or NO_PREDICTION, and shows the text Codex's thread/sample
+// hands it as the suggestion, so {"suggestion":null} landed in its
+// composer as words (#8017). Only the turn's own input is read, from the
+// last item back to the conversation it forks: a "suggestion" quoted
+// earlier in the thread asks for nothing. A body that can't be read keeps
+// the object, the strict rule.
+func predictionWantsObject(body []byte) bool {
+	var q struct {
+		Text struct {
+			Format struct {
+				Schema struct {
+					Properties map[string]json.RawMessage `json:"properties"`
+				} `json:"schema"`
+			} `json:"format"`
+		} `json:"text"`
+		Input json.RawMessage `json:"input"`
+	}
+	if json.Unmarshal(body, &q) != nil {
+		return true
+	}
+	if _, ok := q.Text.Format.Schema.Properties["suggestion"]; ok {
+		return true
+	}
+	var items []map[string]any
+	if json.Unmarshal(q.Input, &items) != nil {
+		var one string
+		if json.Unmarshal(q.Input, &one) == nil {
+			return strings.Contains(one, `"suggestion"`)
+		}
+		return true
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		typ, _ := items[i]["type"].(string)
+		role, text := itemText(items[i])
+		if (typ != "" && typ != "message") || (role != "user" && role != "developer" && role != "system") {
+			break
+		}
+		if strings.Contains(text, `"suggestion"`) {
+			return true
+		}
+	}
+	return false
+}
+
+// noPredictionWord is what Orca's prompt asks for when the user is done
+// (stablyai/orca src/main/codex/structured/turns/codex-composer-predictions.ts).
+const noPredictionWord = "NO_PREDICTION"
+
+// predictionText is a model's answer to a plain-text prediction as the
+// message it predicts, its reasoning left out; "" for no prediction: no
+// text, or NO_PREDICTION alone (in quotes, a code span or with a full
+// stop, as models write it, which Orca matches only bare).
+func predictionText(said string) string {
+	t := strings.TrimSpace(afterThought(strings.TrimSpace(said)))
+	if strings.EqualFold(strings.Trim(t, "\"'`*.。 \n"), noPredictionWord) {
+		return ""
+	}
+	return t
 }
 
 // noSuggestion is the reply that predicts nothing, which Codex shows as
