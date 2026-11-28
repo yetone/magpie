@@ -29,6 +29,7 @@ func TestAccountSettingsKept(t *testing.T) {
 		q.RestCap = 20
 		q.LimitRestOff = true
 		q.Patience = 30
+		q.FirstToken = 45
 		if err := Save(q); err != nil {
 			t.Fatal(err)
 		}
@@ -48,17 +49,17 @@ func TestAccountSettingsKept(t *testing.T) {
 		if !slices.Equal(got.ReplyHeaders, q.ReplyHeaders) {
 			t.Errorf("%s: reply headers %v, want %v", id, got.ReplyHeaders, q.ReplyHeaders)
 		}
-		if got.QuotaRest != 90 || got.RestCap != 20 || !got.LimitRestOff || got.Patience != 30 {
-			t.Errorf("%s: rests %d %d %v, patience %d", id, got.QuotaRest, got.RestCap, got.LimitRestOff, got.Patience)
+		if got.QuotaRest != 90 || got.RestCap != 20 || !got.LimitRestOff || got.Patience != 30 || got.FirstToken != 45 {
+			t.Errorf("%s: rests %d %d %v, patience %d, first token %d", id, got.QuotaRest, got.RestCap, got.LimitRestOff, got.Patience, got.FirstToken)
 		}
 		// set back, each is the default again
 		r := *got
 		r.AdditionalTools, r.ExtraBody, r.ReplyHeaders = false, nil, nil
-		r.QuotaRest, r.RestCap, r.LimitRestOff, r.Patience = 0, 0, false, 0
+		r.QuotaRest, r.RestCap, r.LimitRestOff, r.Patience, r.FirstToken = 0, 0, false, 0, 0
 		if err := Save(r); err != nil {
 			t.Fatal(err)
 		}
-		if got, _ := Find(id); got.AdditionalTools || len(got.ExtraBody) > 0 || len(got.ReplyHeaders) > 0 || got.QuotaRest != 0 || got.RestCap != 0 || got.LimitRestOff || got.Patience != 0 {
+		if got, _ := Find(id); got.AdditionalTools || len(got.ExtraBody) > 0 || len(got.ReplyHeaders) > 0 || got.QuotaRest != 0 || got.RestCap != 0 || got.LimitRestOff || got.Patience != 0 || got.FirstToken != 0 {
 			t.Errorf("%s: left after clearing: %+v", id, got)
 		}
 	}

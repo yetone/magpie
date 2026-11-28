@@ -1704,6 +1704,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led-by { font-size: 11.5px; color: var(--muted); }
 /* "Split by" and its choices wrap together, under the metrics when narrow */
 .led-split { display: flex; align-items: center; gap: 8px; }
+/* six metrics: they wrap in a narrow window, never scrolling it sideways */
+#ledMetric { max-width: 100%; flex-wrap: wrap; }
 .led-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: 18px; }
 .led-chart { min-width: 0; }
 .led-chart .plot { position: relative; height: 236px; }
@@ -3941,7 +3943,7 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .proxy-advanced textarea.proxy-key:focus { border-color: var(--accent); }
 .proxy-hostkey { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .proxy-hostkey .sub { min-width: 0; overflow-wrap: anywhere; font: 11.5px/1.45 var(--mono, ui-monospace, monospace); }
-.editor :is(input.concurrency, input.queue-limit, input.queue-wait)[type] { width: 12em; max-width: 100%; }
+.editor :is(input.concurrency, input.queue-limit, input.queue-wait, input.first-token)[type] { width: 12em; max-width: 100%; }
 .editor input[type="number"] { -moz-appearance: textfield; }
 .editor input[type="number"]::-webkit-inner-spin-button, .editor input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 /* each of a subscription's accounts with a proxy of its own: its name

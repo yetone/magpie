@@ -4477,10 +4477,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if firstToken == 0 && isGroup {
 			firstToken = g.FirstTokenOr()
 		}
-		if isGroup && firstToken > 0 && !last && streams && !pass {
+		if c.p.FirstToken > 0 {
+			// the provider's own, in a group or not: its next key or
+			// account, or the next member, is asked (GoForceX on X)
+			firstToken = c.p.FirstToken
+		}
+		if firstToken > 0 && !last && streams && !pass {
 			// slow to start, the next member is asked (Group.FirstToken)
 			hw.firstWait = time.Duration(firstToken) * time.Second
-			if left := groupBudget - time.Since(walkBegan); left < hw.firstWait {
+			if left := groupBudget - time.Since(walkBegan); isGroup && left < hw.firstWait {
 				// the members before it used the walk's time: it gets
 				// what is left, so the walk ends before the client's
 				hw.firstWait, hw.budgeted = max(left, time.Millisecond), true
@@ -5201,7 +5206,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			call.TTFT, call.FirstText, call.Flow, call.FirstReasoning = 0, 0, 0, 0
 			watched.attempt(call, try, c.p.ID, sent, hw, capture)
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
-			if hw.budgeted || time.Since(walkBegan) >= groupBudget {
+			if hw.budgeted || isGroup && time.Since(walkBegan) >= groupBudget {
 				// the group's time is spent: no further member is asked
 				// to start after the client has given up, and the error
 				// names the budget (#5113)

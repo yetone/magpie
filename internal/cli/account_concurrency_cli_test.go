@@ -178,3 +178,48 @@ func TestAtOnceCmd(t *testing.T) {
 		t.Fatalf("default: %v, want none of the user's own", *n)
 	}
 }
+
+// magpie provider first-token sets how long a streamed reply may take to
+// begin before the next key is asked (GoForceX on X), off for none of its
+// own; a number out of range is an error and keeps the saved one.
+func TestFirstTokenCmd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("DSH_HOME", "")
+	if err := provider.Save(provider.Provider{ID: "or", Name: "OpenRouter", Key: "k1", Chat: "http://127.0.0.1:1/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	ft := func() int {
+		p, err := provider.Find("or")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p.FirstToken
+	}
+	if err := providerCmd([]string{"provider", "first-token", "or", "20"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := ft(); n != 20 {
+		t.Fatalf("set: %d, want 20", n)
+	}
+	if err := providerCmd([]string{"provider", "first-token", "or"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range [][]string{{"-3"}, {"601"}, {"x"}, {"2", "3"}} {
+		if err := providerCmd(append([]string{"provider", "first-token", "or"}, bad...)); err == nil {
+			t.Fatalf("%v taken", bad)
+		}
+	}
+	if n := ft(); n != 20 {
+		t.Fatalf("after refused ones: %d, want 20", n)
+	}
+	if err := providerCmd([]string{"provider", "first-token", "or", "off"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := ft(); n != 0 {
+		t.Fatalf("off: %d", n)
+	}
+}

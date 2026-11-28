@@ -1869,7 +1869,7 @@ const LED_PAGE = 100;
 let ledMetric = "tokens", ledSplit = "model";
 try {
   const m = localStorage.getItem("magpie.ledMetric");
-  if (["tokens", "cost", "calls", "speed", "traffic"].includes(m)) ledMetric = m;
+  if (["tokens", "cost", "calls", "speed", "ttft", "traffic"].includes(m)) ledMetric = m;
 } catch {}
 // Columns or lines (molvqingtai on Discord), kept per viewer as the metric
 // is; anything but "line", or a read that fails, is columns.
@@ -2421,10 +2421,11 @@ function ledContentBox(c) {
 // server sums it all (the ledger's "series" and "by"); the tray panel's Usage
 // tab draws the same from the same answer.
 
-// the window's chart can also say how fast the replies came (#860)
-// and how many bytes went up to the vendors and came back (songlairui on
-// X: a lot of calls with base64 images weigh on the network)
-const LED_TREND = [...LED_METRICS, ["speed", "Speed"], ["traffic", "Traffic"]];
+// the window's chart can also say how fast the replies came (#860), how
+// long they took to begin (GoForceX on X), and how many bytes went up to
+// the vendors and came back (songlairui on X: a lot of calls with base64
+// images weigh on the network)
+const LED_TREND = [...LED_METRICS, ["speed", "Speed"], ["ttft", "First token"], ["traffic", "Traffic"]];
 // "modelAt" is a model at the provider it went to, so one model's speed at
 // each provider is ranked side by side (inaction on Discord); "callerKey"
 // the gateway key that made it, "none" for calls with none, offered while
@@ -2973,7 +2974,7 @@ function ledStyle(host) {
 // of the column ended, with its band softly filled under it, so the top
 // line is the total as the column's top was; speeds don't add up, so each
 // model's line is at its own speed, broken where it had none, over the
-// point's own speed dashed. The tooltip, the hover, a day's pick and the
+// point's own speed dashed, and so is a first token's wait. The tooltip, the hover, a day's pick and the
 // ranking's emphasis are drawLedColumns' own, over the same slots.
 // A smooth line through points [x, y], as d3's curveMonotoneX draws it
 // (Fritsch–Carlson): it bends between points but never past one, so a
@@ -3004,7 +3005,7 @@ function ledLines(g, Y, x0, slot, segs) {
   for (const r of segs) r.remove();
   segs.length = 0;
   if (!l) return;
-  const speed = metric === "speed";
+  const speed = ledMean(metric);
   const { top, list } = ledCategories(l.chartBy ? { by: l.chartBy } : l, split, metric, true);
   const X = (i) => x0 + slot * i, dot = slot >= 12 ? 4.5 : 3;
   const at = (i, v) => [X(i), Y(v)];
@@ -3038,8 +3039,8 @@ function ledLines(g, Y, x0, slot, segs) {
   };
   if (speed) {
     series("\0all", "var(--muted)", totals.map((v) => (v > 0 ? v : null)), null, true);
-    const rest = new Map(pts.flatMap((p) => ledOthers(p.by?.[split] || {}, top, list)).map((c) => [c.id, c]));
-    for (const c of [...top, ...rest.values()]) series(c.id, c.color, pts.map((p) => ledSpeed(p.by?.[split]?.[c.id]) || null));
+    const rest = new Map(pts.flatMap((p) => ledOthers(p.by?.[split] || {}, top, list, metric)).map((c) => [c.id, c]));
+    for (const c of [...top, ...rest.values()]) series(c.id, c.color, pts.map((p) => ledPart(metric, p.by?.[split]?.[c.id] || {}) || null));
     return;
   }
   // from the bottom up: each one's part on what is under it, "Other" last

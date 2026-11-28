@@ -431,6 +431,16 @@ type Provider struct {
 	// group's own.
 	Patience int `json:"patience,omitempty"`
 
+	// FirstToken is how many seconds a streamed reply of this provider
+	// may take to its first content (text, reasoning or a tool call)
+	// before its next key or account, or a routing group's next member,
+	// is asked instead, nothing of it having reached the agent (GoForceX
+	// on X), as a group's FirstToken does: from 1 to FirstTokenLongest, 0
+	// for none of its own, which leaves its tries timed as before, by the
+	// group they go through or not at all. Set, it is what its tries are
+	// timed by in any group. The last one left is always waited for.
+	FirstToken int `json:"firstToken,omitempty"`
+
 	// Socket has a Responses API provider's turns go over the Responses
 	// WebSocket magpie speaks to chatgpt.com (#5781, matrix0487 on
 	// Discord): SocketAuto tries it and falls back to HTTP, and leaves the
@@ -1223,6 +1233,8 @@ func accountSettings(a, pk Provider) Provider {
 	a.MaxImages = pk.MaxImages
 	// how long a request to it alone is kept while it is busy
 	a.Patience = pk.Patience
+	// and how long its replies may take to begin (FirstToken)
+	a.FirstToken = pk.FirstToken
 	// how long its accounts rest out of quota, and the most they rest
 	// while they keep failing (#2008); or not at all for a limit
 	a.QuotaRest, a.QuotaResetAt, a.RestCap, a.LimitRestOff = pk.QuotaRest, pk.QuotaResetAt, pk.RestCap, pk.LimitRestOff
@@ -2003,6 +2015,7 @@ func normalize(p Provider) Provider {
 		p.Patience = PatienceOff
 	}
 	p.Patience = min(p.Patience, PatienceLongest)
+	p.FirstToken = min(max(p.FirstToken, 0), FirstTokenLongest)
 	if v, ok := ParseSocket(p.Socket); ok {
 		p.Socket = v
 	} else {

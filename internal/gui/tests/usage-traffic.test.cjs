@@ -135,7 +135,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert(down > 28e3 && down < 52e3, `down ${down} B/s, the gateway reads 40 KB/s`);
 
             // the chart's Traffic
-            const pill = p.locator("#ledMetric .opt").nth(4);
+            const pill = p.locator("#ledMetric .opt").nth(5);
             assert.equal((await pill.textContent()).trim(), w.traffic);
             await reader.click(p, pill);
             await p.locator("#ledChart svg rect.col").first().waitFor();
@@ -172,7 +172,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test(lang + " none", async () => {
         const { ctx, p, errors } = await open(browser, lang, 1180, false, { mode: "flowing", asked: 0 });
         try {
-          await reader.click(p, p.locator("#ledMetric .opt").nth(4));
+          await reader.click(p, p.locator("#ledMetric .opt").nth(5));
           assert.equal((await p.locator("#ledChart .none").textContent()).trim(), w.none);
           assert.deepEqual(errors, []);
         } finally {

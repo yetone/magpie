@@ -31,7 +31,7 @@ var settingFields = []string{
 	"Fallback", "Routing", "Sink", "UseFirst", "NoStandIn", "Affinity", "AgentAccounts",
 	// limits and rests
 	"MaxConcurrency", "MaxAccounts", "AccountConcurrency", "AccountWeights", "QueueLimit", "QueueWait",
-	"MaxRPM", "MaxImages", "QuotaRest", "QuotaResetAt", "RestCap", "LimitRestOff",
+	"FirstToken", "MaxRPM", "MaxImages", "QuotaRest", "QuotaResetAt", "RestCap", "LimitRestOff",
 	"AccountCaps", "AccountWindowCaps", "AccountWindowAmounts", "CapStop", "CapCareful", "KeySpendCaps",
 	// prices and balances
 	"PriceRate", "CountFree", "Billing", "RateWindows", "KeyOwnBalances", "KeyPriceRates", "TopUpRate",

@@ -478,6 +478,10 @@ type providerJSON struct {
 	// (0: no bound)
 	QueueLimit int `json:"queueLimit,omitempty"`
 	QueueWait  int `json:"queueWait,omitempty"`
+	// the seconds its streamed replies may take to begin before the next
+	// key, account or member is asked, 0 for none of its own
+	// (provider.Provider.FirstToken)
+	FirstToken int `json:"firstToken,omitempty"`
 	// how many requests each key or account sends the vendor in any
 	// minute, 0 for no limit (coeo91 on Discord)
 	MaxRPM int `json:"maxRPM,omitempty"`
@@ -1066,7 +1070,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, UseFirst: p.UseFirst, NoStandIn: p.NoStandIn, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, RestartApp: p.RestartApp, AutoSwitch: p.AutoSwitch, Self: p.SelfAnswered(), KeepSelf: p.KeepSelf, ThisDevice: p.ThisDevice, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), MaxAccounts: p.MaxAccounts, PluginAccounts: p.PluginAtOnce(), PriceRate: p.PriceRate, KeyPriceRates: p.KeyPriceRates, TopUpRate: p.TopUpRate, RateReadHours: p.RateReadHours, KeyGroupRates: keyGroupRatesOf(p), KeyRateFactors: p.KeyRateFactors, AgentAccounts: p.AgentAccounts,
 		RateWindows: p.RateWindows, RateNow: rateNowOf(p, time.Now()),
-		AccountConcurrency: p.AccountConcurrency, AccountWeights: p.AccountWeights, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, MaxImages: p.MaxImages,
+		AccountConcurrency: p.AccountConcurrency, AccountWeights: p.AccountWeights, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, FirstToken: p.FirstToken, MaxRPM: p.MaxRPM, MaxImages: p.MaxImages,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
 	}
 	if p.Account != nil && p.Account.Agent == p.ID {
@@ -2145,6 +2149,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// null for no bound; a save that leaves them out keeps them
 			QueueLimit json.RawMessage `json:"queueLimit"`
 			QueueWait  json.RawMessage `json:"queueWait"`
+			// FirstToken is how many seconds its streamed replies may
+			// take to begin (provider.Provider.FirstToken): a number, 0
+			// or null for none of its own; a save that leaves it out
+			// keeps it
+			FirstToken json.RawMessage `json:"firstToken"`
 			// MaxRPM is how many requests each key or account sends the
 			// vendor in any minute: a number, 0 or null for no limit; a
 			// save that leaves it out keeps it
@@ -2538,6 +2547,16 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 			in.QueueLimit, in.QueueWait = ql, qw
+			ft, keepFT, err := queueOf(req.FirstToken, "first token wait")
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			if ft < 0 || ft > provider.FirstTokenLongest {
+				fail(rw, fmt.Errorf("a reply is given from 1 to %d seconds to begin, or 0 for none of its own, not %d", provider.FirstTokenLongest, ft))
+				return
+			}
+			in.FirstToken = ft
 			rpm, keepRPM, err := queueOf(req.MaxRPM, "requests a minute")
 			if err != nil {
 				fail(rw, err)
@@ -2725,6 +2744,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				}
 				if keepQW && old != nil {
 					in.QueueWait = old.QueueWait
+				}
+				if keepFT && old != nil {
+					in.FirstToken = old.FirstToken
 				}
 				if keepRPM && old != nil {
 					in.MaxRPM = old.MaxRPM

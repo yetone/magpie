@@ -452,3 +452,18 @@ func SetRPM(id string, n int) error {
 	p.MaxRPM = n
 	return Save(*p)
 }
+
+// SetFirstToken sets how many seconds each of a provider's streamed
+// replies may take to begin before its next key or account is asked, 0
+// for none of its own (GoForceX on X).
+func SetFirstToken(id string, n int) error {
+	if n < 0 || n > FirstTokenLongest {
+		return fmt.Errorf("a first token's wait is from 0 (none of its own) to %d seconds, not %d", FirstTokenLongest, n)
+	}
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.FirstToken = n
+	return Save(*p)
+}

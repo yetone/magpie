@@ -176,6 +176,11 @@ func (g Group) Waits() time.Duration {
 // 0 is a group that sets nothing, which follows that default.
 const FirstTokenWait = -1
 
+// FirstTokenLongest is the most seconds a provider's own FirstToken may
+// give a reply to begin: the gateway gives a vendor 10 minutes to send
+// its headers (upstreamHeaderWait).
+const FirstTokenLongest = 600
+
 // FirstTokenOr is the seconds the group lets a member take to its first
 // content: its own FirstToken, else the default for every group
 // (settings' GroupFirstToken); 0 or less waits as long as it takes.

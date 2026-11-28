@@ -173,6 +173,14 @@ tokens over summed time, as its tooltip says, beside the same over each
 request's whole time, for comparing with tools that time a request whole;
 its window already leaves out the wait for the first token.
 
+The Requests tab's trend has a First token metric beside Speed (GoForceX
+on X; `ttft` in `LED_TREND`, [`plugins/usage/page.js`](../../internal/gui/assets/plugins/usage/page.js)).
+A wait, like a speed, is a mean and doesn't add up (`ledMean` in `app.js`):
+each point's own wait (`ledTTFT`, its `ttft_ms` over its `timed`) is the
+track, each model or provider told apart a mark on it or a line of its own,
+and the ranking gives no share. The axis, tooltip and ranking say it as
+`ledTook` does (`usage-ttft-chart.test.cjs`).
+
 A streamed request's duration (`Millis`, which ends every speed window)
 ends when its last try's reply ended, not when `serve` returns: what the
 gateway writes down after an answer (`answered`'s sticks, the provider's
