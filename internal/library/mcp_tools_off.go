@@ -251,10 +251,14 @@ func (l *Library) syncToolRules(t *Target, how toolsOffHow, given []string, b *b
 			}
 		}
 	}
-	// Claude Code's own artifacts, beside magpie's (artifacts.go)
+	// Claude Code's own artifacts, beside magpie's (artifacts.go); the
+	// user's again once the server isn't ticked for it
 	artifacts := how == toolsClaudeDeny && l.artifactsGiven(id, given)
 	if artifacts {
 		want = append(want, claudeArtifactTool)
+	}
+	if how == toolsClaudeDeny && !l.artifactsTicked(id) {
+		a.ArtifactOwn = false
 	}
 	if len(want) == 0 && len(a.ToolRules) == 0 {
 		return
@@ -292,14 +296,19 @@ func (l *Library) syncToolRules(t *Target, how toolsOffHow, given []string, b *b
 	}
 	if how == toolsClaudeDeny {
 		perms, _ := doc["permissions"].(map[string]any)
-		// the user's own rule for it (allowed, asked) is theirs
-		if artifacts && claudeRuled(doc, claudeArtifactTool) {
-			want = slices.DeleteFunc(want, func(r string) bool { return r == claudeArtifactTool })
-		}
 		cur, ok := entryTools(doc, []string{"permissions", "deny"})
 		if !ok {
 			fail(fmt.Errorf("%s: permissions.deny isn't a list of rules, so magpie leaves it as it is", path))
 			return
+		}
+		// magpie's deny the user took out by hand is theirs from then on,
+		// never written back (seiry on #7646)
+		if artifacts && slices.Contains(a.ToolRules, claudeArtifactTool) && !slices.Contains(cur, claudeArtifactTool) {
+			a.ArtifactOwn = true
+		}
+		// the user's own rule for it (allowed, asked, taken out) is theirs
+		if artifacts && (a.ArtifactOwn || claudeRuled(doc, claudeArtifactTool)) {
+			want = slices.DeleteFunc(want, func(r string) bool { return r == claudeArtifactTool })
 		}
 		list, mine := offList(cur, a.ToolRules, want)
 		if slices.Equal(cur, list) {

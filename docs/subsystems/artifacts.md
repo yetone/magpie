@@ -765,9 +765,16 @@ sharing](#live-sharing)), on the same wire.
 - Claude Code given it leaves out its own Artifact tool: `Artifact` in its
   `permissions.deny`, beside the rules magpie writes for tools turned off
   (`syncToolRules`, `claudeArtifactTool`), recorded in `Applied` and taken
-  back when the server goes. A rule of the user's own for `Artifact`
-  (allow or ask, `claudeRuled`) is theirs, and magpie writes no deny. The
-  market's text says so before the user adds it.
+  back when the server goes. It is written only while the server's entry,
+  or the hub's (`HubEntry`), is really in Claude Code's config
+  (`artifactsGiven`): one that couldn't be written gives no deny. A rule of
+  the user's own for `Artifact` (allow or ask, `claudeRuled`) is theirs,
+  and magpie writes no deny. So is magpie's deny once the user deleted it
+  by hand while the server stays ticked (`Applied.ArtifactOwn`): every
+  start wrote it back before (seiry on #7646, rosu_h on X). It is
+  magpie's again once the server is no longer ticked for Claude Code and
+  is added again. The market's text says what is written, and where,
+  before the user adds it, in every language (`i18n.js`).
 
 ## Work › Artifacts
 

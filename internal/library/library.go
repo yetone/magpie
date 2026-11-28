@@ -168,6 +168,11 @@ type Applied struct {
 	// rules, OpenCode's tools keys). Neither holds one the user had.
 	ToolsOff  map[string][]string `json:"toolsOff,omitempty"`
 	ToolRules []string            `json:"toolRules,omitempty"`
+	// ArtifactOwn: the user took magpie's deny of Claude Code's own
+	// Artifact out of its settings.json while Magpie Artifacts was given
+	// to it. The tool is theirs, and no Sync writes the deny again until
+	// the server is no longer ticked for the agent (artifacts.go).
+	ArtifactOwn bool `json:"artifactOwn,omitempty"`
 	// Hooks are the entries magpie wrote into the agent's hooks, each
 	// exactly as written: one changed since is the user's (hooks.go)
 	Hooks []HookEntry `json:"hooks,omitempty"`
@@ -216,7 +221,7 @@ type Applied struct {
 // it looked at the agent through (#4247).
 func (a *Applied) empty() bool {
 	return !a.Instructions && a.InstrHash == "" && len(a.MCP) == 0 && len(a.Skills) == 0 &&
-		len(a.ToolsOff) == 0 && len(a.ToolRules) == 0 && len(a.Hooks) == 0 && len(a.Env) == 0 &&
+		len(a.ToolsOff) == 0 && len(a.ToolRules) == 0 && !a.ArtifactOwn && len(a.Hooks) == 0 && len(a.Env) == 0 &&
 		len(a.Subagents) == 0 && len(a.Commands) == 0 && len(a.Rules) == 0 && len(a.Startup) == 0 && len(a.Calls) == 0 && len(a.Picked) == 0 && !a.Router && len(a.RouterRules) == 0 && len(a.RouterCommands) == 0
 }
 
