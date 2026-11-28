@@ -3762,7 +3762,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .tile .nm .badge { flex: none; }
 /* a partner's row carries its tagline on a second, quieter line */
 .tile.two { height: 46px; align-items: flex-start; padding-top: 6px; }
-.tile.two .have, .tile.two .cnt { align-self: center; }
+/* the name and every mark after it (added, count, badge, new) make the
+   first line, the tagline the second, so a mark follows the name and never
+   the tagline (the owner, 11-28: 这个小绿点是不是应该在Provider名字后面？) */
+.tile.two .nm { flex-wrap: wrap; align-content: flex-start; gap: 2px 6px; }
+.tile.two .col { display: contents; }
+.tile.two .sub { order: 1; flex-basis: 100%; }
+/* the name takes no room to break the line on, so a long one ellipsizes
+   with its marks still after it */
+.tile.two .n { flex: 1 1 0; max-width: max-content; }
 /* the logo's top on the top of the name's letters, not of its line: the
    name's half-leading and the room over its letters at 13px are 4.25px
    for Latin capitals and 3 to 3.5px for CJK. A whole pixel, as the logo

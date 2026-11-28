@@ -26,7 +26,7 @@ const partners = [
       { id: "global", name: "Global", chat: "https://global.acme.example.com/v1", website: "https://usemagpie.ai/go/acme/site/global", siteHost: "global.acme.example" },
     ], splitAccounts: true }),
   partner("zhonly", "China Only", { langs: ["zh"], notes: { en: "Mainland relay", zh: "国内中转" } }),
-  partner("taken", "Taken", { added: true }),
+  partner("taken", "Taken", { added: true, notes: { en: "Already added, with a tagline far longer than its name" } }),
 ];
 const presets = [
   { id: "openai", name: "OpenAI", icon: "openai", kind: "vendor", chat: "https://api.openai.example.com/v1" },
@@ -60,6 +60,21 @@ const L = {
   ja: { head: ["パートナー", "magpie のスポンサー"], subs: null, rows: ["Acme AI", "Taken"], note: "高速な中継", region: "Acme AI アカウントのリージョンを選んでください" },
   de: { head: ["Partner", "Sponsoren von magpie"], subs: null, rows: ["Acme AI", "Taken"], note: "Fast relay", region: "die Region deines Acme AI-Kontos wählen" },
 };
+
+// a tile's dot sits right after its name, on the name's line: its left
+// edge within 10px of the name's last letter (a Range over the text, as the
+// name's box stretches to its tagline's width), its middle inside the
+// letters' line
+async function nextTo(tile, sel, what) {
+  const { gap, mid, h } = await tile.evaluate((t, sel) => {
+    const r = document.createRange();
+    r.selectNodeContents(t.querySelector(".n"));
+    const n = r.getBoundingClientRect(), d = t.querySelector(sel).getBoundingClientRect();
+    return { gap: d.left - n.right, mid: d.top + d.height / 2 - n.top, h: n.height };
+  }, sel);
+  assert(gap >= 0 && gap <= 10, `${what}: ${gap.toFixed(1)}px from the end of its name`);
+  assert(mid >= 0 && mid <= h, `${what}: its middle at ${mid.toFixed(1)}px, the name's letters ${h.toFixed(1)}px tall`);
+}
 
 async function openSheet(page) {
   await page.goto("http://magpie.test/?view=providers");
@@ -108,6 +123,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await acme.getAttribute("title"), new RegExp("Acme AI · " + w.note));
         assert.match(await acme.getAttribute("title"), /api\.acme\.example\.com/);
         assert.equal(await rows.filter({ hasText: "Taken" }).locator(".have").count(), 1);
+        // its added dot follows its name, on the name's line, as a
+        // subscription's does, not its tagline (the owner, 11-28: 这个小绿点
+        // 是不是应该在Provider名字后面？)
+        await nextTo(rows.filter({ hasText: "Taken" }), ".have", "added dot");
+        // and a name too long for its line ends in an ellipsis, its dot
+        // still after it on that line
+        const taken = rows.filter({ hasText: "Taken" });
+        await taken.locator(".n").evaluate((n) => { n.textContent = "Taken " + "Longer ".repeat(12); });
+        assert(await taken.locator(".n").evaluate((n) => n.scrollWidth > n.clientWidth), "the long name is cut");
+        const [tb, db] = await Promise.all([taken.boundingBox(), taken.locator(".have").boundingBox()]);
+        const nb2 = await taken.locator(".n").boundingBox();
+        assert(db.x + db.width <= tb.x + tb.width && db.x >= nb2.x + nb2.width, "the long name's dot inside its tile, after the name");
+        assert(db.y + db.height / 2 >= nb2.y && db.y + db.height / 2 <= nb2.y + nb2.height, "the long name's dot on its line");
+        await taken.locator(".n").evaluate((n) => { n.textContent = "Taken"; });
         // a sponsored built-in preset keeps its badge where it is
         assert.equal(await sheet.locator(".tile", { hasText: "OpenRouter" }).locator(".badge").count(), 1);
 
@@ -197,6 +226,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const want = lang === "en" ? ["Acme AI"] : ["Acme AI", "China Only"];
         let dots = await tileDots();
         assert.deepEqual(dots.map((d) => d.name), want);
+        for (const name of want) await nextTo(page.locator("#addSheet .tile", { hasText: name }), ".new-dot", "new dot");
         for (const d of dots) {
           assert.deepEqual([d.w, d.h, d.inside, d.label], ["6px", "6px", true, lang === "en" ? "New" : "新"]);
           assert.notEqual(d.bg, "rgba(0, 0, 0, 0)");
