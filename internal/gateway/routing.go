@@ -126,7 +126,9 @@ func plainForbidden(c candidate, status int, body []byte) bool {
 // provider's 128 503s, "AIError AI服务异常" word for word, were one
 // agent's request with an empty tool schema, and each walked every
 // account into backoff). forbiddenAlike tells them apart: the same words
-// from two accounts, while the provider answers other requests.
+// from two accounts, while the provider answers other requests. A request
+// that got no reply at all (unansweredWords) isn't one: its words are Go's
+// about the connection, the same from every account whatever went wrong.
 func plainUnavailable(c candidate, status int, body []byte) bool {
 	switch carriedStatus(status, body) {
 	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable:
@@ -135,8 +137,20 @@ func plainUnavailable(c candidate, status int, body []byte) bool {
 	}
 	return failureOf(c, status, body) == failOther && !vendorOverloaded(status, body) &&
 		!modelRefused(status, body) && !codexReset(status, body) && !protectionRefused(status, body) &&
-		!bodyHas(body, didNotStream) && refusalWords(status, body) != ""
+		!bodyHas(body, didNotStream) && !unansweredWords.Match(body) && refusalWords(status, body) != ""
 }
+
+// unansweredWords are the error Go's client gives a request that had no reply
+// at all, as magpie writes it in a 502 (`<provider>: Post "<url>": EOF`):
+// the connection closed or reset before a byte of a reply, or wasn't
+// made. Two accounts' read word for word alike, the URL being the
+// provider's, but say nothing of the request: two ChatGPT accounts'
+// "Codex: Post …/backend-api/codex/responses: EOF" were taken for a 5xx
+// the request gets (sameRefusal), and a Cindy subagent's turn was told
+// the 502 after 1.7s, its last account not asked again after a moment
+// as for any other 502 that passes (Zanghaihuase6m on X). The quote may
+// come escaped, in the JSON of the error.
+var unansweredWords = lazyre.New(`\b(?:Post|Get|Put|Patch|Delete|Head) \\?"[a-z][a-z0-9+.-]*://[^"\s]*\\?": `)
 
 // idRun is a run in an error's words that differs from one try to the
 // next: a request or trace id, a timestamp.

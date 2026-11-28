@@ -135,6 +135,12 @@ func TestPlainUnavailableWords(t *testing.T) {
 		{503, `{"error":{"message":"The model is overloaded"}}`, false},
 		{529, `{"error":{"message":"busy"}}`, false},
 		{429, `{"error":{"message":"slow down"}}`, false},
+		// no reply at all: Go's words about the connection, as magpie
+		// writes them (Zanghaihuase6m on X)
+		{502, `{"error":{"code":null,"message":"Codex: Post \"https://chatgpt.com/backend-api/codex/responses\": EOF","param":null,"type":"api_error"}}`, false},
+		{502, `{"error":{"message":"relay: Post \"https://api.example.com/v1/chat/completions\": read tcp 10.0.0.2:51234->1.2.3.4:443: read: connection reset by peer"}}`, false},
+		{502, `relay: Post "http://127.0.0.1:8080/v1/responses": unexpected EOF`, false},
+		{502, `{"error":{"message":"upstream said: Post failed, try again"}}`, true},
 	} {
 		if got := plainUnavailable(c, x.status, []byte(x.body)); got != x.want {
 			t.Errorf("%d %s: %v, want %v", x.status, x.body, got, x.want)
