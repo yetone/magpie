@@ -2,7 +2,8 @@ package gateway
 
 import (
 	"encoding/json"
-	"strconv"
+	"strings"
+	"sync/atomic"
 
 	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/lazyre"
@@ -57,46 +58,67 @@ func withoutPassthrough(body []byte, field string) ([]byte, bool) {
 	return withoutPassthroughIf(body, func(f string) bool { return f == field })
 }
 
+// passthroughScans counts the bodies withoutPassthroughIf reads.
+var passthroughScans atomic.Int64
+
 // withoutPassthroughIf drops each passthrough member drop says, and the
-// whole passthrough where drop("") does.
+// whole passthrough where drop("") does. It reads body once: each item
+// is found by walking the input array, never looked up again from the
+// start of the body, so a long conversation costs its size and not its
+// size times its items (BigFish on Discord, #feedback).
 func withoutPassthroughIf(body []byte, drop func(field string) bool) ([]byte, bool) {
+	passthroughScans.Add(1)
 	if !gjson.ValidBytes(body) {
 		return body, false
 	}
-	n := int(gjson.GetBytes(body, "input.#").Int())
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() || !placedIn(body, input) {
+		return body, false
+	}
 	type cut struct {
 		at, end int
 		with    []byte
 	}
 	var cuts []cut
-	for i := 0; i < n; i++ {
-		item := gjson.GetBytes(body, "input."+strconv.Itoa(i))
-		pt := gjson.GetBytes(body, "input."+strconv.Itoa(i)+"."+passthroughKey)
-		if !pt.Exists() || pt.Index <= 0 || item.Index <= 0 {
-			continue
+	whole := drop("")
+	input.ForEach(func(_, item gjson.Result) bool {
+		// ForEach and Get give offsets into body, since input's is one;
+		// each is checked against body before it is cut
+		if !item.IsObject() || !placedIn(body, item) {
+			return true
 		}
-		if drop("") {
+		pt := item.Get(passthroughKey)
+		if !pt.Exists() || !placedIn(body, pt) {
+			return true
+		}
+		if whole {
 			var m map[string]json.RawMessage
 			if json.Unmarshal([]byte(item.Raw), &m) != nil {
-				continue
+				return true
 			}
 			delete(m, passthroughKey)
 			nb, err := json.Marshal(m)
 			if err != nil {
-				continue
+				return true
 			}
 			cuts = append(cuts, cut{item.Index, item.Index + len(item.Raw), nb})
-			continue
+			return true
 		}
 		if !pt.IsObject() {
-			continue
+			return true
+		}
+		had := false
+		pt.ForEach(func(k, _ gjson.Result) bool {
+			had = k.String() != "" && drop(k.String())
+			return !had
+		})
+		if !had {
+			return true
 		}
 		// the members kept as they were written, in their order
 		nb := []byte{'{'}
-		had := false
 		pt.ForEach(func(k, v gjson.Result) bool {
 			if k.String() != "" && drop(k.String()) {
-				had = true
 				return true
 			}
 			if len(nb) > 1 {
@@ -105,39 +127,71 @@ func withoutPassthroughIf(body []byte, drop func(field string) bool) ([]byte, bo
 			nb = append(append(append(nb, k.Raw...), ':'), v.Raw...)
 			return true
 		})
-		if !had {
-			continue
-		}
 		nb = append(nb, '}')
 		cuts = append(cuts, cut{pt.Index, pt.Index + len(pt.Raw), nb})
-	}
+		return true
+	})
 	if len(cuts) == 0 {
 		return body, false
 	}
-	// from the last, so each earlier cut's offsets still hold
-	out := body
-	for i := len(cuts) - 1; i >= 0; i-- {
-		c := cuts[i]
-		nb := make([]byte, 0, len(out)-(c.end-c.at)+len(c.with))
-		nb = append(nb, out[:c.at]...)
-		nb = append(nb, c.with...)
-		out = append(nb, out[c.end:]...)
+	// one copy, the cuts in the order they come
+	n := len(body)
+	for _, c := range cuts {
+		n += len(c.with) - (c.end - c.at)
 	}
-	return out, true
+	out := make([]byte, 0, n)
+	from := 0
+	for _, c := range cuts {
+		out = append(append(out, body[from:c.at]...), c.with...)
+		from = c.end
+	}
+	return append(out, body[from:]...), true
+}
+
+// placedIn is whether r's Index places its Raw in body, as a cut needs.
+func placedIn(body []byte, r gjson.Result) bool {
+	return r.Index > 0 && r.Index+len(r.Raw) <= len(body) && string(body[r.Index:r.Index+len(r.Raw)]) == r.Raw
+}
+
+// refusedPassthroughs is what of the passthrough providerID turned away
+// on proto: all of it, or the members it named.
+func (s *Server) refusedPassthroughs(providerID string, proto provider.Protocol) (whole bool, fields map[string]bool) {
+	pre := providerID + "\x00" + passthroughRefused("")
+	suf := "\x00" + string(proto)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, v := range s.unfit {
+		if !v || len(k) < len(pre)+len(suf) || !strings.HasPrefix(k, pre) || !strings.HasSuffix(k, suf) {
+			continue
+		}
+		switch f := k[len(pre) : len(k)-len(suf)]; {
+		case f == "":
+			whole = true
+		case f[0] == '.' && len(f) > 1:
+			if fields == nil {
+				fields = map[string]bool{}
+			}
+			fields[f[1:]] = true
+		}
+	}
+	return whole, fields
 }
 
 // withoutRefusedPassthrough is body without the passthrough members
-// providerID turned away before.
+// providerID turned away before. A provider that turned none away, as
+// nearly every one, gets body as it came, unread.
 func (s *Server) withoutRefusedPassthrough(providerID string, proto provider.Protocol, body []byte) []byte {
-	if proto != provider.Responses || !bodyHas(body, passthroughKey) {
+	if proto != provider.Responses {
 		return body
 	}
-	if !s.fits(providerID, passthroughRefused(""), proto) {
+	whole, fields := s.refusedPassthroughs(providerID, proto)
+	if !whole && len(fields) == 0 || !bodyHas(body, passthroughKey) {
+		return body
+	}
+	if whole {
 		b, _ := withoutPassthrough(body, "")
 		return b
 	}
-	b, _ := withoutPassthroughIf(body, func(f string) bool {
-		return f != "" && !s.fits(providerID, passthroughRefused(f), proto)
-	})
+	b, _ := withoutPassthroughIf(body, func(f string) bool { return fields[f] })
 	return b
 }

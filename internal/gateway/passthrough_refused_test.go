@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -130,4 +131,205 @@ func TestWithoutPassthrough(t *testing.T) {
 	if b2, ok := withoutUnreadable(body, []byte(passthroughRefusalBody)); !ok || string(b2) != want {
 		t.Fatalf("withoutUnreadable: %v %s", ok, b2)
 	}
+}
+
+// passthroughBody is a Codex conversation of n items, each with size
+// bytes of text, in the shapes an input item can take: the passthrough
+// first, last or missing, null, empty, an array, written with spaces and
+// line breaks, with escaped names, and its key inside an item's text or a
+// nested object, where it isn't the item's.
+func passthroughBody(n, size int) []byte {
+	text := strings.Repeat("x", size)
+	var b strings.Builder
+	b.WriteString(`{"model":"gpt-6","input":[`)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		switch i % 9 {
+		case 0:
+			b.WriteString(`{"type":"message","role":"user","content":[{"type":"input_text","text":"` + text + `"}],"internal_chat_message_metadata_passthrough":{"turn_id":"t` + strconv.Itoa(i) + `","content_token_count":[3],"content_item_kinds":["text"]}}`)
+		case 1:
+			b.WriteString(`{"internal_chat_message_metadata_passthrough":{"content_token_count":[1]},"type":"message","role":"assistant","content":[{"type":"output_text","text":"` + text + `"}]}`)
+		case 2:
+			b.WriteString(`{"type":"message","role":"user","content":[{"type":"input_text","text":"` + text + `"}]}`)
+		case 3:
+			b.WriteString("\n  {\n    \"type\": \"message\",\n    \"content\": [{\"type\": \"input_text\", \"text\": \"" + text + "\"}],\n    \"internal_chat_message_metadata_passthrough\" : {\n      \"turn_id\" : \"t\",\n      \"content\\u005ftoken_count\" : [2]\n    }\n  }\n")
+		case 4:
+			b.WriteString(`{"type":"message","content":[{"type":"input_text","text":"\"internal_chat_message_metadata_passthrough\":{\"content_token_count\":[9]} ` + text + `"}],"internal_chat_message_metadata_passthrough":null}`)
+		case 5:
+			b.WriteString(`{"type":"function_call_output","output":{"internal_chat_message_metadata_passthrough":{"content_token_count":[4]}},"internal_chat_message_metadata_passthrough":{}}`)
+		case 6:
+			b.WriteString(`"` + text + `"`)
+		case 7:
+			b.WriteString(`{"type":"message","content":"` + text + `","internal_chat_message_metadata_passthrough":["content_token_count"]}`)
+		case 8:
+			b.WriteString(`{"type":"reasoning","encrypted_content":"` + text + `","internal_chat_message_metadata_passthrough":{"content_token_count":[5]}}`)
+		}
+	}
+	b.WriteString(`],"stream":true}`)
+	return []byte(b.String())
+}
+
+// beforeWithoutPassthroughIf is withoutPassthroughIf as it was before it
+// read the body once: each item looked up again from the body's start.
+// The one it is held to.
+func beforeWithoutPassthroughIf(body []byte, drop func(field string) bool) ([]byte, bool) {
+	if !gjson.ValidBytes(body) {
+		return body, false
+	}
+	n := int(gjson.GetBytes(body, "input.#").Int())
+	type cut struct {
+		at, end int
+		with    []byte
+	}
+	var cuts []cut
+	for i := 0; i < n; i++ {
+		item := gjson.GetBytes(body, "input."+strconv.Itoa(i))
+		pt := gjson.GetBytes(body, "input."+strconv.Itoa(i)+"."+passthroughKey)
+		if !pt.Exists() || pt.Index <= 0 || item.Index <= 0 {
+			continue
+		}
+		if drop("") {
+			var m map[string]json.RawMessage
+			if json.Unmarshal([]byte(item.Raw), &m) != nil {
+				continue
+			}
+			delete(m, passthroughKey)
+			nb, err := json.Marshal(m)
+			if err != nil {
+				continue
+			}
+			cuts = append(cuts, cut{item.Index, item.Index + len(item.Raw), nb})
+			continue
+		}
+		if !pt.IsObject() {
+			continue
+		}
+		nb := []byte{'{'}
+		had := false
+		pt.ForEach(func(k, v gjson.Result) bool {
+			if k.String() != "" && drop(k.String()) {
+				had = true
+				return true
+			}
+			if len(nb) > 1 {
+				nb = append(nb, ',')
+			}
+			nb = append(append(append(nb, k.Raw...), ':'), v.Raw...)
+			return true
+		})
+		if !had {
+			continue
+		}
+		nb = append(nb, '}')
+		cuts = append(cuts, cut{pt.Index, pt.Index + len(pt.Raw), nb})
+	}
+	if len(cuts) == 0 {
+		return body, false
+	}
+	out := body
+	for i := len(cuts) - 1; i >= 0; i-- {
+		c := cuts[i]
+		nb := make([]byte, 0, len(out)-(c.end-c.at)+len(c.with))
+		nb = append(nb, out[:c.at]...)
+		nb = append(nb, c.with...)
+		out = append(nb, out[c.end:]...)
+	}
+	return out, true
+}
+
+// Reading the body once changes no byte of what goes out: every shape an
+// item takes, every member dropped, one, several, none or the whole
+// passthrough, gives what the item-by-item lookup gave. (A body with two
+// "input" keys, which no client sends, is the one place they differ: the
+// lookup counted the first one's items and could cut the second's.)
+func TestWithoutPassthroughSameAsBefore(t *testing.T) {
+	drops := map[string]func(string) bool{
+		"none":    func(string) bool { return false },
+		"member":  func(f string) bool { return f == "content_token_count" },
+		"members": func(f string) bool { return f == "content_token_count" || f == "turn_id" },
+		"every":   func(f string) bool { return f != "" },
+		"whole":   func(f string) bool { return f == "" },
+	}
+	bodies := map[string][]byte{
+		"conversation": passthroughBody(200, 40),
+		"turn":         []byte(strings.Replace(passthroughTurn, "%s", "gpt-6", 1)),
+		"no input":     []byte(`{"model":"gpt-6","internal_chat_message_metadata_passthrough":{"content_token_count":[1]}}`),
+		"input object": []byte(`{"input":{"0":{"internal_chat_message_metadata_passthrough":{"content_token_count":[1]}}}}`),
+		"input text":   []byte(`{"input":"internal_chat_message_metadata_passthrough"}`),
+		"empty":        []byte(`{"input":[]}`),
+		"not json":     []byte(`{"input":[{"internal_chat_message_metadata_passthrough":{"content_token_count":[1]}}`),
+		"key twice":    []byte(`{"input":[{"internal_chat_message_metadata_passthrough":{"turn_id":"a"},"internal_chat_message_metadata_passthrough":{"content_token_count":[1]}}]}`),
+		"spaced":       []byte("{ \"input\" :\n[ {\"internal_chat_message_metadata_passthrough\":{ \"content_token_count\" : [1] , \"turn_id\":\"t\" }} ,\n{\"x\":1} ] }"),
+	}
+	for bn, body := range bodies {
+		for dn, drop := range drops {
+			want, wantOK := beforeWithoutPassthroughIf(body, drop)
+			got, gotOK := withoutPassthroughIf(body, drop)
+			if gotOK != wantOK || string(got) != string(want) {
+				t.Errorf("%s, %s: %v %s\nbefore %v %s", bn, dn, gotOK, got, wantOK, want)
+			}
+		}
+	}
+}
+
+// A provider that never turned a passthrough member away, nearly every
+// one, gets each request's body as it came without its being read: a long
+// conversation was parsed item by item on every request (BigFish on
+// Discord). Once one member is turned away, that member goes, for that
+// provider alone.
+func TestNoPassthroughRefusalReadsNothing(t *testing.T) {
+	fresh(t)
+	s := New()
+	body := passthroughBody(50, 20)
+	from := passthroughScans.Load()
+	got := s.withoutRefusedPassthrough("chatgpt", provider.Responses, body)
+	if n := passthroughScans.Load() - from; n != 0 || len(got) != len(body) || &got[0] != &body[0] {
+		t.Fatalf("read %d times with nothing turned away; same body: %v", n, len(got) == len(body) && &got[0] == &body[0])
+	}
+	s.markUnfit("chatgpt", passthroughRefused("content_token_count"), provider.Responses)
+	if got := s.withoutRefusedPassthrough("other", provider.Responses, body); &got[0] != &body[0] || passthroughScans.Load() != from {
+		t.Fatal("another provider's refusal was applied")
+	}
+	if got := s.withoutRefusedPassthrough("chatgpt", provider.Chat, body); &got[0] != &body[0] || passthroughScans.Load() != from {
+		t.Fatal("another API's refusal was applied")
+	}
+	got = s.withoutRefusedPassthrough("chatgpt", provider.Responses, body)
+	want, _ := beforeWithoutPassthroughIf(body, func(f string) bool { return f == "content_token_count" })
+	if string(got) != string(want) || passthroughHas(got, "content_token_count") || !passthroughHas(got, "turn_id") {
+		t.Fatalf("member turned away still sent, or more went:\n%s", got)
+	}
+	s.markUnfit("chatgpt", passthroughRefused(""), provider.Responses)
+	got = s.withoutRefusedPassthrough("chatgpt", provider.Responses, body)
+	if want, _ := beforeWithoutPassthroughIf(body, func(f string) bool { return f == "" }); string(got) != string(want) {
+		t.Fatalf("whole passthrough turned away: %s", got)
+	}
+}
+
+// BenchmarkWithoutPassthrough is a long Codex conversation, ~20MB in
+// 2000 items: sent to a provider that turned nothing away, and with one
+// member turned away, read once and item by item as before.
+func BenchmarkWithoutPassthrough(b *testing.B) {
+	body := passthroughBody(2000, 10000)
+	drop := func(f string) bool { return f == "content_token_count" }
+	b.Run("unrefused", func(b *testing.B) {
+		s := &Server{unfit: map[string]bool{}}
+		b.SetBytes(int64(len(body)))
+		for i := 0; i < b.N; i++ {
+			s.withoutRefusedPassthrough("chatgpt", provider.Responses, body)
+		}
+	})
+	b.Run("once", func(b *testing.B) {
+		b.SetBytes(int64(len(body)))
+		for i := 0; i < b.N; i++ {
+			withoutPassthroughIf(body, drop)
+		}
+	})
+	b.Run("before", func(b *testing.B) {
+		b.SetBytes(int64(len(body)))
+		for i := 0; i < b.N; i++ {
+			beforeWithoutPassthroughIf(body, drop)
+		}
+	})
 }
