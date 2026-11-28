@@ -198,17 +198,14 @@ func TestHashUnchangedByTheMemo(t *testing.T) {
 	if err := os.Symlink("scripts/run.sh", filepath.Join(d, "run")); err != nil {
 		t.Skip(err)
 	}
-	sum := func(noFinder bool) string {
+	sum := func() string {
 		x := sha256.New()
-		if !noFinder {
-			fmt.Fprintf(x, "file .DS_Store 6\nfinder")
-		}
 		fmt.Fprintf(x, "file SKILL.md 16\n---\nname: x\n---\nlink run scripts/run.sh\nfile scripts/run.sh 8\necho hi\n")
 		return hex.EncodeToString(x.Sum(nil))
 	}
 	for _, nf := range []bool{false, true} {
-		if got := hashFiles(d, nf); got != sum(nf) {
-			t.Errorf("noFinder %v: %s, want %s", nf, got, sum(nf))
+		if got := hashFiles(d, nf); got != sum() {
+			t.Errorf("noFinder %v: %s, want %s", nf, got, sum())
 		}
 	}
 }

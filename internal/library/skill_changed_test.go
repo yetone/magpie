@@ -256,6 +256,41 @@ func TestEditStateUnknownForAnUnreadableCopy(t *testing.T) {
 	}
 }
 
+// A skill installed by an earlier magpie has a Hash that counts the file
+// managers' files, a .DS_Store among them. Once those are left out of the
+// hash, the recorded one still has to match, or every untouched skill reads
+// as changed here after the update.
+func TestSkillKeepsAHashedFileManagerFile(t *testing.T) {
+	sandbox(t)
+	version := "one"
+	fakeSkillTarball(t, &version)
+	ok(t)(InstallSkills("owner/repo", []string{"skills/pdf"}, nil))
+	lib := skillDir("pdf")
+	write(t, filepath.Join(lib, ".DS_Store"), "finder")
+	l, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := l.skill("pdf")
+	if s == nil {
+		t.Fatal("no pdf in the library")
+	}
+	s.Own = "" // an earlier magpie didn't keep it
+	s.Hash = legacyHashFiles(lib, false)
+	if err := l.save(); err != nil {
+		t.Fatal(err)
+	}
+	if v := skillView(t, "pdf"); v.Edited {
+		t.Fatal("a hash recorded with .DS_Store in it reads as an edit")
+	}
+
+	// a real edit is still found
+	write(t, filepath.Join(lib, "forms.md"), "changed here\n")
+	if v := skillView(t, "pdf"); !v.Edited {
+		t.Error("an edit beside the file manager's file went unnoticed")
+	}
+}
+
 // An update of one skill says whether it brought anything: the GUI tells
 // "updated" from "already up to date" by Current (zhexuanliuoutl1 on X).
 func TestUpdateSkillSaysWhenNothingChanged(t *testing.T) {

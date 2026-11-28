@@ -106,7 +106,7 @@ func skillFilePath(root, rel string) (string, error) {
 		return "", fmt.Errorf("%q is not a file of the skill", rel)
 	}
 	for _, part := range strings.Split(filepath.Clean(rel), string(filepath.Separator)) {
-		if skipInSkill(part) || installedDirs[part] {
+		if SkipInSkill(part) || installedDirs[part] {
 			return "", fmt.Errorf("%q is not a file of the skill", rel)
 		}
 	}
@@ -166,7 +166,7 @@ func skillTextFiles(root string) []string {
 		}
 		name := d.Name()
 		if d.IsDir() {
-			if skipInSkill(name) || installedDirs[name] || strings.HasPrefix(name, ".") {
+			if SkipInSkill(name) || installedDirs[name] || strings.HasPrefix(name, ".") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -174,7 +174,7 @@ func skillTextFiles(root string) []string {
 		if len(out) >= skillFilesMax {
 			return filepath.SkipAll
 		}
-		if !d.Type().IsRegular() || skipInSkill(name) || fromInstall(name, false, true) {
+		if !d.Type().IsRegular() || SkipInSkill(name) || fromInstall(name, false, true) {
 			return nil
 		}
 		fi, err := d.Info()

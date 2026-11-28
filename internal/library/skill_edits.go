@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -204,7 +205,7 @@ func changedAt(dir string) (time.Time, error) {
 		if err != nil {
 			return err
 		}
-		if p != dir && skipInSkill(d.Name()) {
+		if p != dir && SkipInSkill(d.Name()) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -222,8 +223,18 @@ func changedAt(dir string) (time.Time, error) {
 	return at, err
 }
 
-func skipInSkill(name string) bool {
-	return name == marker || name == ".git" || name == ".DS_Store"
+// SkipInSkill is whether a name in a skill folder is not part of the
+// skill: magpie's mark on a copy it made, version control's folder, and
+// what a file manager writes into a folder the user opened — Finder's
+// .DS_Store, Windows Explorer's desktop.ini and Thumbs.db, whose case
+// isn't fixed. Every walker of a skill's files leaves the same ones out,
+// so its hash, its tree, a copy of it and a bundle of it agree, and none
+// of them counts as a change the user made to the skill.
+func SkipInSkill(name string) bool {
+	return name == marker || name == ".git" ||
+		strings.EqualFold(name, ".DS_Store") ||
+		strings.EqualFold(name, "desktop.ini") ||
+		strings.EqualFold(name, "Thumbs.db")
 }
 
 // keepLibrarySkill copies the library's skill to the backups before an
@@ -246,7 +257,7 @@ func mirrorDir(from, to string) error {
 			return err
 		}
 		rel, _ := filepath.Rel(from, p)
-		if p != from && skipInSkill(d.Name()) {
+		if p != from && SkipInSkill(d.Name()) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -296,7 +307,7 @@ func mirrorDir(from, to string) error {
 		if err != nil || p == to {
 			return err
 		}
-		if skipInSkill(d.Name()) {
+		if SkipInSkill(d.Name()) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

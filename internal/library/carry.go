@@ -268,10 +268,11 @@ func orNone(xs []string) []string {
 	return xs
 }
 
-// readSkills is each skill folder's files, without installed dependencies,
-// bytecode, links, .git or non-plain files
-// Lock files stay so another computer can rebuild the dependencies
-// What goes is chosen smallest first across every skill
+// readSkills is each skill folder's files, without what isn't part of the
+// skill (SkipInSkill) or what installing its dependencies wrote
+// (fromInstall); lock files stay so another computer can rebuild them.
+// What goes is chosen smallest first across every skill, so the text of
+// them all comes before any big file.
 func readSkills(dirs []string) []*CarriedSkill { return readSkillsMax(dirs, maxCarried, maxCarriedAll) }
 
 // readSkillsMax is readSkills with a file's and the whole's budget given.
@@ -290,6 +291,12 @@ func readSkillsMax(dirs []string, perFile, all int64) []*CarriedSkill {
 			if err != nil {
 				return nil
 			}
+			if p != dir && SkipInSkill(d.Name()) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			if p != dir && fromInstall(d.Name(), d.IsDir(), false) {
 				if d.IsDir() {
 					return filepath.SkipDir
@@ -297,9 +304,6 @@ func readSkillsMax(dirs []string, perFile, all int64) []*CarriedSkill {
 				return nil
 			}
 			if d.IsDir() {
-				if p != dir && (d.Name() == ".git" || d.Name() == marker) {
-					return filepath.SkipDir
-				}
 				return nil
 			}
 			if !d.Type().IsRegular() || d.Name() == marker {
