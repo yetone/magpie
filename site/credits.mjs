@@ -158,9 +158,12 @@ export function parseBody(text) {
 // elsewhere) and the issues or PRs its brackets name.
 export function parse(subject) {
   // older subjects carry their whole body after " — "; credits come before
-  const head = String(subject).split(" — ")[0];
+  const [head, ...rest] = String(subject).split(" — ");
   const out = { names: [], refs: [] };
   for (const m of head.matchAll(/\(([^()]*)\)/g)) group(m[1], out);
+  // but a bracket there that says who reported it is one: "(reported by
+  // @duanckham on X)", "(spotted by @hezhizhen in #103)"
+  for (const m of rest.join(" — ").matchAll(/\(((?:reported|requested|suggested|asked|spotted)\s+by\s+@[^()]*)\)/gi)) group(m[1], out);
   return out;
 }
 
@@ -179,9 +182,12 @@ function group(text, out) {
       p = p.trim();
       if (!p) continue;
       parts++;
-      // "spotted by @hezhizhen in #103"
-      const by = p.match(/(?:^|\s)by @([A-Za-z0-9-]{1,39})\b/);
-      if (by) { out.names.push({ name: by[1], via: "GitHub", sure: true }); context = true; }
+      // "spotted by @hezhizhen in #103"; "reported by @duanckham on X" is
+      // an X account
+      const at = p.match(/(?:^|\s)by @([\w-]{1,39})\b(?:\s+on\s+([^\s,;]+))?/);
+      const atVia = at && at[2] ? PLATFORMS[lower(at[2])] || null : null;
+      const by = at && (atVia || /^[A-Za-z0-9-]+$/.test(at[1])) ? at : null;
+      if (by) { out.names.push({ name: by[1], via: atVia || "GitHub", sure: true }); context = true; }
       // "#12", "plugins#12", "plugins #12", "magpie-community/plugins#12"
       p = p.replace(/(?:\b(plugins)\s+|([\w.-]+\/)?([\w.-]+))?#(\d+)\b/g, (_, spaced, owner, repo, n) => {
         const r = spaced || (!repo ? "yetone/magpie" : `${owner || ""}${repo}`);

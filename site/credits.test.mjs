@@ -144,6 +144,24 @@ test("issue and PR numbers are kept for their authors, in either repository", ()
   assert.deepEqual(names("sessions: Terminal is opened through proc.Command, as every command magpie runs is (spotted by @hezhizhen in #103)"), ["hezhizhen"]);
 });
 
+test("a platform after a \"by @\" handle is where, and none leaves it a GitHub login", () => {
+  // 9661b8f30 (v0.1.272): the bracket is after " — ", where an older
+  // subject's body went, and still says who reported it
+  assert.deepEqual(via("gui(routing): on a wide window the request list and Accounts and keys sit side by side at the same width — they were 1.25fr to 1fr, the left wider than the right (reported by @duanckham on X)"), ["duanckham/X"]);
+  // ebdf44821 (v0.1.187)
+  const s = "sessions: Terminal is opened through proc.Command, as every command magpie runs is — os/exec there failed TestNoCommandBypassesProc and kept main's CI red since 78fe45d (spotted by @hezhizhen in #103)";
+  assert.deepEqual(via(s), ["hezhizhen/GitHub"]);
+  assert.deepEqual(parse(s).refs, [{ repo: "yetone/magpie", n: 103 }]);
+  // a bracket of this shape with no platform keeps its GitHub login
+  assert.deepEqual(via("gui: a thing (by @someone)"), ["someone/GitHub"]);
+  assert.deepEqual(via("gui: a thing (reported by @duanckham on X)"), ["duanckham/X"]);
+  // 0887a9d7e, its head's own credit left out: "served by" after " — "
+  // says what serves it, not who reported it
+  assert.deepEqual(via("cursor: a model Cursor serves only in Max Mode is asked for again in Max Mode — the built-in Cursor (deprecated, served by @magpie-community/opencode-cursor-auth once moved; that plugin's 0.1.7, magpie-community/plugins 3ae3e43, carries the same two fixes) asked every model with no max_mode in the Run's ModelDetails (7) or RequestedModel (2)"), []);
+  // 044e9bd2d, de487aec5, d20f306fc (v0.1.4834): a name, its platform, an issue
+  assert.deepEqual(parse("provider: a key's own model list never bars the vendor's decision model (bunnybit0121 on X, #7788)"), { names: [{ name: "bunnybit0121", via: "X", sure: true }], refs: [{ repo: "yetone/magpie", n: 7788 }] });
+});
+
 test("commit authors and co-authors are credited, agents and machines not, and no email is given", () => {
   const per = credit([
     { subject: "gui: a group's Save no longer leaves the Routing page blank (#884)", author: "wizzy-yang", email: "244719629+wizzy-yang@users.noreply.github.com", coauthors: [{ name: "magpie-fix", email: "fix@localhost" }] },
