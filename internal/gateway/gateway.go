@@ -10983,7 +10983,7 @@ func encoder(proto provider.Protocol, w *sseWriter, r *Request, usage ...*Usage)
 	// a model's whole floats in a call's arguments reach the client as
 	// integers (grok_integral.go, #1431, #3152), outside usageEncoder,
 	// which reads its encoder's reply id
-	enc = &wholeEncoder{streamEncoder: enc}
+	enc = &wholeEncoder{streamEncoder: enc, named: r.Namespaced}
 	if len(r.Free) > 0 {
 		// a Gemini model's objects of any fields, which it was asked for
 		// as JSON text, read back (gemini_free_objects.go, #7363); past
@@ -11020,7 +11020,7 @@ func render(proto provider.Protocol, res Result, r *Request) []byte {
 	model := r.Model
 	// a model's whole floats in a call's arguments reach the client as
 	// integers (grok_integral.go, #1431, #3152)
-	res = wholeResult(res)
+	res = wholeResult(res, r.Namespaced)
 	// a call naming no function reaches no client (nameless_calls.go, #7565)
 	res = namelessResult(res)
 	if r.CR {

@@ -114,17 +114,23 @@ func wholeArgs(s string) string {
 }
 
 // wholeEncoder hands its encoder a reply with the zero fractions dropped
-// from its calls' arguments, streamed in pieces.
+// from its calls' arguments, streamed in pieces. A call to a custom tool
+// keeps its arguments as they came (customTool).
 type wholeEncoder struct {
 	streamEncoder
-	args wholeNums
+	args  wholeNums
+	named map[string]nsTool // the request's namespaced tools
+	asIs  bool              // the open call is to a custom tool
 }
 
 func (e *wholeEncoder) event(ev Event) {
 	switch ev.Kind {
 	case KToolStart:
-		e.args = wholeNums{}
+		e.args, e.asIs = wholeNums{}, customTool(e.named, ev.Name)
 	case KToolArgs:
+		if e.asIs {
+			break
+		}
 		if ev.Text = e.args.feed(ev.Text); ev.Text == "" {
 			return // held: a fraction of zeros the next piece may end
 		}
@@ -132,12 +138,22 @@ func (e *wholeEncoder) event(ev Event) {
 	e.streamEncoder.event(ev)
 }
 
+// A custom tool's call is left as it came: its arguments hold the tool's
+// free-form input, code or a patch, as one string, not numbers a client
+// reads as integers. A model offered the tool as a function writes quotes
+// in that string it does not escape, and wholeNums, reading the text
+// between two of them as outside a string, dropped the zero fractions
+// there: "2.0" in the code reached the tool as "2", "1.0.2" as "1.2".
+func customTool(named map[string]nsTool, name string) bool {
+	return named[name].Custom
+}
+
 // wholeResult is a whole reply with its calls' arguments' zero fractions
-// dropped.
-func wholeResult(res Result) Result {
+// dropped, but for a custom tool's calls.
+func wholeResult(res Result, named map[string]nsTool) Result {
 	var parts []Part
 	for i, p := range res.Parts {
-		if p.Kind != ToolCall || len(p.Args) == 0 {
+		if p.Kind != ToolCall || len(p.Args) == 0 || customTool(named, p.Name) {
 			continue
 		}
 		if a := wholeArgs(string(p.Args)); a != string(p.Args) {
