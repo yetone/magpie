@@ -361,30 +361,67 @@ export function what(subject) {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const WORDS = {
-  en: { name: "Who", led: "What came of it, newest first", more: (n) => `${n} more`, none: "The list isn't available right now." },
-  zh: { name: "谁", led: "带来的改动，新的在前", more: (n) => `还有 ${n} 项`, none: "名单暂时无法显示。" },
-  ja: { name: "誰が", led: "そこから生まれた変更（新しい順）", more: (n) => `ほか ${n} 件`, none: "一覧は今は表示できません。" },
+  en: { name: "Who", led: "What came of it, newest first", more: (n) => `${n} more`, none: "The list isn't available right now.", find: "Find a name", one: "1 person", many: "{n} people" },
+  zh: { name: "谁", led: "带来的改动，新的在前", more: (n) => `还有 ${n} 项`, none: "名单暂时无法显示。", find: "查找名字", one: "1 人", many: "{n} 人" },
+  ja: { name: "誰が", led: "そこから生まれた変更（新しい順）", more: (n) => `ほか ${n} 件`, none: "一覧は今は表示できません。", find: "名前で探す", one: "1 人", many: "{n} 人" },
 };
 const SHOWN = 3;
 const RELEASE = (v) => `https://github.com/yetone/magpie-releases/releases/tag/v${encodeURIComponent(v)}`;
 
-// The table the page shows from contributors.json's data.
+// Each person's row id, so /docs/zh/contributors#lijiho96940561 lands on
+// it: their key (GitHub login, else the name as credited), lowercased, any
+// run of what isn't a letter, digit, "_", "." or "-" made one "-". Two keys
+// that come out the same, or one that is the page's own id ("list"), are
+// told apart ("-2"): a key that is its own slug first, then in key order,
+// so a row keeps its id while the list grows and reorders. A key with nothing left is "p-" and its hash.
+export const PAGE_IDS = ["overview", "list", "how", "leave", "wall", "langs", "toc", "sx-list", "cw-q"];
+export function slug(key) {
+  const s = String(key || "").normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}_.-]+/gu, "-").replace(/^-+|-+$/g, "");
+  if (s) return s;
+  let h = 0x811c9dc5;
+  for (const c of String(key || "")) h = Math.imul(h ^ c.codePointAt(0), 16777619) >>> 0;
+  return "p-" + h.toString(36);
+}
+export function anchors(people) {
+  const keys = people.map((p) => lower(p.github || p.name || ""));
+  const taken = new Set(PAGE_IDS);
+  const ids = new Map();
+  // a key that is its own slug (a login, a handle) keeps it
+  const order = [...new Set(keys)].map((k) => [k, slug(k)]).sort(([a, x], [b, y]) => (a === x) !== (b === y) ? (a === x ? -1 : 1) : a < b ? -1 : a > b ? 1 : 0);
+  for (const [k, base] of order) {
+    let id = base;
+    for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+    taken.add(id);
+    ids.set(k, id);
+  }
+  return keys.map((k) => ids.get(k));
+}
+
+// The table the page shows from contributors.json's data, with the finder
+// above it (public/wall.js shows it; without script the list is whole and
+// the field stays hidden). A row's data-k holds what else finds it besides
+// its name: the GitHub login and the X account that login's profile names.
 export function renderWall(data, lang) {
   const w = WORDS[lang] || WORDS.en;
   const people = data && Array.isArray(data.people) ? data.people : [];
   if (!people.length) return `<p>${esc(w.none)}</p>`;
+  const xOf = new Map(Object.entries((data && data.xAccounts) || {}).map(([l, h]) => [lower(l), String(h)]));
+  const ids = anchors(people);
   const line = (r) => r.what.map((t) => `<li><a href="${RELEASE(r.v)}"><code>v${esc(r.v)}</code></a> ${esc(t)}</li>`).join("");
-  const rows = people.map((p) => {
+  const rows = people.map((p, i) => {
     const name = p.github ? `<a href="https://github.com/${encodeURIComponent(p.github)}">${esc(p.name)}</a>` : esc(p.name);
     const via = (p.via || []).length ? `<br><span class="cw-via">${p.via.map(esc).join(" · ")}</span>` : "";
+    const also = [];
+    for (const k of [p.github, p.github && xOf.get(lower(p.github))]) if (k && lower(k) !== lower(p.name) && !also.includes(lower(k))) also.push(lower(k));
     const items = [];
     for (const r of p.releases || []) for (const t of r.what || []) items.push({ v: r.v, what: [t] });
     const head = items.slice(0, SHOWN).map(line).join("");
     const rest = items.slice(SHOWN);
     const more = rest.length ? `<details><summary>${esc(w.more(rest.length))}</summary><ul>${rest.map(line).join("")}</ul></details>` : "";
-    return `<tr><td><b>${name}</b>${via}</td><td><ul>${head}</ul>${more}</td></tr>`;
+    return `<tr id="${esc(ids[i])}"${also.length ? ` data-k="${esc(also.join(" "))}"` : ""}><td><b>${name}</b>${via}</td><td><ul>${head}</ul>${more}</td></tr>`;
   }).join("");
-  return `<div class="table-wrap"><table class="cw"><thead><tr><th>${esc(w.name)}</th><th>${esc(w.led)}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const find = `<div class="cw-find" hidden data-one="${esc(w.one)}" data-many="${esc(w.many)}"><input id="cw-q" type="search" placeholder="${esc(w.find)}" aria-label="${esc(w.find)}" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="cw-n" aria-live="polite"></span></div>`;
+  return `${find}<div class="table-wrap"><table class="cw"><thead><tr><th>${esc(w.name)}</th><th>${esc(w.led)}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 const vnum = (v) => String(v).split(".").map((x) => parseInt(x, 10) || 0);

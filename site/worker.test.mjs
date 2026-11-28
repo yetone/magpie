@@ -697,7 +697,10 @@ test("contributors: each language's page gets its own table, and keeps its line 
     const get = async (path) => (await worker.fetch(new Request(`https://usemagpie.ai${path}`, { headers: { Cookie: "lang=en" } }), env, ctx)).text();
     for (const [path, lang, head] of [["/docs/contributors", "en", "What came of it"], ["/docs/zh/contributors", "zh", "带来的改动"], ["/docs/ja/contributors.html", "ja", "そこから生まれた"]]) {
       const html = await get(path);
-      assert.match(html, /<div id="wall"><div class="table-wrap"><table class="cw">/, path);
+      assert.match(html, /<div id="wall"><div class="cw-find" hidden [^>]*><input id="cw-q" [^>]*><span class="cw-n" aria-live="polite"><\/span><\/div><div class="table-wrap"><table class="cw">/, path);
+      // the finder's script, and the row a link lands on
+      assert.ok(html.includes('<script src="/wall.js"></script>'), `${path} loads the finder`);
+      assert.ok(html.includes('<tr id="packinggoodsllc_07668">'), path);
       assert.ok(html.includes(head), `${path} has the ${lang} table`);
       assert.ok(html.includes("packinggoodsllc_07668") && html.includes("v0.1.2581"), path);
       assert.match(html, /posthog\.init\(/, `${path} keeps the analytics`);

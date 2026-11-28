@@ -167,6 +167,16 @@ pre .s { color: var(--ink2); }
 .cw details summary { cursor: pointer; color: var(--ink2); font-size: 13px; }
 .cw details ul { margin-top: 4px; }
 .cw-via { color: var(--ink3); font-size: 12px; font-weight: 400; }
+/* its finder (public/wall.js): no motion, the rows just go */
+.cw-find { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+.cw-find[hidden], .table-wrap[hidden] { display: none; }
+.cw-find input { flex: 1; max-width: 320px; -webkit-appearance: none; appearance: none; }
+.cw-find input::-webkit-search-cancel-button { display: none; }
+@media (max-width: 600px) { .cw-find input { font-size: 16px; max-width: none; } }
+.cw-n { color: var(--ink3); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cw tr.cw-last td { border-bottom: 0; }
+/* the row a link lands on */
+.cw tr:target > td { background: var(--bg2); }
 table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
 tr:last-child td { border-bottom: 0; }

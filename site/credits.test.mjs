@@ -2,9 +2,10 @@
 // one from yetone/magpie's own history, word for word.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins } from "./credits.mjs";
+import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS } from "./credits.mjs";
 import { authors, excluded, xAccounts } from "./credits-cli.mjs";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -273,4 +274,78 @@ test("X accounts GitHub can't give join nobody", async () => {
     const dropped = async () => ({ ok: true, json: async () => ({ data: { u0: { login: "Lemonawa", twitterUsername: null } } }) });
     assert.deepEqual(await xAccounts(["Lemonawa"], { fetchImpl: dropped, tok: "t", known: { Lemonawa: "realLemonawa" } }), {});
   } finally { process.stderr.write = err; }
+});
+
+// public/wall.js, the page's finder: a classic script that also exports
+// its matcher here
+const finder = createRequire(import.meta.url)("./public/wall.js");
+
+test("each row has an id a link can land on, kept while the list reorders", () => {
+  // lijiho96940561 on X (latest v0.1.3138) couldn't find their row
+  assert.equal(slug("lijiho96940561"), "lijiho96940561");
+  assert.equal(slug("Benjie Zhou"), "benjie-zhou");
+  assert.equal(slug("ylorn."), "ylorn.");
+  assert.equal(slug("tjhhhh_84378"), "tjhhhh_84378");
+  assert.equal(slug("教父"), "教父");
+  assert.equal(slug("辰林鸭~"), "辰林鸭");
+  assert.equal(slug("4 v5"), "4-v5");
+  assert.equal(slug("ＡＢＣ"), "abc");
+  assert.match(slug("~~~"), /^p-[0-9a-z]+$/);
+  assert.notEqual(slug("~~~"), slug("!!!"));
+  // a GitHub person's id is their login, whatever name the commit gave
+  assert.deepEqual(anchors([{ name: "Benjie Zhou", github: "bjz" }, { name: "lijiho96940561" }]), ["bjz", "lijiho96940561"]);
+  // the same slug twice, or the page's own id, is told apart in key order,
+  // so it doesn't move when the list's order does
+  const a = anchors([{ name: "a b" }, { name: "a-b" }, { name: "list" }]);
+  const b = anchors([{ name: "list" }, { name: "a-b" }, { name: "a b" }]);
+  assert.deepEqual(a, ["a-b-2", "a-b", "list-2"]);
+  assert.deepEqual(b, ["list-2", "a-b", "a-b-2"]);
+  // charan-rathore (a GitHub login) keeps its own id beside "Charan Rathore"
+  assert.deepEqual(anchors([{ name: "charan-rathore", github: "charan-rathore" }, { name: "Charan Rathore" }]), ["charan-rathore", "charan-rathore-2"]);
+  assert.deepEqual(anchors([{ name: "x y" }, { name: "x z" }, { name: "x-y" }]), ["x-y-2", "x-z", "x-y"]);
+  for (const id of PAGE_IDS) assert.equal(anchors([{ name: id }])[0], `${id}-2`);
+  // every id the pages and their scripts use is one rows keep out of
+  const used = new Set();
+  for (const f of ["docs/contributors.html", "docs/zh/contributors.html", "docs/ja/contributors.html", "docs.js", "docs-search.js"]) {
+    const text = readFileSync(new URL(`./public/${f}`, import.meta.url), "utf8");
+    for (const m of text.matchAll(/\bid="([^"]+)"|\.id = "([^"]+)"/g)) used.add(m[1] || m[2]);
+  }
+  used.delete("sx-"); // docs-search.js's results, sx-0, sx-1 …: no key is all that
+  for (const id of used) assert.ok(PAGE_IDS.includes(id), `${id} is not in PAGE_IDS`);
+});
+
+test("the list carries its finder and each row's id, in each language", () => {
+  const data = {
+    xAccounts: { Lemonawa: "realLemonawa" },
+    people: [
+      { name: "lijiho96940561", via: ["X"], releases: [{ v: "0.1.3138", what: ["gateway: Ollama's options reach no Chat upstream"] }] },
+      { name: "Lemonawa", via: ["GitHub", "X"], github: "Lemonawa", releases: [{ v: "0.1.5002", what: ["w"] }] },
+      { name: "Benjie Zhou", via: ["GitHub"], github: "bjz", releases: [{ v: "0.1.5001", what: ["w"] }] },
+    ],
+  };
+  for (const [lang, ph, many] of [["en", "Find a name", "{n} people"], ["zh", "查找名字", "{n} 人"], ["ja", "名前で探す", "{n} 人"]]) {
+    const html = renderWall(data, lang);
+    // hidden until the script shows it: with script off the list is whole
+    assert.ok(html.startsWith(`<div class="cw-find" hidden data-one="`), lang);
+    assert.ok(html.includes(`data-many="${many}"><input id="cw-q" type="search" placeholder="${ph}"`), lang);
+    assert.match(html, /<tr id="lijiho96940561"><td><b>lijiho96940561<\/b>/);
+    // what else finds a row: its login when that isn't its name, its X account
+    assert.match(html, /<tr id="lemonawa" data-k="reallemonawa">/);
+    assert.match(html, /<tr id="bjz" data-k="bjz">/);
+  }
+});
+
+test("the finder matches a name, login or X account, any case, a leading @ left off", () => {
+  const { matches, rowKeys, norm } = finder;
+  const lijiho = rowKeys("lijiho96940561", "");
+  for (const q of ["lijiho", "LIJIHO", "@lijiho96940561", " @Lijiho ", "96940561", "ｌｉｊｉｈｏ", "＠lijiho", ""]) assert.ok(matches(lijiho, q), q);
+  for (const q of ["lijiho9694x", "x@lijiho", "lijiho 9"]) assert.equal(matches(lijiho, q), false, q);
+  const lemon = rowKeys("Lemonawa", "reallemonawa");
+  assert.ok(matches(lemon, "@realLemonawa"));
+  assert.ok(matches(lemon, "lemon"));
+  const bjz = rowKeys("Benjie Zhou", "bjz");
+  assert.ok(matches(bjz, "benjie zh"));
+  assert.ok(matches(bjz, "BJZ"));
+  assert.ok(matches(rowKeys("教父", ""), "教"));
+  assert.equal(norm("  @@Foo "), "foo");
 });
