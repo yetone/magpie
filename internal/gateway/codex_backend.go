@@ -3729,7 +3729,7 @@ func boundCallIDs(body []byte) []byte {
 // message or call (encrypted_content on any item but reasoning and a
 // compaction).
 var openaiOnly = [][]byte{[]byte(`"internal_chat_message_metadata_passthrough"`),
-	[]byte(`"encrypted_function_args"`), []byte(`"stream_options"`), []byte(`"configuration_update"`),
+	[]byte(`"encrypted_function_args"`), []byte(`"stream_options"`), []byte(`"configuration_update"`), []byte(`"other"`),
 	[]byte(`"` + outputReplay + `"`), []byte(`"encrypted_content"`)}
 
 // outputReplay is what Codex asks OpenAI for with output token replay on
@@ -3748,6 +3748,7 @@ var keepsSeal = map[string]bool{`"reasoning"`: true, `"compaction"`: true, `"com
 // OpenAI's: without its messages' internal metadata, a call's
 // encrypted_function_args, stream_options' reasoning_summary_delivery,
 // configuration_update items (the last one's effort at the top instead),
+// unknown historical items Codex writes as other,
 // output.encrypted_content in its include,
 // and the sealed output (encrypted_content) on a message or call that an
 // OpenAI model wrote earlier in the conversation; and, for a summary ask
@@ -3807,6 +3808,10 @@ func forVendor(p provider.Provider, body []byte, compaction bool) []byte {
 				if e := updateEffort(raw); e != "" {
 					updated = e
 				}
+				continue
+			}
+			if string(it["type"]) == `"other"` {
+				changed = true
 				continue
 			}
 			_, meta := it["internal_chat_message_metadata_passthrough"]
@@ -3895,7 +3900,7 @@ func forVendorChanges(body []byte) bool {
 			return false
 		}
 		typ := string(memberOrNil(it, "type"))
-		if typ == `"configuration_update"` {
+		if typ == `"configuration_update"` || typ == `"other"` {
 			return true
 		}
 		_, meta := memberOf(it, "internal_chat_message_metadata_passthrough")
@@ -4364,7 +4369,7 @@ func inputKindRefused(rec *recorder, err error) bool {
 	return inputKindWords.Match(rec.body.Bytes())
 }
 
-var inputKindWords = lazyre.New(`(?i)unsupported[ _]input[ _]item|unknown item type`)
+var inputKindWords = lazyre.New(`(?i)unsupported[ _]input[ _]item|unknown item type|invalid value:\s*'[^']+'\.?\s*supported values are:\s*(?:'[^']+'\s*,\s*)*(?:and\s+)?'message'`)
 
 // compactFailure names who answered a summary request with a failure — the
 // provider, the model and the provider's base URL — and what it said.
