@@ -23,27 +23,27 @@ var barkWords = map[string]map[string]string{
 	"en": {
 		"title": "magpie · today", "spent": "Spent about %s today · %d requests", "calls": "%d requests today",
 		"none": "No requests yet today", "near": "Near the limit:", "clear": "No allowance is near its limit.",
-		"more": "…and %d more", "test": "Bark is set up: alerts and the daily summary come here.",
+		"more": "…and %d more", "test": "%s is set up: alerts and the daily summary come here.",
 	},
 	"zh": {
 		"title": "magpie · 今日", "spent": "今日约花费 %s · %d 次请求", "calls": "今日 %d 次请求",
 		"none": "今天还没有请求", "near": "额度快用完：", "clear": "没有额度接近上限。",
-		"more": "…另有 %d 项", "test": "Bark 已接通：提醒和每日汇总会发到这里。",
+		"more": "…另有 %d 项", "test": "%s 已接通：提醒和每日汇总会发到这里。",
 	},
 	"zh-TW": {
 		"title": "magpie · 今日", "spent": "今日約花費 %s · %d 次請求", "calls": "今日 %d 次請求",
 		"none": "今天還沒有請求", "near": "額度快用完：", "clear": "沒有額度接近上限。",
-		"more": "…另有 %d 項", "test": "Bark 已接通：提醒和每日彙總會發到這裡。",
+		"more": "…另有 %d 項", "test": "%s 已接通：提醒和每日彙總會發到這裡。",
 	},
 	"ja": {
 		"title": "magpie · 今日", "spent": "今日の支出は約 %s · %d リクエスト", "calls": "今日 %d リクエスト",
 		"none": "今日はまだリクエストがありません", "near": "上限が近い枠：", "clear": "上限に近い枠はありません。",
-		"more": "…ほか %d 件", "test": "Bark につながりました。通知と毎日のまとめがここに届きます。",
+		"more": "…ほか %d 件", "test": "%s につながりました。通知と毎日のまとめがここに届きます。",
 	},
 	"de": {
 		"title": "magpie · heute", "spent": "Heute etwa %s ausgegeben · %d Anfragen", "calls": "%d Anfragen heute",
 		"none": "Heute noch keine Anfragen", "near": "Nahe am Limit:", "clear": "Kein Kontingent ist nahe am Limit.",
-		"more": "…und %d weitere", "test": "Bark ist eingerichtet: Hinweise und die tägliche Übersicht kommen hierher.",
+		"more": "…und %d weitere", "test": "%s ist eingerichtet: Hinweise und die tägliche Übersicht kommen hierher.",
 	},
 }
 
@@ -58,9 +58,10 @@ func barkWord(lang, key string, args ...any) string {
 	return fmt.Sprintf(s, args...)
 }
 
-// barkTestText is the push Settings' Test sends.
-func barkTestText(lang string) (title, body string) {
-	return "magpie", barkWord(lang, "test")
+// barkTestText is the push Settings' Test sends to the channel named (Bark,
+// Telegram or Discord).
+func barkTestText(lang, to string) (title, body string) {
+	return "magpie", barkWord(lang, "test", to)
 }
 
 // barkDailyText is the once-a-day push (EV_John_Liu on X): what today cost

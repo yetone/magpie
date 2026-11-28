@@ -253,6 +253,8 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	was.GPURendering = &gpuOn // Settings > General's Advanced › GPU rendering, sent by that row alone
 	// Settings > Usage's Bark row has its own route (settings/bark)
 	was.BarkServer, was.BarkKey, was.BarkDaily = "https://bark.example.com", "kept", "21:30"
+	// and Telegram and Discord theirs (settings/alert-channels)
+	was.TelegramToken, was.TelegramChat, was.DiscordWebhook = "1:kept", "12345", "https://discord.com/api/webhooks/1/kept"
 	// the Routing groups page's defaults for every group (groups/defaults)
 	was.GroupSink, was.GroupFirstToken, was.GroupPatience = true, 30, 120
 	if err := settings.Save(was); err != nil {

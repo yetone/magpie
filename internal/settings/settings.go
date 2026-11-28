@@ -899,6 +899,16 @@ type Settings struct {
 	BarkServer string `json:"barkServer,omitempty"`
 	BarkKey    string `json:"barkKey,omitempty"`
 	BarkDaily  string `json:"barkDaily,omitempty"`
+	// TelegramToken and TelegramChat are a Telegram bot's token and the
+	// chat it writes to (a numeric id or a public @name), and
+	// DiscordWebhook a Discord channel's webhook address: where every
+	// alert and the daily summary also go, as Bark's do (gandli on X). The
+	// token and the webhook are secrets, kept as BarkKey is: the Settings
+	// page is told only that one is set, and a backup or sync without keys
+	// leaves them out, the chat with its token.
+	TelegramToken  string `json:"telegramToken,omitempty"`
+	TelegramChat   string `json:"telegramChat,omitempty"`
+	DiscordWebhook string `json:"discordWebhook,omitempty"`
 	// PlainNames has the model lists magpie gives agents name each model
 	// by its name alone, without its provider's or "routing group" after it
 	// (#335) — but for two in one list that would read the same, which keep
@@ -2910,6 +2920,12 @@ func saveOwn(s Settings, recording, reads bool) error {
 	if err := CheckBark(s.BarkServer, s.BarkKey, s.BarkDaily); err != nil {
 		return err
 	}
+	if err := CheckTelegram(s.TelegramToken, s.TelegramChat); err != nil {
+		return err
+	}
+	if err := CheckDiscord(s.DiscordWebhook); err != nil {
+		return err
+	}
 	if math.IsNaN(s.BalanceAlert) || math.IsInf(s.BalanceAlert, 0) || s.BalanceAlert < 0 {
 		return fmt.Errorf("a balance alert is at an amount of 0 or more (0 for off), not %v", s.BalanceAlert)
 	}
@@ -3233,6 +3249,8 @@ func (s Settings) normal() Settings {
 		s.CheckinAt = fmt.Sprintf("%02d:%02d", h, m)
 	}
 	s.BarkServer, s.BarkKey, s.BarkDaily = normalBark(s.BarkServer, s.BarkKey, s.BarkDaily)
+	s.TelegramToken, s.TelegramChat = strings.TrimSpace(s.TelegramToken), strings.TrimSpace(s.TelegramChat)
+	s.DiscordWebhook = strings.TrimSpace(s.DiscordWebhook)
 	// a reply's model name: memberModel, as a magpie before replyModel
 	// kept it, when replyModel isn't set, and kept beside it for that
 	// magpie

@@ -338,6 +338,9 @@ func Collect(keys bool, app string) (Bundle, error) {
 			s.OTel.Headers = nil
 			s.GitHubToken = ""
 			s.BarkKey = ""
+			// a bot's token and its chat go together: a chat with another
+			// machine's token would be half a channel
+			s.TelegramToken, s.TelegramChat, s.DiscordWebhook = "", "", ""
 		}
 		b.Settings = &s
 	}
@@ -600,6 +603,7 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 			s.LANKey, s.LANKeyID = cur.LANKey, cur.LANKeyID
 			s.GitHubToken = cur.GitHubToken
 			s.BarkKey = cur.BarkKey
+			s.TelegramToken, s.TelegramChat, s.DiscordWebhook = cur.TelegramToken, cur.TelegramChat, cur.DiscordWebhook
 			s.OTel.Headers = nil
 			if strings.TrimRight(strings.TrimSpace(s.OTel.Endpoint), "/") == cur.OTel.Endpoint {
 				s.OTel.Headers = cur.OTel.Headers

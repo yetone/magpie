@@ -617,6 +617,10 @@ type settingsJSON struct {
 	GitHubTokenRefused bool `json:"githubTokenRefused,omitempty"`
 	// whether a Bark device key is set; never the key (EV_John_Liu on X)
 	BarkKeySet bool `json:"barkKeySet,omitempty"`
+	// whether a Telegram bot's token and a Discord webhook are set; never
+	// either (gandli on X)
+	TelegramSet bool `json:"telegramSet,omitempty"`
+	DiscordSet  bool `json:"discordSet,omitempty"`
 	// where other machines reach the gateway while it is shared
 	LANURLs []string `json:"lanURLs,omitempty"`
 	// LANURLs are a container's own addresses, not the host's: the page
@@ -923,6 +927,8 @@ func settingsState() settingsJSON {
 	s.GatewayPaused = pausedNow()
 	s.LANKey = "" // the retained credential belongs on disk, not in UI state
 	s.BarkKeySet, s.BarkKey = strings.TrimSpace(s.BarkKey) != "", ""
+	s.TelegramSet, s.TelegramToken = strings.TrimSpace(s.TelegramToken) != "", ""
+	s.DiscordSet, s.DiscordWebhook = strings.TrimSpace(s.DiscordWebhook) != "", ""
 	// the GitHub token, masked, and where the library's requests take one
 	// from: Settings, or the environment variable named
 	own := strings.TrimSpace(s.GitHubToken)
@@ -3131,6 +3137,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			fail(rw, err)
 			return
 		}
+		summaryNeedsChannel(&s)
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return
@@ -3145,10 +3152,84 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			fail(rw, fmt.Errorf("no Bark device key is set"))
 			return
 		}
-		title, body := barkTestText(trayLang(s.Lang, systemLang))
+		title, body := barkTestText(trayLang(s.Lang, systemLang), "Bark")
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
 		if err := bark.Push(ctx, t, title, body); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]bool{"ok": true})
+	})
+	// a Telegram bot's token and chat, and a Discord webhook, that every
+	// alert and the daily summary also go to (gandli on X). A field left
+	// out stays; "" takes it away. The token and the webhook are written
+	// and never read back by the page.
+	mux.HandleFunc("POST /api/settings/alert-channels", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			TelegramToken  *string `json:"telegramToken"`
+			TelegramChat   *string `json:"telegramChat"`
+			DiscordWebhook *string `json:"discordWebhook"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		if in.TelegramToken != nil {
+			s.TelegramToken = *in.TelegramToken
+		}
+		if in.TelegramChat != nil {
+			s.TelegramChat = *in.TelegramChat
+		}
+		if in.DiscordWebhook != nil {
+			s.DiscordWebhook = *in.DiscordWebhook
+		}
+		if err := settings.CheckTelegram(s.TelegramToken, s.TelegramChat); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := settings.CheckDiscord(s.DiscordWebhook); err != nil {
+			fail(rw, err)
+			return
+		}
+		summaryNeedsChannel(&s)
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// a message to the saved Telegram chat or Discord webhook, to see that
+	// it arrives
+	mux.HandleFunc("POST /api/alert-channels/test", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			To string `json:"to"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		var c *channel
+		for _, x := range channels(s) {
+			if x.name == in.To && x.name != "bark" {
+				c = &x
+			}
+		}
+		name := map[string]string{"telegram": "Telegram", "discord": "Discord"}[in.To]
+		if name == "" {
+			fail(rw, fmt.Errorf("no such alert channel: %q", in.To))
+			return
+		}
+		if c == nil {
+			fail(rw, fmt.Errorf("%s isn't set", name))
+			return
+		}
+		title, body := barkTestText(trayLang(s.Lang, systemLang), name)
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		if err := c.send(ctx, title, body); err != nil {
 			fail(rw, err)
 			return
 		}
@@ -3469,6 +3550,7 @@ func held(h http.Handler) http.Handler {
 // read of the last one (lastKnown), which puts today's settings in it
 func stateSettings(s settings.Settings) settings.Settings {
 	s.Proxies, s.LANKey, s.BarkKey, s.GitHubToken = nil, "", "", ""
+	s.TelegramToken, s.DiscordWebhook = "", ""
 	return s
 }
 

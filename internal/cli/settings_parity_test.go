@@ -298,6 +298,8 @@ var notYet = map[string]string{
 	"POST /api/settings/agent-telemetry":         A,  // api.go
 	"POST /api/settings/bark":                    S2, // api.go: Bark server, key and daily time
 	"POST /api/bark/test":                        S2, // api.go: a test push to Bark
+	"POST /api/settings/alert-channels":          S2, // api.go: Telegram's bot token and chat, Discord's webhook
+	"POST /api/alert-channels/test":              S2, // api.go: a test message to Telegram or Discord
 	"POST /api/settings/allowips":                S2, // api.go
 	"POST /api/settings/bare-ids":                S2, // api.go
 	"POST /api/settings/busy-load":               S2, // api.go

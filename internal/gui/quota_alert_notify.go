@@ -103,9 +103,10 @@ const (
 func (n *notifier) send(title, body string) { n.sendAs("magpie-alert-", title, body) }
 
 func (n *notifier) sendAs(kind, title, body string) {
-	// every alert goes to Bark too, when it is set, whether or not the
-	// system lets this computer notify (EV_John_Liu on X)
-	barkPush(title, body)
+	// every alert goes to Bark, Telegram and Discord too, each that is
+	// set, whether or not the system lets this computer notify
+	// (EV_John_Liu, gandli on X)
+	alertPush(title, body)
 	if !n.allowed() {
 		return
 	}

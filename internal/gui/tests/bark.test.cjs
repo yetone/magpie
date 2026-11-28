@@ -3,7 +3,8 @@
 // and a device key are saved, and a daily summary beside it once a key is
 // set. The page never has the key back: after it is saved only dots show,
 // and the key is in no text of the page. Test pushes, Remove takes the key
-// and the summary away. Every language, wide and narrow, both engines; the
+// away, and the summary with it when nothing else is set (the server says
+// so: alert-channels.test.cjs has Telegram and Discord). Every language, wide and narrow, both engines; the
 // API is faked here, and nothing reaches the network.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -57,11 +58,11 @@ function server(lang, posts) {
 }
 
 const words = {
-  en: { name: "Bark", daily: "Bark daily summary", key: "Device key", test: "Test", save: "Save", remove: "Remove", off: "Off", on: "On", sent: "Sent to Bark" },
-  zh: { name: "Bark", daily: "Bark 每日汇总", key: "设备密钥", test: "测试", save: "保存", remove: "移除", off: "关闭", on: "开启", sent: "已发送到 Bark" },
-  "zh-TW": { name: "Bark", daily: "Bark 每日彙總", key: "裝置金鑰", test: "測試", save: "儲存", remove: "移除", off: "關閉", on: "開啟", sent: "已傳送到 Bark" },
-  ja: { name: "Bark", daily: "Bark の毎日のまとめ", key: "デバイスキー", test: "テスト", save: "保存", remove: "削除", off: "オフ", on: "オン", sent: "Bark に送信しました" },
-  de: { name: "Bark", daily: "Bark-Tagesübersicht", key: "Geräteschlüssel", test: "Testen", save: "Speichern", remove: "Entfernen", off: "Aus", on: "An", sent: "An Bark gesendet" },
+  en: { name: "Bark", daily: "Daily summary", key: "Device key", test: "Test", save: "Save", remove: "Remove", off: "Off", on: "On", sent: "Sent to Bark" },
+  zh: { name: "Bark", daily: "每日汇总", key: "设备密钥", test: "测试", save: "保存", remove: "移除", off: "关闭", on: "开启", sent: "已发送到 Bark" },
+  "zh-TW": { name: "Bark", daily: "每日彙總", key: "裝置金鑰", test: "測試", save: "儲存", remove: "移除", off: "關閉", on: "開啟", sent: "已傳送到 Bark" },
+  ja: { name: "Bark", daily: "毎日のまとめ", key: "デバイスキー", test: "テスト", save: "保存", remove: "削除", off: "オフ", on: "オン", sent: "Bark に送信しました" },
+  de: { name: "Bark", daily: "Tagesübersicht", key: "Geräteschlüssel", test: "Testen", save: "Speichern", remove: "Entfernen", off: "Aus", on: "An", sent: "An Bark gesendet" },
 };
 
 async function open(engine, width, lang, posts, t) {
@@ -155,7 +156,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         await reach(page, page.locator("#barkBox .bark-remove"));
         await page.locator("#barkBox .bark-remove").click();
-        assert.deepEqual(await posted(5), { path: "bark", key: "", daily: "" });
+        assert.deepEqual(await posted(5), { path: "bark", key: "" });
         await keyField.waitFor();
         assert.equal(await page.locator("#barkDailyRow").isHidden(), true, "no summary without a key");
         assert.deepEqual(errors, []);
