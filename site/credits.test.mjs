@@ -2,7 +2,7 @@
 // one from yetone/magpie's own history, word for word.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parse, credit, everyone, thanks, what, wall, renderWall, logins } from "./credits.mjs";
+import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins } from "./credits.mjs";
 import { authors, excluded, xAccounts } from "./credits-cli.mjs";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,6 +15,74 @@ test("a reporter named on Discord or X is credited, with where", () => {
   assert.deepEqual(via("library: an MCP router says which computer it is, so an agent can pick between two (packinggoodsllc_07668 on Discord)"), ["packinggoodsllc_07668/Discord"]);
   assert.deepEqual(via("gateway: a HEIC photo goes to the vendor as JPEG, or PNG with alpha (qikamatata on X)"), ["qikamatata/X"]);
   assert.deepEqual(via("redact: a decimal's digits are not masked as a number of their own (willz, Discord)"), ["willz/Discord"]);
+});
+
+// Bodies from yetone/magpie's history, word for word (wrapped as written).
+const body = (subject, b, opts) => credit([{ subject, body: b, author: "yetone", email: "yetoneful@gmail.com" }], opts)[0].map((p) => `${p.name}/${p.via.join("+")}`);
+
+test("a reporter a commit's body names is credited, with where", () => {
+  // 7f11dfc77 (v0.1.4519)
+  assert.deepEqual(body("gateway: a Gemini CLI sign-in goes without Claude Code's billing line, so Gemini's cache reads its prefix",
+    "Reported on X by @niyezaimenglima: Claude Code on a Gemini model through\nmagpie showed a cache hit rate of 0.\n\nCause: Claude Code's first system line, x-anthropic-billing-header, carries\na cch= that changes every turn (#1600)."), ["niyezaimenglima/X"]);
+  // a1f56720c, 4e7661adc, 225d521cd, cfcd6648f
+  assert.deepEqual(parseBody("tail Desktop gives it.\n\nReported by 4 v5 on Discord.\n"), [{ name: "4 v5", via: "Discord", sure: true }]);
+  assert.deepEqual(parseBody("Reported by ylorn. on Discord (11-06): choosing apps in Alma, a question\nabout one app was answered with another's facts.").map((n) => n.name), ["ylorn."]);
+  assert.deepEqual(parseBody("Reported by 教父 on Discord.").map((n) => `${n.name}/${n.via}`), ["教父/Discord"]);
+  assert.deepEqual(parseBody("Reported by MYCF711 (Discord, issue #4420).").map((n) => `${n.name}/${n.via}`), ["MYCF711/Discord"]);
+  // 3e3196222: a package in the body's Not changed line is nobody
+  assert.deepEqual(body("provider: Request headers to pass, the agent's own values to its provider",
+    "  TestSignPassesClientHeaders.\n\nRequested by 3jRzfF52Qx on X.\n\nNot changed: omp (@oh-my-pi/pi-coding-agent 18.10.3) reads only its agent"), ["3jRzfF52Qx/X"]);
+  // 5099be8b0: after a semicolon; the branch's porter is not the reporter
+  assert.deepEqual(parseBody("Ported from Q呀's (qq01-hub) branch fix/7901-tolerant-model-modalities:\nFiendSaws's fix, with Q呀's shape tests; reported by FiendSaws.").map((n) => n.name), ["FiendSaws"]);
+});
+
+test("a Reported-by: trailer credits each name it holds, with where", () => {
+  const got = (b) => parseBody(b).map((n) => `${n.name}/${n.via}${n.github ? "/" + n.github : ""}`);
+  // fbbdf6e05, c8eb7b387, 48ae0884b
+  assert.deepEqual(got("./internal/gateway suite and ./... weren't run here.\n\nReported-by: isjiajia01, sounfury\nCo-authored-by: ggbdpq <ggbdpq@gmail.com>"), ["isjiajia01/null", "sounfury/null"]);
+  assert.deepEqual(got("full Go and GUI suites run after the push, under mote's suite lock.\n\nReported-by: 辰林鸭~ (Discord)\n"), ["辰林鸭~/Discord"]);
+  assert.deepEqual(got("200 with 0.1.42's code (plugins f2b0dac's record).\n\nReported-by: jihuayu (plugins#461, #4004)"), ["jihuayu/null"]);
+  // ff415f39c: a noreply address is the GitHub login, and is never kept
+  const ff = "/responses rather than chat is not confirmed.\n\nReported-by: Mmx233 <36563672+Mmx233@users.noreply.github.com>\nReported-by: Edward4226 <Edward4226@users.noreply.github.com>\nReported-by: mahiro233 (Discord)\nCo-authored-by: Mmx233 <36563672+Mmx233@users.noreply.github.com>";
+  assert.deepEqual(got(ff), ["Mmx233/GitHub/Mmx233", "Edward4226/GitHub/Edward4226", "mahiro233/Discord"]);
+  assert.doesNotMatch(JSON.stringify(credit([{ subject: "x: y", body: ff }])), /@|noreply/);
+  // 30a0bfe88, 708ae4144: an alias in the bracket is not a second person
+  assert.deepEqual(got("Co-authored-by: mdwsk88 <11055210+mdwsk88@users.noreply.github.com>\nReported-by: mdwsk88 (dawei on Discord)\n"), ["mdwsk88/null"]);
+  assert.deepEqual(got("Reported-by: Fallmonkey (GitHub MonkeyLeeT)"), ["Fallmonkey/null"]);
+});
+
+test("a body credits only the reporters, not who else it names", () => {
+  // a7bd7a0fe: who diagnosed it is not who reported it
+  assert.deepEqual(parseBody("Reported by Winnie7572 on X; diagnosed by tkhs101 in #7496.\nCo-authored-by: ggbdpq <ggbdpq@gmail.com>").map((n) => `${n.name}/${n.via}`), ["Winnie7572/X"]);
+  // 8b70b7d97: the alias in brackets is the same person, not a second one
+  assert.deepEqual(parseBody("Suggested by @faithleysath (matrix0487 on Discord): the usage ledger now\nkeeps what each request received back (down_bytes)").map((n) => n.name), ["faithleysath"]);
+  // 72109ea0e, 243594410, a4916aec1: who confirmed, reproduced or filed it is not the reporter
+  assert.deepEqual(parseBody("its own means every model, as before. Reported by willywang, confirmed\nagain on v0.1.1320 by LoKi (lokic7123-star).").map((n) => n.name), ["willywang"]);
+  assert.deepEqual(parseBody("400 \"invalid tool call arguments\". Reported by xiaobaifly7 and reproduced\nindependently by Shane-Meng (\\n\\n\\n@pytest.mark…).").map((n) => n.name), ["xiaobaifly7"]);
+  assert.deepEqual(parseBody("Reported by ChangQiu on Discord and filed as #4853 by ZyphrZero. The\nwithoutLiteMetadata patch and its two tests are ported from").map((n) => `${n.name}/${n.via}`), ["ChangQiu/Discord"]);
+  // e50d73aa3, 572a1757c: everyone in the list, nobody after it
+  assert.deepEqual(parseBody("Reported by TimWongUp, nativeas, tianhao2316-beep, mxl2498, cunnak and\nTsuki-hash, on Windows and macOS.").map((n) => n.name), ["TimWongUp", "nativeas", "tianhao2316-beep", "mxl2498", "cunnak", "Tsuki-hash"]);
+  assert.deepEqual(parseBody("Reported by OldSuns, ggggggggggz and track23; the fix is skygunner's branch fix/3136-agent-magpie-preview-sweep").map((n) => n.name), ["OldSuns", "ggggggggggz", "track23"]);
+  // c30d3b7b6, 19f6ce16a, e50d73aa3: the owner, a phrase mid-sentence
+  assert.deepEqual(parseBody("couldn't even pause on its own. Asked by the owner: is that by design?\nOnly the lazy first load was."), []);
+  assert.deepEqual(parseBody("- TestHubSearchOffGivesToolsOnDemand (gateway, fake hook): hub/claude\n  and hub/claude~<project> list find_tools and call_tool; asked by the\n  bare id; codex keeps every tool;"), []);
+  assert.deepEqual(parseBody("cleans it with a bare `defer os.RemoveAll(tmp)` (internal/agent/preview.go).\nTwo consequences reported by OldSuns: when the removal fails"), []);
+  // 8031edc78: the maintainer is nobody
+  assert.deepEqual(body("agent: AtomCode support — one provider account, one model table per catalog model, as its own sign-in writes (#736)", "Reported by yetone on #736. go vet, builds (darwin, GOOS=linux, GOOS=windows) and go test -tags nogui"), []);
+});
+
+test("a body's credit keeps every rule a subject's has", () => {
+  const c = { subject: "gateway: a Gemini CLI sign-in goes without Claude Code's billing line, so Gemini's cache reads its prefix", body: "Reported on X by @niyezaimenglima: Claude Code on a Gemini model through\nmagpie showed a cache hit rate of 0.\n", v: "0.1.4519" };
+  assert.deepEqual(wall([c]).map((p) => [p.name, p.via, p.releases[0].v]), [["niyezaimenglima", ["X"], "0.1.4519"]]);
+  assert.deepEqual(wall([c], { exclude: ["NiYeZaiMengLiMa"] }), []);
+  // an X handle a GitHub profile names is that GitHub person, unless two do
+  assert.deepEqual(wall([c], { xAccounts: { someone: "niyezaimenglima" } }).map((p) => [p.name, p.github]), [["someone", "someone"]]);
+  assert.deepEqual(wall([c], { xAccounts: { someone: "niyezaimenglima", other: "niyezaimenglima" } }).map((p) => p.name), ["niyezaimenglima"]);
+  // an agent named as a reporter is still an agent
+  assert.deepEqual(body("x: y", "Reported by Codex."), []);
+  // a body name lets a lone bracketed subject name be trusted
+  assert.deepEqual(credit([{ subject: "routing: the group being edited reads as selected (Jiabubu)" }])[0], []);
+  assert.deepEqual(credit([{ subject: "routing: the group being edited reads as selected, its Save in reach (Jiabubu)", body: "Reported by Jiabubu on Discord (#feedback).\n" }])[0].map((p) => `${p.name}/${p.via.join("+")}`), ["Jiabubu/Discord"]);
 });
 
 test("several people in one bracket are each credited", () => {

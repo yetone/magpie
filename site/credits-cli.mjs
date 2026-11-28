@@ -12,6 +12,9 @@
 //     (public/contributors/en.html, zh, ja), which worker.js puts into the
 //     page. wrangler.jsonc's build runs it at each deploy.
 //
+// The reporters a commit's body names ("Reported on X by @…") are credited
+// beside its subject's (credits.mjs parseBody).
+//
 // The issue and PR authors a subject's "(#N)" names are asked of GitHub's
 // GraphQL API with GH_TOKEN, GITHUB_TOKEN or `gh auth token`. When that
 // can't be read, those people are left out (and `wall` keeps the authors
@@ -31,11 +34,11 @@ const warn = (m) => process.stderr.write(`credits: ${m}\n`);
 
 const SEP = "\x1f", END = "\x1e";
 function log(args) {
-  const out = execFileSync("git", ["log", `--format=%H${SEP}%P${SEP}%an${SEP}%ae${SEP}%s${SEP}%(trailers:key=Co-authored-by,valueonly,separator=%x1d)${SEP}%D${END}`, ...args], { encoding: "utf8", maxBuffer: 1 << 30 });
+  const out = execFileSync("git", ["log", `--format=%H${SEP}%P${SEP}%an${SEP}%ae${SEP}%s${SEP}%(trailers:key=Co-authored-by,valueonly,separator=%x1d)${SEP}%D${SEP}%b${END}`, ...args], { encoding: "utf8", maxBuffer: 1 << 30 });
   return out.split(END).map((r) => r.replace(/^\n/, "")).filter(Boolean).map((r) => {
-    const [sha, parents, author, email, subject, co, refs] = r.split(SEP);
+    const [sha, parents, author, email, subject, co, refs, body] = r.split(SEP);
     return {
-      sha, author, email, subject,
+      sha, author, email, subject, body: body || "",
       parents: parents.trim() ? parents.trim().split(" ").length : 0,
       // the address only tells an agent from a person; it is never written out
       coauthors: (co || "").split("\x1d").map((s) => s.trim()).filter(Boolean).map((s) => {

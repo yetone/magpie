@@ -8,7 +8,14 @@
 //   - the author of an issue or PR such a group names, "(#4532)" (looked up
 //     by credits-cli.mjs; a lookup that fails names nobody);
 //   - a commit's GitHub author and Co-authored-by names other than the
-//     maintainer's and bots'.
+//     maintainer's and bots';
+//   - the reporter a body's sentence names: "Reported on X by
+//     @niyezaimenglima: …", "Reported by 教父 on Discord.", "Requested by
+//     ssharpcc on X.", "…; reported by FiendSaws.", "Reported by OldSuns,
+//     ggggggggggz and track23; …", and a Reported-by: trailer
+//     ("Reported-by: gua2100 (Discord)"). Only the names right after the
+//     verb count: not who diagnosed or patched it, not an alias in
+//     brackets, not a name anywhere else in the body.
 //
 // An X credit is the GitHub person's when that GitHub user's public profile
 // names the X account (its twitter_username, which the user sets
@@ -60,6 +67,91 @@ function personName(s) {
   // who someone is, not their name: "Docker user", "𝕏 user", "𝕏"
   if (/(^|\s)(user|users|someone|reporter|people)$/i.test(s) || !/[\p{L}\p{N}]/u.test(s.replace(/𝕏/gu, ""))) return "";
   return s;
+}
+
+// A sentence in a commit's body that says who reported or asked for it.
+// It starts a paragraph or follows a sentence's end or a semicolon:
+// "a model asked by its bare id" in the middle of a sentence is no credit.
+const BODY_BY = /(?:^|(?<=[.;!?]\s))(?:[-*]\s+)?(?:reported|requested|suggested|asked)(?:\s+on\s+([^\s,.;:()]+))?\s+by\s+/gimu;
+// a body name with no platform after it: one word, never an English one
+const BODY_NAME = /^[\p{L}\p{N}][\p{L}\p{N}_.\-]{0,38}$/u;
+const NOT_NAME = new Set("default hand name id itself himself herself themselves design mistake email mail them him her".split(" "));
+
+function bodyName(s, placed) {
+  s = s.trim().replace(/^@/, "");
+  // "4 v5 on Discord": a platform after it lets a name have spaces
+  if (placed) return personName(s);
+  if (!BODY_NAME.test(s) || STOP.has(lower(s)) || NOT_NAME.has(lower(s))) return "";
+  if (/^\d{1,5}$/.test(s) || /^v?\d+(\.\d+)+/.test(s)) return "";
+  return s;
+}
+
+// "(Discord)", "(on Discord)", "(Discord, issue #4420)", "(Discord
+// #feedback, …)": where. Any other bracket ("gua2100 (ggbdpq)", "(#5390)",
+// "(GitHub MonkeyLeeT)", "(dawei on Discord)") names no platform.
+function bracketPlatform(s) {
+  const m = String(s).trim().match(/^(?:on\s+)?([^\s,;#]+)(?:$|,|\s+#)/);
+  return m ? PLATFORMS[lower(m[1])] || null : null;
+}
+
+// One name in a Reported-by: trailer: "linkaww on Discord", "小李
+// (Discord)", "Mmx233 <36563672+Mmx233@users.noreply.github.com>",
+// "zane668 (#880)". A bracket is where, an issue or an alias, never a
+// second person.
+function trailerName(part) {
+  const m = part.trim().match(/^(.+?)(?:\s*<([^<>]*)>)?(?:\s*\(([^()]*)\))?(?:\s+on\s+(\S+))?$/);
+  if (!m) return null;
+  const on = m[4] ? PLATFORMS[lower(m[4])] || null : null;
+  if (m[4] && !on) return null;
+  if (m[2] && AGENT_MAIL.test(m[2]) && !noreply(m[2])) return null;
+  // the trailer holds a name and nothing else, so "辰林鸭~" is one too
+  const name = bodyName(m[1], true);
+  if (!name || STOP.has(lower(name)) || NOT_NAME.has(lower(name)) || /^\d{1,5}$/.test(name)) return null;
+  const github = noreply(m[2]);
+  return { name, via: on || (m[3] ? bracketPlatform(m[3]) : null) || (github ? "GitHub" : null), sure: true, github };
+}
+
+// The reporters a commit's body names (and an older subject's text after
+// " — "), each { name, via, sure: true, github? }.
+export function parseBody(text) {
+  const out = [];
+  // "Reported-by: isjiajia01, sounfury": a comma in a bracket is the bracket's
+  for (const m of String(text || "").matchAll(/^[ \t]*(?:reported|requested|suggested)-by:[ \t]*(.+)$/gim)) {
+    for (const part of m[1].split(/,\s*(?![^()]*\))/)) {
+      const n = trailerName(part);
+      if (n) out.push(n);
+    }
+  }
+  // a body's lines are wrapped, so a sentence runs on across them
+  const flat = String(text || "").split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, " ").trim()).join("\n");
+  for (const m of flat.matchAll(BODY_BY)) {
+    const lead = m[1] ? PLATFORMS[lower(m[1])] || null : null; // "Reported on X by @…"
+    const rest = flat.slice(m.index + m[0].length).split("\n")[0];
+    // the names end at the sentence's end, a colon or semicolon, a bracket
+    // or a dash; "ylorn. on Discord" is a name with its dot
+    const end = rest.search(/[.;:!?](?=\s|$)(?!\s+on\s+\S)|\s\(|\s[—–-]\s/);
+    let clause = end >= 0 ? rest.slice(0, end) : rest;
+    const paren = end >= 0 && rest.slice(end).match(/^\s\(([^()]*)\)/);
+    const tail = paren ? bracketPlatform(paren[1]) : null;
+    // "EncodeTS in #7958", "yetone on #736", "1939323749 with a custom provider …"
+    clause = clause.replace(/\s+(?:in|on)\s+[\w./-]*#\d+.*$/, "").replace(/\s+with\s.*$/, "");
+    const got = [];
+    // a list ends at the first part that isn't a name: "willywang,
+    // confirmed again …", "ChangQiu on Discord and filed as #4853 by …"
+    for (let part of clause.split(/,\s*|\s+(?:and|&)\s+/)) {
+      part = part.trim();
+      let via = null;
+      const on = part.match(/^(.+?)\s+on\s+(\S+)$/);
+      if (on && PLATFORMS[lower(on[2])]) { part = on[1]; via = PLATFORMS[lower(on[2])]; }
+      const name = bodyName(part, !!via);
+      if (!name) break;
+      // "A and B on Discord": both are on Discord
+      if (via) for (const g of got) if (!g.via) g.via = via;
+      got.push({ name, via });
+    }
+    for (const g of got) out.push({ name: g.name, via: g.via || lead || tail || null, sure: true });
+  }
+  return out;
 }
 
 // The credits in one subject: names (sure, or to be taken only if seen
@@ -147,7 +239,7 @@ function human(name, email) {
 }
 const coName = (c) => (typeof c === "string" ? { name: c, email: "" } : c);
 
-// Each commit's people. commits: [{ subject, author, email, parents,
+// Each commit's people. commits: [{ subject, body, author, email, parents,
 // coauthors: [{ name, email }] }]
 // issueAuthors: Map or object of "repo#n" → login (a bot's ends in "[bot]").
 // xAccounts: Map or object of GitHub login → the X handle its public profile
@@ -157,7 +249,11 @@ export function credit(commits, { issueAuthors = {}, exclude = [], xAccounts = {
   const authorOf = issueAuthors instanceof Map ? (k) => issueAuthors.get(k) : (k) => issueAuthors[k];
   const ex = new Set([...exclude].map((s) => lower(String(s).trim())).filter(Boolean));
   const onX = xLogins(xAccounts);
-  const parsed = commits.map((c) => parse(c.subject));
+  const parsed = commits.map((c) => {
+    const p = parse(c.subject);
+    p.names.push(...parseBody(String(c.subject).split(" — ").slice(1).join(" — ") + "\n\n" + (c.body || "")));
+    return p;
+  });
   // names credited plainly anywhere, so a lone bracketed one can be trusted
   const known = new Set();
   commits.forEach((c, i) => {
@@ -183,7 +279,7 @@ export function credit(commits, { issueAuthors = {}, exclude = [], xAccounts = {
       // an X handle a GitHub profile names is that GitHub person
       const gh = n.via === "X" ? onX.get(lower(n.name)) : "";
       if (gh) { if (!left(n.name, ex)) add(gh, "X", gh); continue; }
-      add(n.name, n.via, "");
+      add(n.name, n.via, n.github || "");
     }
     for (const r of parsed[i].refs) {
       const a = authorOf(refKey(r));
