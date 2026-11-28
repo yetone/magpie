@@ -80,3 +80,19 @@ func TestReadPastEAGAIN(t *testing.T) {
 		t.Fatalf("screen %q, want what was drawn after the EAGAIN", got)
 	}
 }
+
+// A screen with nothing on it but a box's lines says them, as drawn: it
+// is not one where nothing was drawn. One with nothing says so.
+func TestLastScreenOfLinesAlone(t *testing.T) {
+	if got := New().LastScreen(); got != "nothing on its screen (0 bytes read)" {
+		t.Fatalf("nothing drawn: %q", got)
+	}
+	s := New()
+	s.Feed([]byte("\x1b[38;2;136;136;136m" + strings.Repeat("─", 200) + "\r\n╭──╮\r\n╰──╯"))
+	if got := s.LastScreen(); !strings.HasSuffix(got, "─ ╭──╮ ╰──╯") || len(got) > 600 {
+		t.Fatalf("lines alone: %q", got)
+	}
+	if rows := s.Rows(); len(rows) != 0 {
+		t.Fatalf("rows of lines alone: %q", rows)
+	}
+}

@@ -138,12 +138,12 @@ func Run(args []string) error {
 		// wsl.exe's own arguments, then Claude Code's
 		pargs = append(slices.Clone(wsl.Args), pargs...)
 	}
-	fail := func(why string) error {
-		fmt.Fprintf(os.Stderr, "claude-tui: %s\n", why)
-		return fmt.Errorf("Claude Code's interactive mode didn't run: %s", why)
-	}
 	args = interactiveArgs(pargs[len(wslArgs(wsl)):])
 	s := &shim{Term: tuidrive.New(), out: os.Stdout, rowsCh: make(chan struct{}, 1), wsl: wsl, listed: mcpListed(args)}
+	fail := func(why string) error {
+		s.say(os.Stderr, why)
+		return fmt.Errorf("Claude Code's interactive mode didn't run: %s", why)
+	}
 	s.watchPanel()
 	s.Undrawn = s.undrawn
 	resume, named := "", ""
@@ -211,7 +211,7 @@ func Run(args []string) error {
 	if by, ok := tuidrive.Deadline(os.Getenv(DeadlineEnv)); ok {
 		started := time.Now()
 		t := time.AfterFunc(time.Until(by), func() {
-			fmt.Fprintf(os.Stderr, "claude-tui: %s\n", s.late(time.Since(started)))
+			s.say(os.Stderr, s.late(time.Since(started)))
 			s.Stop()
 			s.dropImages()
 			s.tap.drop()
@@ -228,7 +228,28 @@ func Run(args []string) error {
 	}
 	s.emit(map[string]any{"type": "system", "subtype": "init", "session_id": s.sid})
 	go s.tail(from)
-	return s.input(os.Stdin)
+	if err := s.input(os.Stdin); err != nil {
+		// a message Claude Code didn't take, or its end mid-turn: said
+		// on the line magpie logs, as fail's are, with the screen whole
+		s.say(os.Stderr, err.Error())
+		return err
+	}
+	return nil
+}
+
+// say writes, on w (the helper's stderr), why it ends, on the lines magpie
+// logs ("claude-tui: ", the gateway's lockedWriter): why first, where a
+// one-off run's card reads it (oneOffErr), then the screen as it stands,
+// row by row (tuidrive.Term.Rows), as why keeps only its end
+// (LastScreen). The error Run returns is printed after them, last, where
+// a run's tail of stderr is read (endedBefore).
+func (s *shim) say(w io.Writer, why string) {
+	var b strings.Builder
+	b.WriteString("claude-tui: " + why + "\n")
+	for _, r := range s.Rows() {
+		b.WriteString("claude-tui: screen| " + r + "\n")
+	}
+	_, _ = io.WriteString(w, b.String())
 }
 
 // wslArgs is wsl.exe's arguments before Claude Code's, none for this

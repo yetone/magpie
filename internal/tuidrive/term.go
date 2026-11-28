@@ -299,14 +299,25 @@ func (t *Term) nowLocked() string {
 // nothing drawn since the screen was cleared, the screen as it stands, and
 // with nothing on it, that nothing was drawn (and Undrawn's why). An error
 // that ended on an empty screen said nothing of what the agent showed
-// (sowhynot).
+// (sowhynot). The lines and blocks its boxes are drawn with are left out
+// (words): Claude Code's prompt box is ruled the screen's width over and
+// under, and a tail of 600 bytes was all rule, one long line, not the
+// words above it (FremontDango, Windows). A screen of boxes alone is said
+// as drawn.
 func (t *Term) LastScreen() string {
 	if t == nil {
 		return "nothing on its screen (0 bytes read)"
 	}
-	p := strings.Join(strings.Fields(t.Plain()), " ")
+	plain, now := t.Plain(), t.Now()
+	p := words(plain)
 	if p == "" {
-		p = strings.Join(strings.Fields(t.Now()), " ")
+		p = words(now)
+	}
+	if p == "" {
+		p = strings.Join(strings.Fields(plain), " ")
+	}
+	if p == "" {
+		p = strings.Join(strings.Fields(now), " ")
 	}
 	if p == "" {
 		n := t.nread.Load()
@@ -325,4 +336,39 @@ func (t *Term) LastScreen() string {
 		}
 	}
 	return p
+}
+
+// Rows is the screen as it stands, row by row, for a log to keep whole
+// (LastScreen keeps its end): each row's words (words), the rows with none
+// left out. None before the agent draws.
+func (t *Term) Rows() []string {
+	if t == nil {
+		return nil
+	}
+	var rows []string
+	for _, r := range strings.Split(t.Now(), "\n") {
+		if w := words(r); w != "" {
+			rows = append(rows, w)
+		}
+	}
+	return rows
+}
+
+// words is s's words one space apart, without the lines and blocks a
+// terminal draws boxes and rules with (decoration): they say nothing, and
+// a screen-wide rule is 600 bytes of them.
+func words(s string) string {
+	return strings.Join(strings.Fields(strings.Map(func(r rune) rune {
+		if decoration(r) {
+			return ' '
+		}
+		return r
+	}, s)), " ")
+}
+
+// decoration is whether r is one of the lines, corners and blocks boxes
+// are drawn with: Unicode's Box Drawing (─ │ ╭ ╮ ╰ ╯ ═ …) and Block
+// Elements (▐ ▛ █ ▜ ▌ ▔ ▁ …), and the horizontal scan lines (⎺ ⎻ ⎼ ⎽).
+func decoration(r rune) bool {
+	return r >= 0x2500 && r <= 0x259F || r >= 0x23BA && r <= 0x23BD
 }

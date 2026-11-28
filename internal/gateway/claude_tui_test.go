@@ -83,6 +83,32 @@ func TestClaudeTUIFallbackLogged(t *testing.T) {
 	}
 }
 
+// The helper's lines, why it ended and Claude Code's screen row by row,
+// go to the log without the user's folders or secrets, as a one-off run's
+// do (logOneOff): the screen is the user's own, a folder and a token on it.
+func TestClaudeTUIScreenLoggedSafe(t *testing.T) {
+	var logs bytes.Buffer
+	old := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(old)
+	token := "sk-ant-oat01-" + strings.Repeat("Q7x", 20)
+	w := &lockedWriter{run: &subscriptionRun{}}
+	_, _ = w.Write([]byte("claude-tui: Claude Code did not take the message: ⎿ Error · Please run /login\n" +
+		"claude-tui: screen| C:\\Users\\fremont\\work\n" +
+		"claude-tui: screen| ❯ use " + token + "\n"))
+	got := logs.String()
+	for _, want := range []string{"claude: Claude Code did not take the message: ⎿ Error · Please run /login", "claude: screen| ~\\work", "claude: screen| ❯ use "} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the log lacks %q:\n%s", want, got)
+		}
+	}
+	for _, gone := range []string{"fremont", strings.Repeat("Q7x", 20)} {
+		if strings.Contains(got, gone) {
+			t.Errorf("the log has %q:\n%s", gone, got)
+		}
+	}
+}
+
 // A Claude Code in WSL is run by the helper through wsl.exe, its
 // transcripts read from Windows: the distro's own folder through \\wsl$,
 // or the account's config directory, a Windows folder. Where Windows

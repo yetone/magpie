@@ -4404,12 +4404,13 @@ var claudeToolWaitVars = []string{"CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS=0", "CLAUD
 type lockedWriter struct{ run *subscriptionRun }
 
 func (w *lockedWriter) Write(p []byte) (int, error) {
-	// the interactive mode's helper says on its own line why it ended
-	// (claudetui.Run)
+	// the interactive mode's helper says on its own line why it ended,
+	// then Claude Code's screen row by row (claudetui.Run): the user's
+	// folders and secrets taken out (logSafe), as a one-off run's are
 	if bodyHas(p, "claude-tui: ") {
 		for _, l := range strings.Split(string(p), "\n") {
 			if why, ok := strings.CutPrefix(l, "claude-tui: "); ok {
-				log.Printf("claude: %s", why)
+				log.Printf("claude: %s", logSafe(why))
 			}
 		}
 	}
