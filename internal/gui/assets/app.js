@@ -12772,8 +12772,13 @@ function renderFallback(p) {
   for (const g of providers.gateway?.groups || []) all.push({ id: g.id, label: g.name, g: g.providers?.join(" ") || "" });
   for (const o of providers.providers) {
     if (!o.ready || o.off) continue;
-    const tells = modelTells(o.models.filter((m) => m.on));
-    for (const m of o.models) if (m.on) all.push({ id: o.id + "/" + m.id, label: o.name + " · " + (m.name || m.id) + (tells.has(m.id) ? " · " + tells.get(m.id) : ""), icon: o.icon });
+    const on = o.models.filter((m) => m.on);
+    // its own other models too, when it has more than one: an aggregator
+    // whose popular model cools down goes on to another of its models
+    // (big fish on Discord)
+    if (o.id === p.id && on.length < 2) continue;
+    const tells = modelTells(on);
+    for (const m of on) all.push({ id: o.id + "/" + m.id, label: o.name + " · " + (m.name || m.id) + (tells.has(m.id) ? " · " + tells.get(m.id) : ""), icon: o.icon });
   }
   const tell = () => el("span", "mtell", t("routing group"));
   let open = false;
@@ -12799,7 +12804,7 @@ function renderFallback(p) {
     sugg.replaceChildren();
     if (!open && !q.value.trim()) return;
     const f = q.value.trim().toLowerCase();
-    const hits = all.filter((x) => !draft.fallback.includes(x.id) && !x.id.startsWith(p.id + "/") && (x.id + " " + x.label + " " + (x.g ?? "")).toLowerCase().includes(f));
+    const hits = all.filter((x) => !draft.fallback.includes(x.id) && (x.id + " " + x.label + " " + (x.g ?? "")).toLowerCase().includes(f));
     for (const x of hits.slice(0, 12)) {
       const c = el("button", "mchip");
       c.append(...(x.g != null ? [svg(FAN, 12, 1.5), el("span", "", x.label), tell()] : [el("span", "", x.label)]));
