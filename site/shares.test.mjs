@@ -2,6 +2,7 @@
 // node:sqlite and R2 by r2stub.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { api, page, content, prune, cleanPath, RATE, MAX_BYTES, CONTENT, MAX_BLOBS, BLOB_RATE } from "./shares.js";
 import worker from "./worker.js";
 import { bucket } from "./r2stub.mjs";
@@ -57,6 +58,11 @@ test("shares: a shared page shows in the frame of its link, its files from the s
   assert.match(html, /sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"/);
   assert.doesNotMatch(html, /allow-same-origin/);
   assert.match(html, />Report</);
+  // the bar shows magpie's bird beside its name, from the site, which the CSP lets in
+  const bird = html.match(/<a class="brand" href="https:\/\/usemagpie\.ai\/"[^>]*><img src="(https:\/\/usemagpie\.ai)(\/img\/magpie-small\.svg)" alt="">magpie<\/a>/);
+  assert.ok(bird, html);
+  assert.ok(existsSync(new URL("./public" + bird[2], import.meta.url)));
+  assert.match(w.headers.get("Content-Security-Policy"), new RegExp(`img-src ${bird[1]};`));
   assert.match(w.headers.get("Content-Security-Policy"), /frame-src https:\/\/a\.usemagpie\.ai/);
   // Cloudflare's beacon is injected into HTML a worker answers unless it says no-transform
   assert.match(w.headers.get("Cache-Control"), /no-transform/);
@@ -193,7 +199,9 @@ test("shares: a title is text in the link's page, never markup", async () => {
   const s = setup();
   const got = await share(s, [["index.html", "a"]], { title: `</title><script>alert(1)</script>"'`, description: `"><img src=x onerror=alert(1)>` });
   const html = await (await page(req("GET", `/a/${got.id}`), s.env)).text();
-  assert.doesNotMatch(html, /<script>|<img/);
+  // the bar's own bird is the one <img>
+  assert.doesNotMatch(html, /<script>|<img src=x/);
+  assert.equal(html.match(/<img/g).length, 1);
   assert.match(html, /&lt;\/title&gt;&lt;script&gt;/);
 });
 

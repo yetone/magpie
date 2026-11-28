@@ -895,7 +895,8 @@ The site:
   only as a SHA-256 hash, holds a version to 32 MB and 256 files, and each
   address (hashed, for an hour) to 30 creates and updates an hour.
 - The link is a page of the site's own: a slim bar with the title, a
-  link to magpie and Report, over a frame of the content host
+  link to magpie (its bird, `/img/magpie-small.svg` from the site, which
+  the bar's CSP lets in, beside the name) and Report, over a frame of the content host
   `a.usemagpie.ai/<id>/<version>/`, which serves the files under the same
   CSP sandbox as the gateway's pages (an opaque origin, so a page can't
   reach usemagpie.ai's cookies or storage). A content address opened as a

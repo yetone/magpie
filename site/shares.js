@@ -475,11 +475,14 @@ header{flex:none;display:flex;align-items:center;gap:16px;height:40px;padding:0 
 h1{flex:1;min-width:0;margin:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 a,.me{color:var(--mute);text-decoration:none;white-space:nowrap;transition:color .15s ease}
 a:hover,.me:hover{color:var(--fg)}
+.brand{display:flex;align-items:center;gap:6px;color:var(--fg);font-weight:600}
+.brand img{width:16px;height:16px}
+@media (prefers-color-scheme:dark){.brand img{filter:invert(1)}}
 iframe{flex:1;width:100%;border:0}
 ${live ? LIVE_CSS : ""}</style>
 </head>
 <body>
-<header><h1 title="${title}">${title}</h1>${live ? `<span class="peers" hidden></span><button class="me" type="button" hidden></button>` : ""}<a href="${SITE}/" target="_blank" rel="noopener">magpie</a><a href="${esc(report)}">Report</a></header>
+<header><h1 title="${title}">${title}</h1>${live ? `<span class="peers" hidden></span><button class="me" type="button" hidden></button>` : ""}<a class="brand" href="${SITE}/" target="_blank" rel="noopener"><img src="${SITE}/img/magpie-small.svg" alt="">magpie</a><a href="${esc(report)}">Report</a></header>
 <iframe src="${esc(live ? src + "#magpie-share=" + key : src)}" title="${title}" sandbox="${SANDBOX}" allow="clipboard-write; fullscreen" referrerpolicy="no-referrer"></iframe>
 ${live ? `<form class="sheet" hidden><input maxlength="40" autocomplete="nickname" placeholder="Name others see" required><button type="submit">Join</button><button class="out" type="button" hidden>Sign out</button></form>
 <script nonce="${nonce}">var __name = (f) => f;(${shell.toString()})(${JSON.stringify({ id: m[1], key })})</script>
