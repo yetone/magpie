@@ -1029,19 +1029,29 @@ func init() {
 	plugin.ListingOff = pluginsOff
 	// a models hook saying its account's sign-in expired marks it, as a
 	// built-in whose model list the vendor refused marked the account
-	plugin.OnSignIn(func(id, account, said string) {
-		pp, ok := pluginOfAgent("plugin:" + id)
-		if !ok {
-			// told while the providers were first read: wait for them
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			defer cancel()
-			_, _ = plugin.Providers(ctx)
-			if pp, ok = pluginOfAgent("plugin:" + id); !ok {
-				pp = plugin.Provider{ID: id}
-			}
+	plugin.OnSignIn(signInToldByHost)
+}
+
+// signInToldByHost is what a plugin said, outside an answer, of its
+// account's sign-in (plugin.OnSignIn): the account is marked or cleared.
+// A provider not listed yet (told while the providers were first read)
+// waits for the listing under way, the paced one every caller shares
+// (plugin.WaitListed), a minute at most, and asks nothing when the
+// listing kept is the plugins' answer already. It asked the plugins
+// directly before: a full listing of every plugin, outside the pace the
+// host's changes are listed at (c83193bd4), for each thing a host said
+// of an account whose provider no listing named yet (#8064).
+func signInToldByHost(id, account, said string) {
+	pp, ok := pluginOfAgent("plugin:" + id)
+	if !ok {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		plugin.WaitListed(ctx)
+		if pp, ok = pluginOfAgent("plugin:" + id); !ok {
+			pp = plugin.Provider{ID: id}
 		}
-		notePluginSaid(pp, account, said, 0)
-	})
+	}
+	notePluginSaid(pp, account, said, 0)
 }
 
 func modelAPIID(m plugin.Model) string {

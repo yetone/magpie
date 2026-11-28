@@ -324,6 +324,9 @@ var (
 	provEnd     time.Time
 	provStreak  int
 	provWaiting bool
+	// provDone is closed when the background listing under way (provBusy)
+	// ends, for WaitListed
+	provDone chan struct{}
 )
 
 // What the host tells (a plugin saving a sign-in) starts listings again
@@ -563,8 +566,31 @@ func refreshProvidersInBackground(ctx context.Context, epoch uint64) {
 			continue
 		}
 		provBusy, provCancel = false, nil
+		close(provDone)
 		provMu.Unlock()
 		return
+	}
+}
+
+// WaitListed waits, up to ctx, for the plugins' answer to the latest
+// change of them or their sign-ins: at once when what Cached keeps is
+// that answer, else for the background listing Cached begins (or the one
+// under way) to end. It asks nothing itself: the listing is the one
+// every caller waiting shares, started at the pace relistWait keeps. A
+// caller that asked the plugins directly instead (OnSignIn's handler,
+// told of an account it couldn't find) began a listing of every plugin
+// for each thing a host said, beside the paced one (#8064).
+func WaitListed(ctx context.Context) {
+	Cached()
+	provMu.Lock()
+	busy, done := provBusy, provDone
+	provMu.Unlock()
+	if !busy {
+		return
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
 	}
 }
 
@@ -873,6 +899,7 @@ func Cached() []Provider {
 		if start {
 			ctx, provCancel = context.WithCancel(context.Background())
 			provBusy, provTried = true, true
+			provDone = make(chan struct{})
 			refreshing.Add(1)
 		}
 		epoch := provEpoch
