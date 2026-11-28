@@ -421,6 +421,24 @@ body:not(.side-nav) #nav button:is([data-view="groups"], [data-view="artifacts"]
   /* a status line comes up over the bar, not under it */
   html body.web:not(.panel) :is(.foot .status:not(:empty):not(.lift), .status.lift) { bottom: calc(var(--tabbar) + 10px); }
 }
+/* a page's own tabs past five (the Library's, Settings') are one menu at
+   its top on a phone, "Instructions ⌄", as Usage's days are, rather than a
+   second bar of wrapped lines over the tab bar (phonetabs.js subMenus;
+   gandli on X) */
+.sub-menu { display: none; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+  body.web .sub-as-menu { display: none !important; }
+  body.web .sub-menu {
+    position: relative; display: inline-flex; flex: none; align-items: center; gap: 4px; max-width: 100%;
+    height: 32px; padding: 0 4px 0 2px; border-radius: 7px; font-size: 17px; font-weight: 600; color: var(--fg);
+  }
+  body.web .sub-menu > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.web .sub-menu svg { flex: none; color: var(--muted); transition: transform .15s var(--ease); }
+  body.web .sub-menu.open svg { transform: rotate(180deg); }
+  body.web .sub-menu::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
+  body.web .set-searching .sub-menu { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .sub-menu svg { transition: none; } }
 /* More's menu: each page with its tab's mark */
 .nav-more-menu .pm-head { display: none; }
 .nav-more-menu .pm-item { align-items: center; gap: 10px; padding: 9px 10px; }

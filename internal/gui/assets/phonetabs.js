@@ -51,3 +51,65 @@ more.onclick = () => {
   });
 };
 fit();
+
+// A page's own tabs, past the five an iPhone's segmented control holds, are
+// one menu at the page's top on a phone, "Instructions ⌄", as Usage's days
+// are (plugins/usage/page.js): the Library's dozen and Settings' eight
+// wrapped into a second bar of two or three lines over the tab bar at the
+// foot (gandli on X: 同时存在底部和顶部二级导航). The strip stays, hidden
+// (app.css .sub-as-menu), and a pick clicks its tab, so every tab keeps its
+// one handler; Usage's four and Plugins' three stay as they are.
+const SUB_STRIPS = [["#view-library .lib-tabs", "Library"], ["#setTabs", "Settings"]];
+const subTabs = (strip) => [...strip.querySelectorAll(":scope > button")].filter((b) => !b.hidden);
+function subMenus() {
+  const phone = phoneWeb() && !document.body.classList.contains("panel");
+  for (const [q, name] of SUB_STRIPS) {
+    const strip = document.querySelector(q);
+    if (!strip) continue;
+    const tabs = subTabs(strip), menu = phone && tabs.length > 5;
+    let b = strip.previousElementSibling?.classList.contains("sub-menu") ? strip.previousElementSibling : null;
+    if (strip.classList.contains("sub-as-menu") !== menu) strip.classList.toggle("sub-as-menu", menu);
+    if (!menu) { b?.remove(); continue; }
+    if (!b) {
+      b = el("button", "sub-menu");
+      b.type = "button";
+      b.setAttribute("aria-haspopup", "menu");
+      b.onclick = (e) => {
+        e.stopPropagation();
+        if (b.classList.contains("open")) return closeProtoMenu();
+        const all = subTabs(strip);
+        const on = all.findIndex((x) => x.classList.contains("on"));
+        openProtoMenu(b, all.map((x, i) => ({ v: String(i), name: x.textContent.trim(), literalName: true, note: "" })), String(on), (v) => all[+v]?.click(), name, "sub-menu-pop");
+      };
+      strip.before(b);
+    }
+    const on = tabs.find((x) => x.classList.contains("on")) || tabs[0];
+    const said = on.textContent.trim();
+    if (b.firstChild?.textContent !== said) b.replaceChildren(el("span", "", said), svg(CHEV, 11, 1.8));
+    const label = t(name) + ": " + said;
+    if (b.getAttribute("aria-label") !== label) b.setAttribute("aria-label", label);
+  }
+  subWatch.takeRecords(); // its own changes aren't news
+}
+const subWatch = new MutationObserver(subMenus);
+// the Library draws its head again with each render; Settings' tabs come
+// and go with plugins and features, and either's words with a language.
+// The Library's page is a plugin's, added to the window when it loads.
+const subSeen = new WeakSet();
+function subPages() {
+  for (const page of document.querySelectorAll(":is(#view-library, #view-settings)")) {
+    if (subSeen.has(page)) continue;
+    subSeen.add(page);
+    subWatch.observe(page, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "hidden"] });
+  }
+  subMenus();
+}
+const pageWatch = new MutationObserver(() => {
+  const lib = document.querySelector("#view-library");
+  if (!lib) return;
+  pageWatch.disconnect();
+  subPages();
+});
+if (!document.querySelector("#view-library")) pageWatch.observe(document.body, { childList: true });
+matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").addEventListener?.("change", subMenus);
+subPages();
