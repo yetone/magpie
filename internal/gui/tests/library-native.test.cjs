@@ -2,8 +2,8 @@
 // jinpwng (#7244): a plugin Codex installed from a marketplace and a package
 // Pi installed list their skills, MCP servers and hooks in the Library's own
 // tabs, once, with where they came from. A plugin Claude Code installed
-// itself (#7266) too, its subagents on the Subagents tab. Read only: nothing there to switch,
-// copy or remove, and no row twice. In every language, both engines, at a
+// itself (#7266) too, its subagents on the Subagents tab. Nothing there to switch or remove (an MCP
+// server's row copies it into the library: library-native-copy), and no row twice. In every language, both engines, at a
 // phone's width too. No backend: the API is faked here, with the shapes
 // the Go reader returns for Codex's real cache layout (chrome's inline
 // hooks, codex-app-tools' .mcp.json) and a Pi package. A Codex plugin a
@@ -137,9 +137,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert(titles.every((x) => x.includes(".codex/config.toml")), titles.join(" | "));
           assert.notEqual(titles[0], titles[1]);
         }
-        // read only: nothing to switch, copy or remove
+        // nothing to switch or remove; an MCP server's row has its menu,
+        // to copy it into the library (library-native-copy)
         assert.equal(await rows.getByRole("switch").count(), 0);
-        assert.equal(await rows.locator("button.danger, .lib-icon").count(), 0);
+        assert.equal(await rows.locator("button.danger, .lib-icon:not(.lib-nativemore)").count(), 0);
+        assert.equal(await rows.locator(".lib-nativemore").count(), tab === "mcp" ? tabs.mcp.length : 0);
         assert.deepEqual(calls, ["GET"]);
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         assert(over <= 0, `the page scrolls sideways by ${over}px`);

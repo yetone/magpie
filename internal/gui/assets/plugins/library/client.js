@@ -2399,6 +2399,7 @@ magpie.plugin("library", (ctx) => {
           x.dataset.project = pr.dir;
           row.append(x);
         }
+        if (kind === "mcp") row.append(nativeServerMore(p, x));
         rows.push(row);
       }
     }
@@ -2406,7 +2407,7 @@ magpie.plugin("library", (ctx) => {
     const box = el("section", "lib-nativebox");
     const rh = el("div", "row-head");
     rh.append(el("span", "label", t("Installed in the agents themselves")), el("span", "grow"));
-    box.append(rh, intro(t("Listed as the agents' plugins and packages declare them. The agent loads them: magpie copies and changes nothing, and a session shows what is loaded.")));
+    box.append(rh, intro(t("Listed as the agents' plugins and packages declare them. The agent loads them: magpie changes nothing, and a session shows what is loaded.")));
     if (only) {
       const bar = el("div", "row-head lib-bundleonly lib-nativeonly");
       bar.append(el("span", "label", t("Only what {plugin} brings", { plugin: only.slice(only.indexOf(" ") + 1) })), el("span", "grow"),
@@ -2417,6 +2418,30 @@ magpie.plugin("library", (ctx) => {
     // from a row, is shown whole
     box.append(foldedFound("native-" + kind, rows, !!only));
     return [box];
+  }
+
+  // the row's menu of a server an agent's plugin declares: a copy in the
+  // library, to give to other agents (0xRichardH on X), or why it works
+  // only inside its agent (library.NoCopyWhy)
+  const NO_COPY = {
+    app: (a) => t("It works only inside {agent}'s app: the app starts it with a connection of its own.", { agent: a }),
+    agent: (a) => t("It reads values {agent} fills in when it starts it.", { agent: a }),
+    entry: () => t("Its entry isn't one the library can hold."),
+  };
+  function nativeServerMore(p, x) {
+    const b = button("", "lib-icon lib-nativemore", (e) => {
+      e.stopPropagation();
+      if (b.classList.contains("open")) return closeAgentMenu();
+      const taken = !x.noCopy && (lib.servers || []).some((s) => s.name === x.name);
+      const why = x.noCopy ? (NO_COPY[x.noCopy] || NO_COPY.entry)(p.agentName) : taken ? t("The library has a server called {name}", { name: x.name }) : "";
+      openRowMenu(b, [{ name: t("Copy to the library"), literal: true, icon: GLYPH.doc, off: !!why, why,
+        run: () => change("servers/copy-native", { agent: p.agent, dir: p.dir, name: x.name }, t("{name} is in the library now", { name: x.name })) }]);
+    });
+    b.append(svg(DOTS, 14, 2));
+    b.title = t("More");
+    b.setAttribute("aria-label", t("More"));
+    b.setAttribute("aria-haspopup", "menu");
+    return b;
   }
 
   function renderPi(body) {

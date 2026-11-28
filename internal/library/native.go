@@ -2,8 +2,11 @@ package library
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"maps"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,6 +27,20 @@ import (
 // second time as a copy of the library's. Whether a session loads it is
 // not known from its files, so it is listed as unknown (Loaded) until one
 // shows it.
+//
+// One MCP server of theirs can be copied into the library
+// (CopyNativeServer, 0xRichardH on X), to give to other agents. A copy is
+// the server as the plugin declares it, with the plugin's folder written
+// in where the agent would put it, and no agent ticked. One that works
+// only inside its agent is not copied, and says why (NoCopy): it runs from
+// inside the agent's app install, or comes from the marketplace the
+// agent's app writes out of its own bundle (Codex's openai-bundled), or
+// reads values the agent fills in when it starts it (CLAUDE_PLUGIN_DATA,
+// user_config). Codex's codex_app is the second kind: every tools/list
+// goes through the pipe the Codex app hands it in
+// CODEX_APP_TOOLS_PIPE_PATH, and fails without it (#2308). cua_repl is
+// both: a node_repl inside ChatGPT.app that needs the app's browser access
+// pipe and its signed replies for each Codex session.
 //
 // Codex (codex-rs/core-plugins loader.rs), under CODEX_HOME:
 //
@@ -64,8 +81,24 @@ type NativePart struct {
 	// Detail is a skill's description, a server's transport, a hook's
 	// command
 	Detail string `json:"detail,omitempty"`
+	// NoCopy is, for an MCP server, why it isn't copied into the library:
+	// "app" when it works only inside the agent's app, "agent" when it
+	// reads values the agent fills in when it starts it, "entry" when its
+	// entry isn't one the library can hold. "" for one that is copied.
+	NoCopy string `json:"noCopy,omitempty"`
 
 	dir string // a skill's folder, what a Pi package's filters match
+	// server is an MCP server as the library would hold it, for a copy
+	server *Server
+}
+
+// nativeFrom is the plugin a part comes from, as its MCP servers need it:
+// the agent, the plugin's folder, and whether the agent's app writes the
+// plugin out of its own bundle.
+type nativeFrom struct {
+	agent, agentName string
+	root             string
+	bundled          bool
 }
 
 // NativePlugin is a plugin or package an agent installed itself.
@@ -119,6 +152,54 @@ func ReadNative() []NativePlugin {
 	return out
 }
 
+// CopyNativeServer puts a copy of an MCP server an agent's plugin declares
+// (the plugin in dir) in the library, given to no agent yet: the user
+// gives it to the agents they want. The plugin stays the agent's.
+func CopyNativeServer(agentID, dir, name string) (*Result, error) {
+	// read before change: ReadNative takes the library's lock itself
+	var part *NativePart
+	var of string
+	for _, p := range ReadNative() {
+		if p.Agent != agentID || p.Dir != dir {
+			continue
+		}
+		for i := range p.Parts {
+			if x := p.Parts[i]; x.Kind == "mcp" && x.Name == name {
+				part, of = &p.Parts[i], p.AgentName
+				break
+			}
+		}
+		if part != nil {
+			break
+		}
+	}
+	if part == nil {
+		return nil, fmt.Errorf("no plugin of %s in %s has a server called %s", agentID, dir, name)
+	}
+	if part.NoCopy != "" || part.server == nil {
+		return nil, errors.New(NoCopyWhy(part.NoCopy, of))
+	}
+	s := part.server
+	return changeMCP(func(l *Library) error {
+		if l.server(s.Name) != nil {
+			return fmt.Errorf("the library already has a server called %s", s.Name)
+		}
+		l.MCP = append(l.MCP, s)
+		return nil
+	})
+}
+
+// NoCopyWhy is NativePart.NoCopy said in words, of the agent named agent.
+func NoCopyWhy(why, agent string) string {
+	switch why {
+	case "app":
+		return fmt.Sprintf("It works only inside %s's app: the app starts it with a connection of its own.", agent)
+	case "agent":
+		return fmt.Sprintf("It reads values %s fills in when it starts it.", agent)
+	}
+	return "The library can't hold its entry."
+}
+
 // ---- Codex ------------------------------------------------------------------
 
 type codexConf struct {
@@ -168,12 +249,14 @@ func codexNative() []NativePlugin {
 			if p.Version == "" {
 				p.Version = filepath.Base(root)
 			}
-			if s := conf.Marketplaces[m.Name()].Source; s != "" {
-				p.Source = m.Name() + " (" + s + ")"
+			src := conf.Marketplaces[m.Name()].Source
+			if src != "" {
+				p.Source = m.Name() + " (" + src + ")"
 			}
 			id := pl.Name() + "@" + m.Name()
 			p.Enabled = conf.Plugins[id].Enabled
-			p.Parts = codexParts(root, man)
+			from := nativeFrom{agent: "codex", agentName: "Codex", root: root, bundled: codexBundled(m.Name(), src)}
+			p.Parts = manifestParts(from, man, false)
 			for _, pr := range projects {
 				// a project that says nothing of it has the user's
 				if set := pr.plugins[id]; set != nil {
@@ -348,14 +431,22 @@ func codexVersion(dir string) (string, map[string]any) {
 	return best, bestMan
 }
 
-func codexParts(root string, man map[string]any) []NativePart {
-	return manifestParts(root, man, false)
+// codexBundled is whether a Codex marketplace is the one the Codex app
+// writes out of its own bundle (its config.toml source is
+// CODEX_HOME/.tmp/bundled-marketplaces/<name>): its plugins are made for
+// the app, which starts their servers with what only it has.
+func codexBundled(market, source string) bool {
+	if market == "openai-bundled" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(filepath.ToSlash(source)), "/.tmp/bundled-marketplaces/")
 }
 
 // manifestParts are the parts a plugin's manifest declares. Codex reads
 // the default files only when the manifest names none; Claude Code reads
 // them too (also).
-func manifestParts(root string, man map[string]any, also bool) []NativePart {
+func manifestParts(from nativeFrom, man map[string]any, also bool) []NativePart {
+	root := from.root
 	var parts []NativePart
 	// skills
 	roots := pathsOf(man["skills"])
@@ -382,7 +473,7 @@ func manifestParts(root string, man map[string]any, also bool) []NativePart {
 		docs = append(docs, nativeJSONFiles(root, []string{".mcp.json"})...)
 	}
 	for _, d := range docs {
-		parts = append(parts, nativeServers(d)...)
+		parts = append(parts, nativeServers(d, from)...)
 	}
 	// hooks: files or inline objects, else hooks/hooks.json
 	named = true
@@ -521,7 +612,7 @@ func claudeNative() []NativePlugin {
 				// as one the user or a project chose
 				continue
 			}
-			p.Parts = manifestParts(e.InstallPath, man, true)
+			p.Parts = manifestParts(nativeFrom{agent: "claude", agentName: "Claude Code", root: e.InstallPath}, man, true)
 			out = append(out, p)
 		}
 	}
@@ -544,7 +635,7 @@ func nativeJSONFiles(root string, names []string) []map[string]any {
 	return out
 }
 
-func nativeServers(doc map[string]any) []NativePart {
+func nativeServers(doc map[string]any, from nativeFrom) []NativePart {
 	m, _ := doc["mcpServers"].(map[string]any)
 	if m == nil {
 		m = doc
@@ -562,9 +653,135 @@ func nativeServers(doc map[string]any) []NativePart {
 		case typ == "http" || typ == "streamable-http" || typ == "" && plStr(e["url"]) != "":
 			tr = "http"
 		}
-		out = append(out, NativePart{Kind: "mcp", Name: k, Detail: tr})
+		p := NativePart{Kind: "mcp", Name: k, Detail: tr}
+		p.server, p.NoCopy = nativeServer(k, e, from)
+		out = append(out, p)
 	}
 	return out
+}
+
+// nativeServer is a plugin's MCP server as the library would hold it, or
+// why it can't be (NativePart.NoCopy). The entry is read as the agent's
+// own are (decode): a variable Codex's env_vars passes on becomes a
+// reference to it. Claude Code's ${CLAUDE_PLUGIN_ROOT} is the plugin's
+// folder, and the server is given it in its env, as Claude Code gives
+// it. A relative cwd is from the plugin's folder; the library has no cwd,
+// so the command and the arguments that are paths are made paths from it.
+func nativeServer(name string, e map[string]any, from nativeFrom) (*Server, string) {
+	f := &mcpFile{Format: fmtClaude}
+	if from.agent == "codex" {
+		f.Format = fmtCodex
+	}
+	slug := pluginSlug(name)
+	if slug == "" {
+		return nil, "entry"
+	}
+	s, ok := f.decode(slug, e)
+	if !ok {
+		return nil, "entry"
+	}
+	s.Agents = []string{}
+	cwd := plStr(e["cwd"])
+	if from.agent == "claude" {
+		sub := strings.NewReplacer("${CLAUDE_PLUGIN_ROOT}", from.root, "$CLAUDE_PLUGIN_ROOT", from.root).Replace
+		s.Command, s.URL, cwd = sub(s.Command), sub(s.URL), sub(cwd)
+		for i := range s.Args {
+			s.Args[i] = sub(s.Args[i])
+		}
+		for _, m := range []map[string]string{s.Env, s.Headers} {
+			for k, v := range m {
+				m[k] = sub(v)
+			}
+		}
+		if all := serverText(s, cwd); strings.Contains(all, "CLAUDE_PLUGIN_DATA") || strings.Contains(all, "user_config.") {
+			return nil, "agent"
+		}
+	}
+	if cwd != "" && !filepath.IsAbs(cwd) {
+		cwd = filepath.Join(from.root, filepath.FromSlash(cwd))
+	}
+	if cwd != "" && !s.Remote() {
+		s.Command = fromDir(cwd, s.Command, true)
+		for i, a := range s.Args {
+			s.Args[i] = fromDir(cwd, a, false)
+		}
+	}
+	if from.bundled {
+		return nil, "app"
+	}
+	// a program, a folder or a file of the agent's app, in any place the
+	// server is started with
+	if !s.Remote() {
+		for _, p := range append(append([]string{s.Command, cwd}, s.Args...), slices.Collect(maps.Values(s.Env))...) {
+			if inAgentApp(p, from.agent, from.agentName) {
+				return nil, "app"
+			}
+		}
+	}
+	if from.agent == "codex" {
+		s.StartupTimeout, s.CallTimeout = codexSeconds(e["startup_timeout_sec"]), codexSeconds(e["tool_timeout_sec"])
+	}
+	if from.agent == "claude" && !s.Remote() {
+		if _, set := s.Env["CLAUDE_PLUGIN_ROOT"]; !set {
+			if s.Env == nil {
+				s.Env = map[string]string{}
+			}
+			s.Env["CLAUDE_PLUGIN_ROOT"] = from.root
+		}
+	}
+	if s.check() != nil {
+		return nil, "entry"
+	}
+	// a server of the plugin's own files is this computer's
+	s.Local = from.root != "" && strings.Contains(serverText(s, cwd), from.root)
+	return s, ""
+}
+
+// serverText is every value a server is started or reached with.
+func serverText(s *Server, cwd string) string {
+	v := []string{s.Command, s.URL, cwd}
+	v = append(v, s.Args...)
+	for _, m := range []map[string]string{s.Env, s.Headers} {
+		for _, k := range slices.Sorted(maps.Keys(m)) {
+			v = append(v, m[k])
+		}
+	}
+	return strings.Join(v, "\n")
+}
+
+// fromDir is p, a command or an argument of a server started in dir, as a
+// path from anywhere: one written ./x or ../x, a command with a folder in
+// it, or an argument naming a file in dir. Anything else (a program on the
+// PATH, a flag, a word) is as written.
+func fromDir(dir, p string, command bool) string {
+	if p == "" || filepath.IsAbs(p) || strings.HasPrefix(p, "-") || strings.Contains(p, "$") {
+		return p
+	}
+	slash := filepath.ToSlash(p)
+	at := filepath.Join(dir, filepath.FromSlash(p))
+	if strings.HasPrefix(slash, "./") || strings.HasPrefix(slash, "../") || command && strings.Contains(slash, "/") {
+		return at
+	}
+	if fi, err := os.Stat(at); !command && err == nil && !fi.IsDir() {
+		return at
+	}
+	return p
+}
+
+// codexSeconds is a Codex entry's timeout in whole seconds, rounded up; 0
+// for none, or one past what the library holds.
+func codexSeconds(v any) int {
+	var f float64
+	switch x := v.(type) {
+	case float64:
+		f = x
+	case int64:
+		f = float64(x)
+	}
+	if f <= 0 || f > maxStartupTimeout {
+		return 0
+	}
+	return int(math.Ceil(f))
 }
 
 func mapKeys(m map[string]any) func(func(string) bool) {
@@ -645,13 +862,15 @@ func nativeSkills(dir string, depth int) []NativePart {
 
 // nativeUnique drops a part listed twice, and keeps the list bounded.
 func nativeUnique(parts []NativePart) []NativePart {
-	seen := map[NativePart]bool{}
+	type key struct{ kind, name, detail, dir string }
+	seen := map[key]bool{}
 	out := []NativePart{}
 	for _, p := range parts {
-		if seen[p] || len(out) >= nativePartsMax {
+		k := key{p.Kind, p.Name, p.Detail, p.dir}
+		if seen[k] || len(out) >= nativePartsMax {
 			continue
 		}
-		seen[p] = true
+		seen[k] = true
 		out = append(out, p)
 	}
 	kinds := map[string]int{"skill": 0, "mcp": 1, "hook": 2, "subagent": 3}

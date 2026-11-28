@@ -2180,11 +2180,18 @@ func appOwned(s *Server, a *agent.Agent) bool {
 	if s.Remote() || a == nil {
 		return false
 	}
-	cmd := strings.ToLower(strings.ReplaceAll(s.Command, `\`, "/"))
-	if a.ID == "codex" && (strings.Contains(cmd, "/cua_node/") || strings.Contains(cmd, "/openai/codex/runtimes/")) {
+	return inAgentApp(s.Command, a.ID, a.Name)
+}
+
+// inAgentApp is whether path is inside the app install of the agent of
+// this id and name: its Mac app bundle, its Microsoft Store app, the Codex
+// app's runtimes.
+func inAgentApp(path, id, name string) bool {
+	cmd := strings.ToLower(strings.ReplaceAll(path, `\`, "/"))
+	if id == "codex" && (strings.Contains(cmd, "/cua_node/") || strings.Contains(cmd, "/openai/codex/runtimes/")) {
 		return true
 	}
-	names := []string{strings.ToLower(a.ID), strings.ToLower(a.Name)}
+	names := []string{strings.ToLower(id), strings.ToLower(name)}
 	if id, _, ok := strings.Cut(names[0], "-"); ok {
 		names = append(names, id)
 	}

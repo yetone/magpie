@@ -60,6 +60,7 @@ const libraryUsage = `magpie library                     what the library gives 
   magpie library plugin import <folder | owner/repo | git address> [plugin…] [agents=a,b…|none]   put a source's plugins in the library, as Library › Claude plugins does
   magpie library project …           a project folder's own skills (Library › Projects): magpie library project help
   magpie library native              what plugins Codex and Claude Code and packages Pi installed themselves declare (read only; the agent loads them)
+  magpie library native copy <server> [agent]   one of their MCP servers into the library, to give to other agents (not one that works only inside its agent)
   magpie library rtk                 which agents run their shell commands through RTK (rtk-ai.app), to save tokens
   magpie library rtk on|off <agent>  switch it (on with RTK's own installer; off works with RTK gone)
   magpie library rtk install         install RTK (Homebrew, winget, or RTK's own script)

@@ -922,6 +922,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.ImportServer(in.Name)
 		case "servers/remove-found":
 			res, err = library.RemoveFoundServer(in.Name)
+		case "servers/copy-native":
+			// one an agent's own plugin declares, Dir its folder
+			res, err = library.CopyNativeServer(in.Agent, in.Dir, in.Name)
 		case "hooks/save":
 			res, err = library.SaveHook(in.Old, in.Hook)
 		case "env/save":
