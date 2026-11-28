@@ -816,6 +816,20 @@ characters with no note; its Markdown export is whole. Verification:
 `TestReadTranscriptPages`, `TestSessionsShowJSONFrom`,
 `TestSessionsShowFull`, `TestSessionsMCPReadFull`.
 
+`magpie sessions show agent:id` finds its session with `sessions.FindOne`,
+not `Find`: each run is a new process with no listing kept (`keptList`),
+and `Find` lists every agent's files and puts the newest 200 sessions
+together for the one asked for, 4-5s a page over ~3000 sessions
+(hdhfhf_hdh219 on X). A Claude Code session is read from every Claude
+Code session's own file (what `ccFamily` judges copies and branches by)
+and its own subagents' and workflow agents' files; a Codex thread from
+the Codex rollouts on this computer (its identity and task title). No
+other agent's folders and no WSL distro are listed. What it gives is
+`Find`'s, with `copies` set as the listing sets them, also for a session
+older than the listing's 200; any other agent, or a session not found
+so, is `Find`'s. Verification: `TestFindOneIsFindWithoutAFullPass`,
+`TestSessionsShowListsOneAgent`.
+
 The sheet's "turn i / N" counts the whole session. A first read that is cut,
 or starts past the start (a search's, `from` > 0), carries `turns`, the
 user's text messages in the whole file, and `turnsBefore`, those among the

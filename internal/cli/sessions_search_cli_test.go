@@ -108,6 +108,34 @@ func TestSessionsShow(t *testing.T) {
 	}
 }
 
+// hdhfhf_hdh219 on X: each `magpie sessions show agent:id --from N` took
+// 4-5s over ~3000 sessions, every agent's files listed for the one asked
+// for. A Claude Code or Codex session named so is read from its agent's
+// files alone (sessions.FindOne); one that isn't there is still looked
+// for everywhere.
+func TestSessionsShowListsOneAgent(t *testing.T) {
+	sessionsHome(t)
+	for _, ref := range []string{fixClaude, "codex:01a0bdc9-b5fd-7e63-9658-68bc8dce5ecd"} {
+		sessions.Reset()
+		before := sessions.FullPasses()
+		out, err := runSearch(t, true, ref, "--from", "1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantAll(t, out, ref)
+		if n := sessions.FullPasses() - before; n != 0 {
+			t.Errorf("show %s listed every agent's files %d times, want none", ref, n)
+		}
+	}
+	before := sessions.FullPasses()
+	if _, err := runSearch(t, true, "claude:nope"); err == nil {
+		t.Fatal("claude:nope was shown")
+	}
+	if sessions.FullPasses() == before {
+		t.Error("a session not found under its agent wasn't looked for everywhere")
+	}
+}
+
 // A flag either command doesn't know, or one missing its value, is
 // refused with the usage, never taken for words or a session (LESSONS:
 // magpie snow --help wrote "--help" into a profile); --help prints the

@@ -1032,6 +1032,13 @@ var filesHook func()
 
 func allFiles() []file { return allFilesWith(&allKept[0], zcodeFiles) }
 
+var fullPasses atomic.Int64
+
+// FullPasses is how many times this process has listed every agent's
+// session files. The CLI's tests hold `magpie sessions show agent:id` to
+// none (FindOne).
+func FullPasses() int64 { return fullPasses.Load() }
+
 // allFilesForTitles is allFiles with ZCode's sessions listed from their own
 // rows alone: a name poll needs titles, not every message counted
 // (zcodeFiles joins them for a session's size and last activity).
@@ -1041,6 +1048,7 @@ func allFilesWith(kept *filesKept, zcode func() []file) []file {
 	if filesHook != nil {
 		filesHook()
 	}
+	fullPasses.Add(1)
 	lists := callFileLists(codexFiles())
 	lists = append(lists, openCodeFiles(), piFiles(), raftFiles(), cindyFiles(), agyFold(wslFiles("pi", "raft", "omp", "kimi", "antigravity", "agy")), zcode())
 	lists = append(lists, dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),

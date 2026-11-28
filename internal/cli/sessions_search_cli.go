@@ -305,7 +305,7 @@ func findSession(ref string) (sessions.Session, error) {
 		if !sessions.Reads(agent) {
 			return sessions.Session{}, fmt.Errorf("%w: magpie sessions read on %s allows it", sessions.ErrNotRead, agent)
 		}
-		if s, found := sessions.Find(agent, id); found {
+		if s, found := sessions.FindOne(agent, id); found {
 			return s, nil
 		}
 		return sessions.Session{}, fmt.Errorf("no session %s (magpie sessions search finds them)", ref)
@@ -323,7 +323,7 @@ func findSession(ref string) (sessions.Session, error) {
 		if !sessions.Reads(have[0].Agent) {
 			return sessions.Session{}, sessions.ErrNotRead
 		}
-		if s, found := sessions.Find(have[0].Agent, have[0].ID); found {
+		if s, found := sessions.FindOne(have[0].Agent, have[0].ID); found {
 			return s, nil
 		}
 		return have[0], nil
