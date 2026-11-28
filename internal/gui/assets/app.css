@@ -4749,7 +4749,9 @@ input.words.remote-key { width: 160px; }
 /* Warm up now's line holds a vendor's reason, which can be one long word */
 .row.warm-now .sub { white-space: normal; overflow-wrap: anywhere; }
 .warm-at { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
-.warm-at input.at { width: auto; height: 27px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-size: 12.5px; font-variant-numeric: tabular-nums; outline: none; transition: border-color .12s, box-shadow .12s; }
+/* a field beside its Off/On stands as tall as it: .opt's 22px and the
+   .segs' 2px round it (gandli on X) */
+.warm-at input.at { width: auto; height: 26px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-size: 12.5px; font-variant-numeric: tabular-nums; outline: none; transition: border-color .12s, box-shadow .12s; }
 .warm-at input.at:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .warm-at input.at::-webkit-calendar-picker-indicator { opacity: .55; }
 /* a usage alert's share or amount: a short number field, its unit beside it */
@@ -4763,7 +4765,7 @@ input.words.remote-key { width: 160px; }
 .bark-box { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
 .bark-box input.words { width: 180px; }
 .bark-box code { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
-.warm-at .warm-rm, .warm-at .warm-add { min-width: 24px; height: 27px; padding: 0 6px; font-size: 14px; line-height: 1; }
+.warm-at .warm-rm, .warm-at .warm-add { min-width: 24px; height: 26px; padding: 0 6px; font-size: 14px; line-height: 1; }
 .row.pref .sub .warn { color: var(--amber); }
 .row.pref .sub.wraps { white-space: normal; }
 .row.pref code.sub.https-cmd { display: block; font-size: 11px; user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
@@ -5095,6 +5097,10 @@ body.panel .modal { padding: 16px 12px; }
   body.web input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
   body.web textarea, body.web select { font-size: 16px; min-height: 44px; }
   body.web { --field-h: 44px; } /* the height above, for the names beside such a field */
+  /* a field beside its Off/On keeps to the switch's height, .opt's 28px
+     here and the .segs' 2px round it, not the 44px above ([type] outweighs
+     that rule) (gandli on X) */
+  body.web .warm-at input.at[type] { min-height: 0; height: 32px; }
   body.web .modal { padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
   body.web .modal .editor.framed > .ebody, body.web .editor { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px; align-items: start; }
   body.web .editor label { text-align: left; }
