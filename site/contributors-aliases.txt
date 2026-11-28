@@ -1,0 +1,14 @@
+# X accounts on the contributors page (usemagpie.ai/docs/contributors)
+# whose owners say a GitHub login is theirs:
+# "x-handle github-login" a line. Lines after # are comments.
+#
+# A line joins nothing by itself. At each deploy the build reads that
+# login's public GitHub profile, and the X account's credits go under
+# the login only while the profile names that X account (its X link in
+# Social accounts, or the Twitter username). A login a commit already
+# credits has its profile read anyway, so its line is the claim's record.
+#
+# A line is added on the X account owner's word and reviewed like code;
+# the proof is the profile, never the line.
+ZhouYimingsjtu dreamfarer-space  # said on X, 11-28
+elis_pina LoveEcho1145           # said on X, 11-28 (their issues #6582, #6584)

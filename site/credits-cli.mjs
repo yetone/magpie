@@ -19,15 +19,18 @@
 // GraphQL API with GH_TOKEN, GITHUB_TOKEN or `gh auth token`. When that
 // can't be read, those people are left out (and `wall` keeps the authors
 // its last output knew); the rest still goes out. The same API gives each
-// credited GitHub user's public X account (twitter_username), so an X
-// credit under that handle is that GitHub person; a user it can't read
-// joins nobody (and `wall` keeps the accounts its last output knew). Names
-// in contributors-exclude.txt are never given.
+// credited GitHub user's public X accounts (twitter_username and the X
+// links among the profile's social accounts), so an X credit under such a
+// handle is that GitHub person; a user it can't read joins nobody (and
+// `wall` keeps the accounts its last output knew). contributors-aliases.txt
+// names GitHub logins with no credit of their own whose profiles are read
+// too, for the one X account each line names. Names in
+// contributors-exclude.txt are never given.
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins } from "./credits.mjs";
+import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins, handlesOf } from "./credits.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const warn = (m) => process.stderr.write(`credits: ${m}\n`);
@@ -48,6 +51,52 @@ function log(args) {
       tags: (refs || "").split(", ").map((s) => s.replace(/^tag: /, "")).filter((t) => /^v\d+\.\d+\.\d+$/.test(t)),
     };
   });
+}
+
+// contributors-aliases.txt: "x-handle github-login" a line, an X account
+// and the GitHub login its owner says is theirs. Only a word shaped like
+// each counts; lines after # are comments.
+export function aliases(file = join(here, "contributors-aliases.txt")) {
+  let text = "";
+  try { text = readFileSync(file, "utf8"); } catch { return []; }
+  const out = [];
+  for (const l of text.split("\n")) {
+    const m = l.replace(/#.*/, "").trim().match(/^@?([A-Za-z0-9_]{1,15})\s+([A-Za-z0-9-]{1,39})$/);
+    if (m) out.push({ x: m[1], login: m[2] });
+    else if (l.replace(/#.*/, "").trim()) warn(`contributors-aliases.txt: "${l.trim()}" is not "x-handle github-login"; left out`);
+  }
+  return out;
+}
+
+// The logins to ask GitHub for: the credited ones, and each alias's.
+export function toLookUp(credited, list) {
+  const seen = new Map(credited.map((l) => [l.toLowerCase(), l]));
+  for (const a of list) if (!seen.has(a.login.toLowerCase())) seen.set(a.login.toLowerCase(), a.login);
+  return [...seen.values()];
+}
+
+// x (login → the X accounts its profile names) as credit() may use it: a
+// login no commit credits counts only for the X accounts an alias line
+// pairs with it, and only those its profile names. A line whose login's
+// profile doesn't name that X account changes nothing.
+export function honoured(x, credited, list) {
+  const own = new Set(credited.map((l) => l.toLowerCase()));
+  const out = {};
+  for (const [login, v] of Object.entries(x || {})) {
+    if (own.has(login.toLowerCase())) { out[login] = v; continue; }
+    const want = new Set(list.filter((a) => a.login.toLowerCase() === login.toLowerCase()).map((a) => a.x.toLowerCase()));
+    const kept = handlesOf(v).filter((h) => want.has(h.replace(/^@/, "").toLowerCase()));
+    if (kept.length) out[login] = kept.length === 1 ? kept[0] : kept;
+  }
+  return out;
+}
+
+// the X handle a social account's link names: "https://x.com/dou_dev"
+const X_LINK = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/(?:#!\/)?@?([A-Za-z0-9_]{1,15})\/?(?:[?#].*)?$/i;
+const X_PATHS = new Set(["home", "i", "intent", "share", "search", "hashtag", "explore", "settings", "login", "signup", "messages", "notifications"]);
+export function xOfLink(url) {
+  const m = String(url || "").trim().match(X_LINK);
+  return m && !X_PATHS.has(m[1].toLowerCase()) ? m[1] : "";
 }
 
 export function excluded(file = join(here, "contributors-exclude.txt")) {
@@ -103,9 +152,11 @@ export async function authors(refs, { known = {}, fetchImpl = globalThis.fetch, 
   return got;
 }
 
-// GitHub login → the X handle its public profile names, asked fresh each
-// time. Only logins with one are in the map. A login GitHub doesn't answer
-// keeps what known had for it, or is left out: unknown joins nobody.
+// GitHub login → the X handle its public profile names (twitter_username,
+// and any x.com or twitter.com link among its social accounts; a list when
+// they name more than one), asked fresh each time. Only logins with one are
+// in the map. A login GitHub doesn't answer keeps what known had for it, or
+// is left out: unknown joins nobody.
 export async function xAccounts(users, { known = {}, fetchImpl = globalThis.fetch, tok = token() } = {}) {
   const got = {};
   const kept = (l) => { if (known[l]) got[l] = known[l]; };
@@ -114,7 +165,7 @@ export async function xAccounts(users, { known = {}, fetchImpl = globalThis.fetc
   if (!tok) { warn(`no GitHub token: X accounts of ${list.length} people not read`); list.forEach(kept); return got; }
   for (let i = 0; i < list.length; i += 100) {
     const chunk = list.slice(i, i + 100);
-    const q = `query { ${chunk.map((l, j) => `u${j}: user(login: ${JSON.stringify(l)}) { login twitterUsername }`).join(" ")} }`;
+    const q = `query { ${chunk.map((l, j) => `u${j}: user(login: ${JSON.stringify(l)}) { login twitterUsername socialAccounts(first: 20) { nodes { url } } }`).join(" ")} }`;
     try {
       const res = await fetchImpl("https://api.github.com/graphql", {
         method: "POST",
@@ -130,7 +181,13 @@ export async function xAccounts(users, { known = {}, fetchImpl = globalThis.fetc
         const u = data[`u${j}`];
         if (u === undefined) return kept(l); // not answered
         // null: no such user any more, so no X account
-        if (u && u.twitterUsername && String(u.login).toLowerCase() === l.toLowerCase()) got[l] = String(u.twitterUsername);
+        if (!u || String(u.login).toLowerCase() !== l.toLowerCase()) return;
+        const hs = [];
+        const nodes = (u.socialAccounts && u.socialAccounts.nodes) || [];
+        for (const h of [u.twitterUsername, ...nodes.map((n) => xOfLink(n && n.url))]) {
+          if (h && !hs.some((k) => k.toLowerCase() === String(h).toLowerCase())) hs.push(String(h));
+        }
+        if (hs.length) got[l] = hs.length === 1 ? hs[0] : hs;
       });
     } catch (e) {
       warn(`X accounts not read (${e.message}); those people keep their last or none`);
@@ -146,7 +203,9 @@ async function cmdThanks(range) {
   const refs = commits.flatMap((c) => parse(c.subject).refs);
   const issueAuthors = await authors(refs);
   const exclude = excluded();
-  const x = await xAccounts(logins(credit(commits, { issueAuthors, exclude })));
+  const credited = logins(credit(commits, { issueAuthors, exclude }));
+  const al = aliases();
+  const x = honoured(await xAccounts(toLookUp(credited, al)), credited, al);
   const people = everyone(credit(commits, { issueAuthors, exclude, xAccounts: x }));
   const en = thanks(people, "en");
   if (en) process.stdout.write(en + "\n" + thanks(people, "zh") + "\n");
@@ -176,7 +235,9 @@ async function cmdWall(out = join(here, "public", "contributors.json")) {
   const refs = released.flatMap((c) => parse(c.subject).refs);
   const issueAuthors = await authors(refs, { known: before.issueAuthors || {} });
   const exclude = excluded();
-  const x = await xAccounts(logins(credit(released, { issueAuthors, exclude })), { known: before.xAccounts || {} });
+  const credited = logins(credit(released, { issueAuthors, exclude }));
+  const al = aliases();
+  const x = honoured(await xAccounts(toLookUp(credited, al), { known: before.xAccounts || {} }), credited, al);
   const people = wall(released, { issueAuthors, exclude, xAccounts: x });
   const data = { generated: new Date().toISOString(), head: commits.length ? commits.at(-1).sha : "", issueAuthors, xAccounts: x, people };
   const put = (file, text) => { writeFileSync(file + ".tmp", text); renameSync(file + ".tmp", file); };

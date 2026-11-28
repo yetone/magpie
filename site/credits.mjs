@@ -18,8 +18,8 @@
 //     brackets, not a name anywhere else in the body.
 //
 // An X credit is the GitHub person's when that GitHub user's public profile
-// names the X account (its twitter_username, which the user sets
-// themselves; looked up by credits-cli.mjs). It goes under the GitHub
+// names the X account (its twitter_username or an X link among its social
+// accounts, which the user sets themselves; looked up by credits-cli.mjs). It goes under the GitHub
 // login, via X and GitHub. Nothing else joins two names: never a similar
 // spelling, never an email.
 //
@@ -265,7 +265,7 @@ const coName = (c) => (typeof c === "string" ? { name: c, email: "" } : c);
 // coauthors: [{ name, email }] }]
 // issueAuthors: Map or object of "repo#n" → login (a bot's ends in "[bot]").
 // xAccounts: Map or object of GitHub login → the X handle its public profile
-// names ("" for none).
+// names, or a list of them ("" for none).
 // Returns an array beside commits, each [{ key, name, via, github }].
 export function credit(commits, { issueAuthors = {}, exclude = [], xAccounts = {} } = {}) {
   const authorOf = issueAuthors instanceof Map ? (k) => issueAuthors.get(k) : (k) => issueAuthors[k];
@@ -321,14 +321,19 @@ const X_HANDLE = /^[A-Za-z0-9_]{1,15}$/;
 function xLogins(xAccounts) {
   const pairs = xAccounts instanceof Map ? [...xAccounts] : Object.entries(xAccounts || {});
   const by = new Map();
-  for (const [login, handle] of pairs) {
-    const h = String(handle || "").trim().replace(/^@/, "");
+  for (const [login, v] of pairs) for (const handle of handlesOf(v)) {
+    const h = handle.trim().replace(/^@/, "");
     if (!login || BOT.test(login) || !X_HANDLE.test(h)) continue;
     const k = lower(h);
     by.set(k, by.has(k) && lower(by.get(k) || "") !== lower(login) ? null : login);
   }
   for (const [k, v] of by) if (!v) by.delete(k);
   return by;
+}
+
+// an xAccounts value as a list: "a" or ["a", "b"]
+export function handlesOf(v) {
+  return (Array.isArray(v) ? v : [v]).map((h) => String(h == null ? "" : h)).filter(Boolean);
 }
 
 // the GitHub logins credit() found, to look up their X accounts
@@ -427,14 +432,14 @@ export function renderWall(data, lang) {
   const w = WORDS[lang] || WORDS.en;
   const people = data && Array.isArray(data.people) ? data.people : [];
   if (!people.length) return `<p>${esc(w.none)}</p>`;
-  const xOf = new Map(Object.entries((data && data.xAccounts) || {}).map(([l, h]) => [lower(l), String(h)]));
+  const xOf = new Map(Object.entries((data && data.xAccounts) || {}).map(([l, h]) => [lower(l), handlesOf(h)]));
   const ids = anchors(people);
   const line = (r) => r.what.map((t) => `<li><a href="${RELEASE(r.v)}"><code>v${esc(r.v)}</code></a> ${esc(t)}</li>`).join("");
   const rows = people.map((p, i) => {
     const name = p.github ? `<a href="https://github.com/${encodeURIComponent(p.github)}">${esc(p.name)}</a>` : esc(p.name);
     const via = (p.via || []).length ? `<br><span class="cw-via">${p.via.map(esc).join(" · ")}</span>` : "";
     const also = [];
-    for (const k of [p.github, p.github && xOf.get(lower(p.github))]) if (k && lower(k) !== lower(p.name) && !also.includes(lower(k))) also.push(lower(k));
+    for (const k of [p.github, ...((p.github && xOf.get(lower(p.github))) || [])]) if (k && lower(k) !== lower(p.name) && !also.includes(lower(k))) also.push(lower(k));
     const items = [];
     for (const r of p.releases || []) for (const t of r.what || []) items.push({ v: r.v, what: [t] });
     const head = items.slice(0, SHOWN).map(line).join("");

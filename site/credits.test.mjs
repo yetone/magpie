@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS } from "./credits.mjs";
-import { authors, excluded, xAccounts } from "./credits-cli.mjs";
+import { authors, excluded, xAccounts, aliases, toLookUp, honoured, xOfLink } from "./credits-cli.mjs";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -300,7 +300,7 @@ test("names are never joined by a similar spelling, another platform or a shared
 
 test("X accounts GitHub can't give join nobody", async () => {
   const ok = async (_, req) => {
-    assert.match(JSON.parse(req.body).query, /u0: user\(login: "Lemonawa"\) \{ login twitterUsername \}/);
+    assert.match(JSON.parse(req.body).query, /u0: user\(login: "Lemonawa"\) \{ login twitterUsername socialAccounts\(first: 20\) \{ nodes \{ url \} \} \}/);
     return { ok: true, json: async () => ({ data: { u0: { login: "Lemonawa", twitterUsername: "realLemonawa" }, u1: { login: "alice", twitterUsername: null }, u2: null } }) };
   };
   assert.deepEqual(await xAccounts(["Lemonawa", "alice", "gone"], { fetchImpl: ok, tok: "t" }), { Lemonawa: "realLemonawa" });
@@ -316,6 +316,81 @@ test("X accounts GitHub can't give join nobody", async () => {
     const dropped = async () => ({ ok: true, json: async () => ({ data: { u0: { login: "Lemonawa", twitterUsername: null } } }) });
     assert.deepEqual(await xAccounts(["Lemonawa"], { fetchImpl: dropped, tok: "t", known: { Lemonawa: "realLemonawa" } }), {});
   } finally { process.stderr.write = err; }
+});
+
+test("a profile's X link among its social accounts names its X account too", async () => {
+  // dou_dev's link as GitHub gives it: https://x.com/dou_dev
+  assert.equal(xOfLink("https://x.com/dou_dev"), "dou_dev");
+  assert.equal(xOfLink("https://twitter.com/yukaii_h"), "yukaii_h");
+  assert.equal(xOfLink("https://www.x.com/@ZhouYimingsjtu/"), "ZhouYimingsjtu");
+  for (const u of ["https://x.com/intent", "https://twitter.com/home/", "https://x.com/intent/follow?screen_name=a", "https://x.com/i/status/1", "https://x.com/a/status/1", "https://bsky.app/profile/a", "https://notx.com/a", "https://x.com/"]) assert.equal(xOfLink(u), "", u);
+  let asked = "";
+  const gh = async (_, req) => {
+    asked = JSON.parse(req.body).query;
+    return { ok: true, json: async () => ({ data: {
+      u0: { login: "isdou", twitterUsername: "dou_dev", socialAccounts: { nodes: [{ url: "https://x.com/dou_dev" }] } },
+      u1: { login: "dreamfarer-space", twitterUsername: null, socialAccounts: { nodes: [{ url: "https://x.com/ZhouYimingsjtu" }, { url: "https://github.blog" }] } },
+      u2: { login: "two", twitterUsername: "first", socialAccounts: { nodes: [{ url: "https://twitter.com/second" }] } },
+      u3: { login: "LoveEcho1145", twitterUsername: null, socialAccounts: { nodes: [] } },
+    } }) };
+  };
+  const x = await xAccounts(["isdou", "dreamfarer-space", "two", "LoveEcho1145"], { fetchImpl: gh, tok: "t" });
+  assert.match(asked, /u1: user\(login: "dreamfarer-space"\) \{ login twitterUsername socialAccounts\(first: 20\) \{ nodes \{ url \} \} \}/);
+  assert.deepEqual(x, { isdou: "dou_dev", "dreamfarer-space": "ZhouYimingsjtu", two: ["first", "second"] });
+  // either of two X accounts joins, and both find the row
+  const both = [{ subject: "gui: a thing (second on X)", v: "0.1.2" }, { subject: "gui: another (first on X)", v: "0.1.1" }];
+  const people = wall(both, { xAccounts: { two: ["first", "second"] } });
+  assert.deepEqual(people.map((p) => [p.name, p.github, p.via]), [["two", "two", ["X"]]]);
+  assert.match(renderWall({ people, xAccounts: { two: ["first", "second"] } }, "en"), /<tr id="two" data-k="first second">/);
+});
+
+// ZhouYimingsjtu on X says GitHub's dreamfarer-space is theirs; no commit
+// credits that login, so only contributors-aliases.txt has its profile read
+const zhou = [{
+  subject: "provider: Antigravity counts Gemini 4 Carbon and Argon at their original price, $4 / $20 / $0.20",
+  body: "ZhouYimingsjtu on X: with an Ultra 20x plan, ~$200 of real use gave\nCarbon:Neon:Hydrogen = 1.64:1:0.39. magpie priced them 2:3:1.5 by input",
+  v: "0.1.4541",
+}];
+
+test("an alias line joins an X account to a login only while that login's profile names it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "credits-"));
+  const err = process.stderr.write;
+  let warned = "";
+  process.stderr.write = (m) => { warned += m; return true; };
+  try {
+    writeFileSync(join(dir, "a.txt"), "# comment\nZhouYimingsjtu dreamfarer-space  # said on X\n@elis_pina LoveEcho1145\nnot an alias line\ndreamfarer_space x_y\n\n");
+    const al = aliases(join(dir, "a.txt"));
+    assert.deepEqual(al, [{ x: "ZhouYimingsjtu", login: "dreamfarer-space" }, { x: "elis_pina", login: "LoveEcho1145" }]);
+    assert.match(warned, /"not an alias line" is not "x-handle github-login"/);
+    assert.match(warned, /"dreamfarer_space x_y"/); // an underscore is no GitHub login
+    assert.deepEqual(aliases(join(dir, "none.txt")), []);
+    // the alias's login is looked up beside the credited ones, once
+    assert.deepEqual(toLookUp(["LoveEcho1145", "isdou"], al), ["LoveEcho1145", "isdou", "dreamfarer-space"]);
+    assert.deepEqual(toLookUp(["loveecho1145"], al), ["loveecho1145", "dreamfarer-space"]);
+
+    // the profile names nothing yet: nothing changes
+    let x = honoured({}, [], al);
+    assert.deepEqual(x, {});
+    assert.deepEqual(wall(zhou, { xAccounts: x }).map((p) => [p.name, p.github, p.via]), [["ZhouYimingsjtu", undefined, ["X"]]]);
+    // it names that X account: the credit goes under the login
+    x = honoured({ "dreamfarer-space": "ZhouYimingsjtu" }, [], al);
+    assert.deepEqual(x, { "dreamfarer-space": "ZhouYimingsjtu" });
+    const joined = wall(zhou, { xAccounts: x });
+    assert.deepEqual(joined.map((p) => [p.name, p.github, p.via]), [["dreamfarer-space", "dreamfarer-space", ["X"]]]);
+    assert.match(renderWall({ people: joined, xAccounts: x }, "zh"), /<tr id="dreamfarer-space" data-k="zhouyimingsjtu">/);
+    // it names another X account: an uncredited login takes only the line's
+    assert.deepEqual(honoured({ "dreamfarer-space": "someone_else" }, [], al), {});
+    assert.deepEqual(honoured({ "dreamfarer-space": ["someone_else", "zhouyimingsjtu"] }, [], al), { "dreamfarer-space": "zhouyimingsjtu" });
+    // a login with no line and no credit takes nothing
+    assert.deepEqual(honoured({ stranger: "ZhouYimingsjtu" }, [], al), {});
+    // a credited login keeps every X account its profile names, line or not
+    assert.deepEqual(honoured({ LoveEcho1145: ["elis_pina", "other"], isdou: "dou_dev" }, ["LoveEcho1145", "isdou"], al), { LoveEcho1145: ["elis_pina", "other"], isdou: "dou_dev" });
+  } finally {
+    process.stderr.write = err;
+    rmSync(dir, { recursive: true, force: true });
+  }
+  // the checked-in list: each line is an X handle and a GitHub login
+  assert.deepEqual(aliases(), [{ x: "ZhouYimingsjtu", login: "dreamfarer-space" }, { x: "elis_pina", login: "LoveEcho1145" }]);
 });
 
 // public/wall.js, the page's finder: a classic script that also exports
