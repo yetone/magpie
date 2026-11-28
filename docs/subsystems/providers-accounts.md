@@ -539,6 +539,18 @@ the price is the own id's first (`ListPrice`). `TestModelIDListedAndAskedForByOw
 
 ## Constraints and failure behavior
 
+The vendor's model list can name `modalities` as an object (`input`/`output`
+or Ark's `input_modalities`/`output_modalities`) or as a flat string array
+(#7901). `catalog.fetchPage` reads the flat array as inputs only when no
+input list was given, after the top-level `input_modalities` and
+`output_modalities`, so a video or embedding output keeps its API. An
+empty input array says the model takes no images; a missing or unexpected
+value says nothing. An unexpected valid JSON value in `modalities` is
+ignored without losing that model or its neighbors. A repeated field is
+read from its last value, without carrying facts from an earlier shape.
+`TestFetchNonObjectModalities` and `TestFetchModalitiesShapes` exercise the
+list through its HTTP reader.
+
 An allowance deliberately not requested (a saved Claude account outside
 its card refresh, or allowances set to *When I ask*) can use the last
 reading with `readDeferred: true`. `AsOf` and `ReadAt` still date that

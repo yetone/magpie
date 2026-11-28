@@ -1021,11 +1021,16 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 			// "output_modalities": ["video"]}
 			ins, outs = Kinds(r.Modalities.InputModalities), Kinds(r.Modalities.OutputModalities)
 		}
-		if ins == nil && outs == nil && r.Outputs != nil {
+		if ins == nil && outs == nil && (r.Inputs != nil || r.Outputs != nil) {
 			// the same names at the row's top level, the shape OpenRouter
 			// asks of a provider's list (Jina AI's): "output_modalities":
 			// ["embeddings"] for an embedding model
 			ins, outs = Kinds(strs(r.Inputs)), Kinds(strs(r.Outputs))
+		}
+		if ins == nil && r.Modalities.Flat != nil {
+			// a flat "modalities": ["text", "image"] array, where no input
+			// list was named separately
+			ins = Kinds(r.Modalities.Flat)
 		}
 		// a model the list says makes videos: another magpie's kind, or,
 		// where the list marks no kind, Ark's domain "VideoGeneration" or
@@ -1203,17 +1208,48 @@ func errorMessage(b []byte) string {
 	return msg
 }
 
+// liveModalities decodes a vendor row's modalities whether it is an object
+// (OpenCode/models.dev or Volcengine Ark), a flat string list, or an
+// unexpected JSON value that should be ignored rather than failing the list.
+type liveModalities struct {
+	Input            []string
+	Output           []string
+	InputModalities  []string
+	OutputModalities []string
+	Flat             []string
+}
+
+func (m *liveModalities) UnmarshalJSON(data []byte) error {
+	*m = liveModalities{}
+	var obj struct {
+		Input            []string `json:"input"`
+		Output           []string `json:"output"`
+		InputModalities  []string `json:"input_modalities"`
+		OutputModalities []string `json:"output_modalities"`
+	}
+	if json.Unmarshal(data, &obj) == nil {
+		m.Input = obj.Input
+		m.Output = obj.Output
+		m.InputModalities = obj.InputModalities
+		m.OutputModalities = obj.OutputModalities
+		return nil
+	}
+	var flat []string
+	if json.Unmarshal(data, &flat) == nil {
+		m.Flat = flat
+		return nil
+	}
+	return nil
+}
+
 type liveModel struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
-	Modalities  struct {
-		Input  []string `json:"input"`
-		Output []string `json:"output"`
-		// Volcengine Ark's
-		InputModalities  []string `json:"input_modalities"`
-		OutputModalities []string `json:"output_modalities"`
-	} `json:"modalities"`
+	// object ({"input":[…],"output":[…]} or Volcengine Ark's
+	// {"input_modalities":[…],"output_modalities":[…]}), or a flat string
+	// array (["text","image"]); any odd value mustn't lose the whole list
+	Modalities liveModalities `json:"modalities"`
 	// what Volcengine Ark's list says a model is for: "LLM",
 	// "VideoGeneration", "ImageGeneration"…
 	Domain string `json:"domain"`

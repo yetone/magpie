@@ -309,3 +309,40 @@ func TestFetchRelayDrawerNames(t *testing.T) {
 		t.Errorf("the chat list lost a model: omni_flash-10s %v, claude-sonnet-4-5 %v", chat["omni_flash-10s"], chat["claude-sonnet-4-5"])
 	}
 }
+
+// A vendor row whose "modalities" is a flat string array (["text", "image"])
+// or another non-object JSON value must not fail the whole /v1/models list.
+func TestFetchNonObjectModalities(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"data":[
+			{"id":"flat-with-top-level","modalities":["text","image"],"input_modalities":["text","image"],"output_modalities":["text"]},
+			{"id":"flat-only","modalities":["text","image"]},
+			{"id":"flat-video","modalities":["text","video"],"output_modalities":["video"]},
+			{"id":"odd-string","modalities":"text->text"},
+			{"id":"obj-standard","modalities":{"input":["text","image"],"output":["text"]}}
+		]}`)
+	}))
+	defer srv.Close()
+	ms, err := FetchURL(context.Background(), srv.URL+"/v1/models", "", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]Model{}
+	for _, m := range ms {
+		byID[m.ID] = m
+	}
+	if len(byID) != 5 {
+		t.Fatalf("got %d models (%+v), want 5", len(byID), ms)
+	}
+	for _, id := range []string{"flat-with-top-level", "flat-only", "obj-standard"} {
+		if !byID[id].Images {
+			t.Errorf("%s: Images = false, want true", id)
+		}
+	}
+	if !byID["flat-video"].Films {
+		t.Errorf("flat-video: Films = false, want true (top-level output_modalities preserved)")
+	}
+	if byID["odd-string"].Images {
+		t.Errorf("odd-string: Images = true, want false")
+	}
+}
