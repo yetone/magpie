@@ -294,13 +294,20 @@
       at.after(b);
       at = b;
     }
+    // a tab made here comes after start.js's navHides: the pages the
+    // reader left out of the sidebar (navpages.js) stay out, a plugin's
+    // too (dolacmeo on X: hidden at once, back after a reload; #7335), and
+    // Settings' count of them is drawn again
+    navHides();
     navSubs();
+    window.renderNavPages?.();
     // a reload of a plugin's page, or the one the window was left on,
-    // comes back to it once its tab is there
+    // comes back to it once its tab is there; the one left on not when
+    // it is left out of the sidebar, as a built-in page (start.js)
     if (view === "agents" && !opened) {
       opened = true;
       let want = params.get("view") || "";
-      if (!want) { try { want = localStorage.getItem("magpie.lastView") || ""; } catch { /* none kept */ } }
+      if (!want) { try { want = localStorage.getItem("magpie.lastView") || ""; } catch { /* none kept */ } if (navMine().includes(want)) want = ""; }
       if (pages.has(want)) show(want);
     }
   }

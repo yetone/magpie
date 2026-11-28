@@ -26,6 +26,10 @@ window.navArrange = function () {
     while (nx?.matches(".nav-sub, .thumb")) nx = nx.nextElementSibling;
     if (nx !== e) nav.insertBefore(e, nx);
     prev = e;
+    // a plugin's page in this built-in's place (pluginpages.js) goes with
+    // it, when the order is put on after that tab is there (eisen0419, #7335)
+    const repl = e.dataset?.replaced && nav.querySelector(`button[data-plugin-page][data-view="${CSS.escape(e.dataset.replaced)}"]`);
+    if (repl) { if (e.nextElementSibling !== repl) e.after(repl); prev = repl; }
   }
   for (const e of home) if (!e.dataset.view) own ? e.remove() : e.dataset.en && (e.textContent = t(e.dataset.en));
 };
