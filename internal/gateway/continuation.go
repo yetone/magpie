@@ -882,7 +882,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		noteSaidStatus(w, errNamed)
 	}
 	if !errSent {
-		enc.event(Event{Kind: KError, Text: failed, Code: failedCode})
+		enc.event(Event{Kind: KError, Text: failed, Code: failedCode, Status: errNamed})
 	}
 	return 200, failed
 }

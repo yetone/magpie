@@ -12240,17 +12240,23 @@ func writeErrorAs(w http.ResponseWriter, proto provider.Protocol, status int, ty
 	case provider.Anthropic:
 		v = map[string]any{"type": "error", "error": map[string]any{"type": typ, "message": msg}}
 	case provider.Gemini:
-		st := map[int]string{400: "INVALID_ARGUMENT", 408: "DEADLINE_EXCEEDED", 413: "INVALID_ARGUMENT", 401: "UNAUTHENTICATED", 403: "PERMISSION_DENIED", 404: "NOT_FOUND",
-			429: "RESOURCE_EXHAUSTED", 500: "INTERNAL", 502: "UNAVAILABLE", 503: "UNAVAILABLE", 529: "UNAVAILABLE"}[status]
-		if st == "" {
-			st = "UNKNOWN"
-		}
-		v = map[string]any{"error": map[string]any{"code": status, "message": msg, "status": st}}
+		v = map[string]any{"error": map[string]any{"code": status, "message": msg, "status": geminiStatus(status)}}
 	default:
 		v = map[string]any{"error": map[string]any{"message": msg, "type": typ, "code": code, "param": param}}
 	}
 	writeJSON(w, status, v)
 	return status
+}
+
+// geminiStatus is the google.rpc.Code status a Gemini client is told an
+// HTTP code's error with, as Google's HTTP mapping gives it: ABORTED for
+// 409, which ALREADY_EXISTS shares, INVALID_ARGUMENT for 422, which no
+// status has, and "UNKNOWN" for a code it doesn't map.
+func geminiStatus(code int) string {
+	return cmp.Or(map[int]string{400: "INVALID_ARGUMENT", 401: "UNAUTHENTICATED", 403: "PERMISSION_DENIED", 404: "NOT_FOUND",
+		408: "DEADLINE_EXCEEDED", 409: "ABORTED", 413: "INVALID_ARGUMENT", 422: "INVALID_ARGUMENT", 429: "RESOURCE_EXHAUSTED",
+		499: "CANCELLED", 500: "INTERNAL", 501: "UNIMPLEMENTED", 502: "UNAVAILABLE", 503: "UNAVAILABLE", 504: "DEADLINE_EXCEEDED",
+		529: "UNAVAILABLE"}[code], "UNKNOWN")
 }
 
 // tooLongRe matches how vendors say a request is more than the model's

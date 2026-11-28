@@ -829,7 +829,8 @@ func (e *geminiEncoder) event(ev Event) {
 				"index": 0, "groundingMetadata": g}}, "modelVersion": e.model, "responseId": e.id})
 		}
 	case KError:
-		e.w.event("", map[string]any{"error": map[string]any{"code": 502, "message": ev.Text, "status": "UNAVAILABLE"}})
+		code := cmp.Or(ev.Status, 502)
+		e.w.event("", map[string]any{"error": map[string]any{"code": code, "message": ev.Text, "status": geminiStatus(code)}})
 	}
 	e.col.add(ev)
 }
