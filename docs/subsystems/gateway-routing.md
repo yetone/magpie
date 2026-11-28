@@ -1067,6 +1067,34 @@ sends it without a key from loopback, `Origin: null`, an app scheme, a
 read-only and held key, and expects nothing spent until the full key
 asks.
 
+`/v0/management/` (#7402, [`cliproxy_mgmt.go`](../../internal/gateway/cliproxy_mgmt.go))
+answers the two reads of CLIProxyAPI's management API that T3 Code's
+Usage providers → Add hub makes, so T3 Code shows magpie's subscriptions
+as a hub's and ties them to its magpie instances (their endpoint, the
+gateway's origin, is the hub URL). `GET /v0/management/auth-files` lists
+the Codex, Claude and Grok cards of `provider.CachedCards` as auth files
+(provider `codex`, `claude`, `xai`; `auth_index` a hash of provider, user
+and the magpie a remote card is from; no token or path). `POST
+/v0/management/api-call` answers an account's usage read (GET of its
+vendor's usage URL alone, `mgmtUsageURL`) with `status_code` 200 and a
+body in that vendor's reply shape, made of the card's windows. Another URL
+or method, Codex's reset credits and their consume among them, is
+`status_code` 403 in the reply, and an account never read 502; nothing is
+sent upstream and the call's header is never read. Every other path under
+it, `reset-quota`, `auth-files/models` and the config writes included, is
+404, or 405 for the two routes by another method. Admission is the
+quotas' plus a key from loopback too (`mgmtAdmit`): no `KeyID` is 401
+`missing management key`, so none of `corsGuard`'s keyless origin
+exemptions reaches a card. The two reads are in `readOnlyRoutes`; the
+rest of `/v0/management/` is refused a read-only key. A held key gets
+`scopeQuotas`' cards. With `auth-files/models` 404, T3 Code counts an
+account for every model of its harness, so a pool's reset shows only once
+every account of that harness is spent. `TestCLIProxyManagementNeedsAKey`,
+`TestCLIProxyManagementReadOnlyKey` and `TestCLIProxyManagementReadByT3Code`
+in [`cliproxy_mgmt_test.go`](../../internal/gateway/cliproxy_mgmt_test.go);
+the last reads it through a port of T3 Code's hub reader, usage parsers
+and `hubPoolResetAt` (at 0c8e46b0).
+
 `POST /v1/magpie/update?version=<v>` (`Server.remoteUpdate` in
 [`remote_update.go`](../../internal/gateway/remote_update.go),
 nnlrl_75403 on Discord) has this magpie update itself to its channel's

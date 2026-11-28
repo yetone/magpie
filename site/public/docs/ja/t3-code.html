@@ -175,6 +175,7 @@
     <a href="#effort">推論レベル</a>
     <a href="#own">自分の設定</a>
     <a href="#routed">Claude Code 自身のルーティング</a>
+    <a href="#limits">利用上限</a>
     <a href="#off">元に戻す</a>
   </aside>
 
@@ -208,6 +209,11 @@
     <p>インスタンスの名前、オンかどうか、magpie が書かないキー（<code>autoCompactWindow</code>、<code>accentColor</code> など）はあなたのもので、T3 Code で変えた値は保たれます。magpie のインスタンスに自分で加えた環境変数も残ります。自分のインスタンス、そのカスタムモデル、T3 のほかの設定には触れません。magpie のものはカスタムモデル、ゲートウェイの環境変数、Codex インスタンスの起動引数とカタログだけです。</p>
     <h2 id="routed"><a class="anchor" href="#routed">Claude Code 自身のルーティング</a></h2>
     <p><code>~/.claude/settings.json</code> の <code>env</code> はプロセスの環境変数より優先されます。Claude Code が自分の設定で別の場所へルーティングされていれば、magpie インスタンスのリクエストもそこへ行きます。magpie 経由かルーティングなしならゲートウェイへ行きます。<code>CLAUDE_CODE_USE_BEDROCK</code> などのクラウドのスイッチがオンならそのクラウドへ行き、magpie のチェックがそれを知らせます。</p>
+    <h2 id="limits"><a class="anchor" href="#limits">利用上限</a></h2>
+    <p>T3 Code の <span class="ui">Usage → Limits</span> に magpie のサブスクリプションを表示でき、magpie のスレッドには上限がいつ戻るかが出ます。T3 Code で <span class="ui">Settings → Providers → Usage providers → Add hub</span> を開き、hub URL にゲートウェイのアドレス、management key にゲートウェイキーを入れます。読み取り専用のキーで足ります：</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="t3-hub">Copy</button><pre id="t3-hub">magpie gateway-key add "T3 Code" --read-only
+# Hub URL: http://127.0.0.1:3425   Management key: 表示された sk-magpie-key-…</pre></div>
+    <ul><li>hub URL は magpie が二つのインスタンスに書いたアドレス（設定のゲートウェイアドレスのポート）なので、T3 は hub の上限をそれらに結び付けます。</li><li>magpie にある Codex、Claude、Grok のアカウントと、magpie が最後に読んだ各ウィンドウの使用量とリセット時刻を一覧します。T3 はハーネスのすべてのアカウントをそのモデルそれぞれに数えるので、スレッドに上限が出るのはそれらがすべて使い切られたときです。</li><li>ゲートウェイはこのためにベンダーへ問い合わせず、トークンも渡しません。答えるのは hub のアカウント一覧と各アカウントの使用量の読み取りだけで、Use reset や hub のほかの管理ルートは拒否します。キーがなければ、このコンピューターからでも何も答えません。</li></ul>
     <h2 id="off"><a class="anchor" href="#off">元に戻す</a></h2>
     <p>magpie で行をオフにすると、magpie は自分の二つのインスタンスだけを外し、ほかのインスタンスと設定はそのままです。</p>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="t3-off">コピー</button><pre id="t3-off">magpie t3code default</pre></div>

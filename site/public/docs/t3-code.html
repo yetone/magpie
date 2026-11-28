@@ -175,6 +175,7 @@
     <a href="#effort">Reasoning</a>
     <a href="#own">Your own settings</a>
     <a href="#routed">Claude Code's own routing</a>
+    <a href="#limits">Usage limits</a>
     <a href="#off">Switching back</a>
   </aside>
 
@@ -208,6 +209,11 @@
     <p>The instances' names, whether they are on, and every key magpie doesn't write (such as <code>autoCompactWindow</code> and <code>accentColor</code>) are yours, and what you change in T3 Code stays. Environment variables you add on magpie's instance stay too. Your own instances, their custom models and T3's other settings are untouched. magpie's are only the custom models, the gateway's variables, and the Codex instance's launch arguments and catalog.</p>
     <h2 id="routed"><a class="anchor" href="#routed">Claude Code's own routing</a></h2>
     <p>The <code>env</code> in <code>~/.claude/settings.json</code> is applied over the process', so a Claude Code routed elsewhere in its own settings takes the magpie instance's requests there; one routed through magpie or not routed at all asks the gateway. A provider switch on there, such as <code>CLAUDE_CODE_USE_BEDROCK</code>, takes it to that cloud, and magpie's check says so.</p>
+    <h2 id="limits"><a class="anchor" href="#limits">Usage limits</a></h2>
+    <p>T3 Code's <span class="ui">Usage → Limits</span> can show magpie's subscriptions, and a magpie thread then says when its limit is back. In T3 Code open <span class="ui">Settings → Providers → Usage providers → Add hub</span>, with the gateway's address as the hub URL and a gateway key as the management key. A read-only key is enough:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="t3-hub">Copy</button><pre id="t3-hub">magpie gateway-key add "T3 Code" --read-only
+# Hub URL: http://127.0.0.1:3425   Management key: the sk-magpie-key-… it prints</pre></div>
+    <ul><li>The hub URL is the address magpie wrote into the two instances (the port in Settings' Gateway address), so T3 ties the hub's limits to them.</li><li>It lists the Codex, Claude and Grok accounts magpie has, each window's use and reset as magpie last read them. T3 counts every account of a harness for each of its models, so a thread shows a limit only once all of them are used up.</li><li>The gateway asks no vendor for it and tells no token. It answers only the hub's account list and each account's usage read; Use reset and the hub's other management routes are refused. Without a key it answers nothing, from this computer too.</li></ul>
     <h2 id="off"><a class="anchor" href="#off">Switching back</a></h2>
     <p>Turn the row off in magpie. magpie takes out only its two instances; your others and your settings stay.</p>
     <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="t3-off">Copy</button><pre id="t3-off">magpie t3code default</pre></div>

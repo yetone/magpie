@@ -26,11 +26,15 @@ import (
 // joe21_eee's display, #3387). None of these routes tells a gateway
 // key's secret.
 var readOnlyRoutes = map[string]bool{
-	"GET /{$}":                        true,
-	"GET /v1":                         true,
-	"GET /v1/{$}":                     true,
-	"GET /v1/magpie/quotas":           true,
-	"GET /v1/magpie/quotas/history":   true,
+	"GET /{$}":                      true,
+	"GET /v1":                       true,
+	"GET /v1/{$}":                   true,
+	"GET /v1/magpie/quotas":         true,
+	"GET /v1/magpie/quotas/history": true,
+	// the quotas as CLIProxyAPI's management API tells them, an
+	// api-call answered from them and sent on nowhere (cliproxy_mgmt.go)
+	mgmtAuthFilesPattern:              true,
+	mgmtAPICallPattern:                true,
 	"GET " + AccountsPath:             true,
 	"GET " + StatuslinePath:           true,
 	"POST " + StatuslinePath:          true,

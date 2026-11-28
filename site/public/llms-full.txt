@@ -5061,6 +5061,19 @@ The instances' names, whether they are on, and every key magpie doesn't write (s
 
 The `env` in `~/.claude/settings.json` is applied over the process', so a Claude Code routed elsewhere in its own settings takes the magpie instance's requests there; one routed through magpie or not routed at all asks the gateway. A provider switch on there, such as `CLAUDE_CODE_USE_BEDROCK`, takes it to that cloud, and magpie's check says so.
 
+## Usage limits
+
+T3 Code's Usage → Limits can show magpie's subscriptions, and a magpie thread then says when its limit is back. In T3 Code open Settings → Providers → Usage providers → Add hub, with the gateway's address as the hub URL and a gateway key as the management key. A read-only key is enough:
+
+```
+magpie gateway-key add "T3 Code" --read-only
+# Hub URL: http://127.0.0.1:3425   Management key: the sk-magpie-key-… it prints
+```
+
+- The hub URL is the address magpie wrote into the two instances (the port in Settings' Gateway address), so T3 ties the hub's limits to them.
+- It lists the Codex, Claude and Grok accounts magpie has, each window's use and reset as magpie last read them. T3 counts every account of a harness for each of its models, so a thread shows a limit only once all of them are used up.
+- The gateway asks no vendor for it and tells no token. It answers only the hub's account list and each account's usage read; Use reset and the hub's other management routes are refused. Without a key it answers nothing, from this computer too.
+
 ## Switching back
 
 Turn the row off in magpie. magpie takes out only its two instances; your others and your settings stay.
@@ -9162,6 +9175,8 @@ curl 'http://127.0.0.1:3425/v1/magpie/quotas/history?days=7&provider=codex'
 ```
 
 magpie's own skill `magpie-quota` lets an agent read `magpie quota --json` and wait with `magpie quota wait`. It is first in the Library's skills market. Beside it, `magpie-api` teaches an agent this API, and `/v1/models` and `/v1/magpie/route` (the model a routing group picked) too, for an agent that hands work out across models.
+
+A reader of a CLIProxyAPI hub's limits reads them too: the gateway answers that management API's account list and usage reads from these quotas, to a gateway key (read-only is enough), and nothing else of it. T3 Code's [Add hub](https://usemagpie.ai/docs/t3-code#limits) is set up this way.
 
 ## Alerts
 

@@ -175,6 +175,7 @@
     <a href="#effort">思考强度</a>
     <a href="#own">你自己的设置</a>
     <a href="#routed">Claude Code 自己的路由</a>
+    <a href="#limits">用量限额</a>
     <a href="#off">切回</a>
   </aside>
 
@@ -208,6 +209,11 @@
     <p>两个实例的名字、是否启用，以及 magpie 不写的键（如 <code>autoCompactWindow</code>、<code>accentColor</code>）都归你，你在 T3 Code 里改过的不会被改回去。magpie 实例上你自己加的环境变量也保留。你自己的实例、它们的自定义模型和 T3 的其他设置都不受影响。属于 magpie 的只有：自定义模型、网关的环境变量，以及 Codex 实例的启动参数和模型目录。</p>
     <h2 id="routed"><a class="anchor" href="#routed">Claude Code 自己的路由</a></h2>
     <p><code>~/.claude/settings.json</code> 里的 <code>env</code> 会覆盖进程的环境变量。所以如果你的 Claude Code 在自己的设置里路由到了别处，magpie 实例的请求也会去那里；路由到 magpie 或没有路由的，请求发到网关。如果那里开了 <code>CLAUDE_CODE_USE_BEDROCK</code> 这类云厂商开关，请求会去那个云，magpie 的检查会提示这一点。</p>
+    <h2 id="limits"><a class="anchor" href="#limits">用量限额</a></h2>
+    <p>T3 Code 的 <span class="ui">Usage → Limits</span> 可以显示 magpie 的订阅，magpie 的线程也会显示限额何时恢复。在 T3 Code 里打开 <span class="ui">Settings → Providers → Usage providers → Add hub</span>，hub URL 填网关地址，management key 填一个网关 key，只读 key 就够：</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="t3-hub">Copy</button><pre id="t3-hub">magpie gateway-key add "T3 Code" --read-only
+# Hub URL: http://127.0.0.1:3425   Management key: 它打印的 sk-magpie-key-…</pre></div>
+    <ul><li>hub URL 就是 magpie 写进两个实例的地址（设置里网关地址的端口），T3 据此把 hub 的限额对应到这两个实例。</li><li>它列出 magpie 里的 Codex、Claude 和 Grok 账号，以及 magpie 最近一次读到的各窗口用量和重置时间。T3 把一个 harness 的所有账号都算给它的每个模型，所以要等这些账号都用完，线程才会显示限额。</li><li>网关不会为此去问厂商，也不会给出任何 token。它只回答 hub 的账号列表和每个账号的用量读取；Use reset 和 hub 的其他管理接口一律拒绝。没有 key 时什么都不回答，本机也一样。</li></ul>
     <h2 id="off"><a class="anchor" href="#off">切回</a></h2>
     <p>在 magpie 里把那一行取消，magpie 只拿掉它自己的两个实例，你的其他实例和设置不变。</p>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="t3-off">复制</button><pre id="t3-off">magpie t3code default</pre></div>

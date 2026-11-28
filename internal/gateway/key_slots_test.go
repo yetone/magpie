@@ -33,6 +33,8 @@ var keySlotFree = []string{
 	// Host, reaches it, never with a gateway key (artifactAPIOpen)
 	"POST " + ArtifactPagePath + "{ref}/_api/db", "POST " + ArtifactPagePath + "{ref}/_api/publish", "POST " + ArtifactPagePath + "{ref}/_api/meta", "POST " + ArtifactPagePath + "{ref}/_api/upload", "POST " + ArtifactPagePath + "{ref}/_api/assets", "POST " + ArtifactPagePath + "{ref}/_api/sample", "POST " + ArtifactPagePath + "{ref}/_api/files", "POST " + ArtifactPagePath + "{ref}/_api/mcp", "POST " + ArtifactPagePath + "{ref}/_api/dictation", "POST " + ArtifactPagePath + "{ref}/_api/tts", "POST " + ArtifactPagePath + "{ref}/_api/comments", "GET " + artifactBlobPath + "{id}", ToolsMCPPath, ToolsMCPOne + "{plugin}",
 	HubMCPPath + "{agent}", HubMCPAll, "/", "POST " + joinData, AdminPath,
+	// CLIProxyAPI's management API: answered from the quotas, sent on nowhere
+	mgmtAPICallPattern, mgmtPattern,
 	// the chat page's files are kept in magpie, never sent to a model
 	"POST " + ChatPagePath + "/anthropic/v1/files", "DELETE " + ChatPagePath + "/anthropic/v1/files/{id}",
 }

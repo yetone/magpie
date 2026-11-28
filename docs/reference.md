@@ -4150,6 +4150,7 @@ application:
     - /backend-api/codex
     - /alpha/search
     - /mcp
+    - /v0/management
     - /me
     - /deepseek-chat
     - /join

@@ -173,6 +173,10 @@ func heldQuotaHist() quotaHist {
 
 var spanWords = lazyre.New(`(?i)(\d+)\s*-?\s*(h|hr|hour|d|day|w|wk|week|month)s?\b`)
 
+// WindowSpan is how long w runs, as windowSpan says: for the gateway,
+// which tells a window's length to a reader that asks it by seconds.
+func WindowSpan(w QuotaWindow) time.Duration { return windowSpan(w) }
+
 // windowSpan is how long a window runs: as its vendor said, else as its
 // name says ("5 hours", "7d", "Weekly"), else 0, not known.
 func windowSpan(w QuotaWindow) time.Duration {

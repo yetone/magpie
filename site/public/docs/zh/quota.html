@@ -193,6 +193,7 @@ magpie quota history --days 7 --json</pre></div>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="q-api">复制</button><pre id="q-api">curl http://127.0.0.1:3425/v1/magpie/quotas
 curl 'http://127.0.0.1:3425/v1/magpie/quotas/history?days=7&provider=codex'</pre></div>
     <p>magpie 的官方技能 <code>magpie-quota</code> 让 Agent 读 <code>magpie quota --json</code>，并用 <code>magpie quota wait</code> 等待额度恢复。它在 资源库 的技能市场里排在最前面。旁边的 <code>magpie-api</code> 技能教 Agent 直接读这个 API，以及 <code>/v1/models</code> 和 <code>/v1/magpie/route</code>（路由组选了哪个模型），适合在多个模型间分派任务的 Agent。</p>
+    <p>读取 CLIProxyAPI hub 限额的工具也能读到这些：网关用这些额度回答该管理 API 的账号列表和用量读取，需要网关 key（只读即可），其他管理接口一概不答。T3 Code 的 <a href="/docs/zh/t3-code#limits">Add hub</a> 就这样设置。</p>
     <h2 id="alert"><a class="anchor" href="#alert">用量提醒</a></h2>
     <p>让 magpie 应用在任意订阅或计划的某个窗口用到指定比例时发通知，每个窗口每次只提醒一次；或者在余额降到某个数以下时提醒，以它自己的货币或 credits 计，充值超过之前只提醒一次。两项默认都关闭，<code>off</code> 关掉。</p>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="q-alert">复制</button><pre id="q-alert">magpie quota alert 80              # notify at 80% used, once per window

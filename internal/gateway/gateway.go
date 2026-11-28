@@ -1195,6 +1195,11 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("POST /api/chat", s.ollamaChat(false))
 	mux.HandleFunc("POST /api/generate", s.ollamaChat(true))
 	mux.HandleFunc("GET /v1/magpie/quotas", s.quotas)
+	// CLIProxyAPI's management API, its usage reads alone, for a reader
+	// of a hub's limits (T3 Code, #7402; cliproxy_mgmt.go)
+	mux.HandleFunc(mgmtAuthFilesPattern, s.mgmtAuthFiles)
+	mux.HandleFunc(mgmtAPICallPattern, s.mgmtAPICall)
+	mux.HandleFunc(mgmtPattern, s.mgmtNotFound)
 	mux.HandleFunc("GET "+AccountsPath, s.accountsList)
 	mux.HandleFunc("GET /v1/magpie/usage", s.usageSummary)
 	mux.HandleFunc("GET /v1/magpie/usage/requests", s.usageRequests)

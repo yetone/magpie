@@ -30,6 +30,7 @@ var keyModelRoutes = map[string]bool{
 	"GET /api/hello": true, "GET /api/version": true, "GET /api/tags": true,
 	"POST /api/show": true, "POST /api/chat": true, "POST /api/generate": true,
 	"GET /v1/magpie/quotas": true, "GET /v1/magpie/quotas/history": true, "GET " + AccountsPath: true,
+	mgmtAuthFilesPattern: true, mgmtAPICallPattern: true, mgmtPattern: true,
 	"GET " + provider.RemoteCardsPath: true, "POST " + provider.RemoteRefreshPath: true,
 	"POST " + provider.RemoteCodexResetPath: true, "GET " + provider.RemoteAgentModelsPath: true,
 	"GET /v1/magpie/route": true, "GET " + StatuslinePath: true, "POST " + StatuslinePath: true,

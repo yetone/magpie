@@ -193,6 +193,7 @@ magpie quota history --days 7 --json</pre></div>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="q-api">コピー</button><pre id="q-api">curl http://127.0.0.1:3425/v1/magpie/quotas
 curl 'http://127.0.0.1:3425/v1/magpie/quotas/history?days=7&provider=codex'</pre></div>
     <p>magpie 公式のスキル <code>magpie-quota</code> は、エージェントに <code>magpie quota --json</code> を読ませ、<code>magpie quota wait</code> で待たせます。ライブラリ のスキルマーケットの先頭にあります。隣の <code>magpie-api</code> スキルは、この API と <code>/v1/models</code>、<code>/v1/magpie/route</code>（ルーティンググループが選んだモデル）の読み方をエージェントに教えます。複数のモデルに作業を振り分けるエージェント向けです。</p>
+    <p>CLIProxyAPI hub の上限を読むツールもこれを読めます。ゲートウェイはその管理 API のアカウント一覧と使用量の読み取りにこのクォータから答え、ゲートウェイキー（読み取り専用で十分）が要り、ほかの管理ルートには答えません。T3 Code の <a href="/docs/ja/t3-code#limits">Add hub</a> はこの方法で設定します。</p>
     <h2 id="alert"><a class="anchor" href="#alert">通知</a></h2>
     <p>サブスクリプションやプランのどれかの枠が指定の割合まで使われたとき（枠ごとに一回）、または残高が指定額以下になったとき（その通貨かクレジットで、それを超えてチャージされるまで一回）、magpie アプリが通知します。どちらも既定はオフで、<code>off</code> で止めます。</p>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="q-alert">コピー</button><pre id="q-alert">magpie quota alert 80              # notify at 80% used, once per window

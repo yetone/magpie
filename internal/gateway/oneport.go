@@ -28,6 +28,9 @@ var clientPrefixes = []string{
 	"/models", "/chat/completions", "/responses", "/messages",
 	"/images", "/embeddings", "/rerank", "/decisions", "/audio", "/videos", "/realtime",
 	"/muse-code/models", CodexPath, AlphaSearchPath, "/mcp",
+	// CLIProxyAPI's management API, which a hub's limits reader asks at
+	// the address its agents are sent to (cliproxy_mgmt.go)
+	"/v0/management",
 	// the key page (KeyPagePath): a key's holder opens it at the address
 	// they give their agents
 	KeyPagePath,

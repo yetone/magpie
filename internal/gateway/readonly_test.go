@@ -36,6 +36,9 @@ var readOnlyRefused = []string{
 	"DELETE " + ChatPagePath + "/anthropic/v1/files/{id}",
 	"POST " + ChatPagePath + "/v1/tools/asr",
 	"POST " + ChatPagePath + "/v1/tools/tts",
+	// CLIProxyAPI's management routes but its usage reads: its writes
+	// (reset-quota, auth-files' own), answered 404 or 405 to anyone
+	mgmtPattern,
 	// a Codex reset, which can't be undone (#3850)
 	"POST " + provider.RemoteCodexResetPath,
 	// an update another magpie asks for
