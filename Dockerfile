@@ -9,7 +9,8 @@ RUN go mod download
 COPY . .
 
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -tags nogui -trimpath \
+# grpcnotrace: as LEAN in the Makefile.
+RUN CGO_ENABLED=0 go build -tags nogui,grpcnotrace -trimpath \
       -ldflags "-s -w -X main.version=${VERSION}" -o /out/magpie . \
     && mkdir -p /config/home /config/cache /config/data /config/state
 

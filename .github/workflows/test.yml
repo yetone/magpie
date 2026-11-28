@@ -43,6 +43,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # lean_test.go builds for every system with GOPROXY off, and the
+      # module cache holds only what this one built before.
+      - name: Modules
+        timeout-minutes: 10
+        run: go mod download
+
       # The GUI links GTK 3 and WebKitGTK 4.1 through cgo on Linux (see the
       # Makefile), so vet and test need their headers and the gtk3 tag.
       # A stuck apt mirror held main's run here for 2.5 hours (b0d456c3), and
