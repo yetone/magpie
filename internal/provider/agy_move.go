@@ -24,6 +24,9 @@ import (
 const (
 	agyCLIID      = "agy-cli"
 	agyCLIPackage = "@magpie-community/opencode-agy-cli-auth"
+	// 0.1.161: every agy session runs agy's default agent, not a custom
+	// one, which agy 1.5.17 bills at about 4x the quota (plugins#1680,
+	// google-antigravity/antigravity-cli#1890), and needs agy 1.5.19;
 	// 0.1.145: a Claude Code conversation keeps its agy session when a
 	// Bash cd moves its working folder or ToolSearch loads a tool mid-turn,
 	// instead of replaying it into a new one (_paper_hands on X), and
@@ -44,7 +47,7 @@ const (
 	// of its own, and a request of one never goes on in another's agy, so
 	// one account's 429 no longer rests the other (Archivemylife on X);
 	// 0.1.68: auth.import takes the old plugin's sign-ins
-	agyCLIMin = "0.1.145"
+	agyCLIMin = "0.1.161"
 )
 
 // AgyCLIID and AgyCLIPackage are the plugin Antigravity is signed in to
