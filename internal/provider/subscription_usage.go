@@ -203,6 +203,11 @@ type SubscriptionQuota struct {
 	// account's balance with others (balance_shared.go): the name of the
 	// first of them, whose card shows it once for all
 	SharedBalance string `json:"sharedBalance,omitempty"`
+	// SamePlan is set on a ChatGPT API account's row in the account lists
+	// (LoginUsageShown) that shows the reading of the Codex account that
+	// is the same ChatGPT account: that Codex account's user, whose card
+	// a refresh reads again (samePlanReadings). Never cached.
+	SamePlan string `json:"samePlan,omitempty"`
 	// Until is when the plan's paid time ends: it renews then when Renew
 	// is "auto", is over when "off", and either when "" (the vendor
 	// doesn't say which).

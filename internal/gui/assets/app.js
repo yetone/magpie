@@ -14537,7 +14537,10 @@ function balanceFix(p) {
 
 // accountRefresh: an account row's refresh, then its rows read again
 function accountRefresh(agent, p, user) {
-  const b = quotaRefresh({ provider: p?.id || agent, user }, async () => {
+  // a ChatGPT API account showing its Codex twin's reading (samePlanReadings) reads that one again
+  const twin = loginUsage[agent]?.data?.[user]?.samePlan;
+  const b = quotaRefresh(twin ? { provider: "codex", user: twin } : { provider: p?.id || agent, user }, async () => {
+    if (twin && loginUsage.codex) loginUsage.codex.at = 0;
     await loginUsage[agent]?.loading;
     if (loginUsage[agent]) loginUsage[agent].at = 0;
     loginUsageOf(agent);
@@ -14601,6 +14604,7 @@ function accountQuota(data, user, capFor = () => 0, settable = null, prov) {
   if (ws.some((w) => w.members)) return poolLine(line, ws, q, capFor, settable);
   line.title = ws.slice(3).map((w) => w.tiers ? tiersText(w) : t(w.name) + " " + quotaText(w)).join(ws !== counted ? "\n" : " · ");
   if (q.asOf) line.title = tipLines(line.title, asOfText(q));
+  if (q.samePlan) line.title = tipLines(line.title, t("The ChatGPT plan's windows, as the same account added as ChatGPT reads them"));
   for (const w of ws.slice(0, 3)) {
     const used = to100(w.used);
     const m = el("span", "aq-w" + (used >= 90 ? " full" : ""));

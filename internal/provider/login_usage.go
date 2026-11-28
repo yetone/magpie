@@ -162,7 +162,17 @@ var errLeftAlone = errors.New("not read yet: this subscription is switched off i
 // Kunlin03 on X: a Claude Pro account with the Claude Code switch off).
 // LoginUsage itself stays empty for it: warm-ups and switching read it and
 // must not take a kept reading for a fresh one.
+//
+// A ChatGPT API account that is the same ChatGPT account as a Codex one
+// shows that Codex account's reading (samePlanReadings, tmr11235 on X).
 func LoginUsageShown(ctx context.Context, agent string) map[string]SubscriptionQuota {
+	if agent == ChatGPTAPIID {
+		return samePlanReadings(ctx, loginUsageShown(ctx, agent))
+	}
+	return loginUsageShown(ctx, agent)
+}
+
+func loginUsageShown(ctx context.Context, agent string) map[string]SubscriptionQuota {
 	if !settings.AccountDiscoveryOff() && leftAlone(agent) {
 		if logins, ok := usageLogins(agent); ok {
 			return keptLoginUsage(logins)
