@@ -127,6 +127,9 @@ func isolate(t testing.TB) {
 	codexSavedAsked.Lock()
 	codexSavedAsked.m = map[string]time.Time{}
 	codexSavedAsked.Unlock()
+	// nor which Codex sign-in another test's ChatGPT API account was found
+	// to be (siwcTwin)
+	forgetSIWCTwins()
 	t.Cleanup(func() {
 		claudeKeychain, claudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
 		DevinExecutable = oldDevin

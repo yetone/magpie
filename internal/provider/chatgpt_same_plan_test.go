@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -113,6 +115,21 @@ func TestChatGPTAPIRowShowsTheSameAccountsCodexWindows(t *testing.T) {
 		codex("Dee@Example.com", "acct-1", "user-1"), api("dee@example.com", "acct-1", "user-1"),
 		codex("team@example.com · Team", "acct-team", "user-2"), api("team@example.com", "acct-own", "user-2"),
 		api("solo@example.com", "acct-3", "user-3"))
+
+	// the Codex sign-ins' app lists, asked for the two with no twin by
+	// their tokens: neither holds app_1
+	apps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/backend-api/wham/usage/chatpass/apps" {
+			t.Errorf("asked %s: the Codex rows' readings are cached", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Write([]byte(`{"items":[]}`))
+	}))
+	t.Cleanup(apps.Close)
+	oldBase := CodexBase
+	CodexBase = apps.URL + "/backend-api/codex"
+	t.Cleanup(func() { CodexBase = oldBase })
 
 	reset := time.Now().Add(3 * time.Hour)
 	dee := SubscriptionQuota{Provider: "codex", Name: "Codex", User: "Dee@Example.com", Plan: "plus",

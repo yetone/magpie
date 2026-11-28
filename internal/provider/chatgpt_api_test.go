@@ -479,7 +479,7 @@ func TestChatGPTAPIUsageSaysWhere(t *testing.T) {
 	if !ok || q.Error != siwcNoUsage || q.SeeAt != SIWCUsageURL || len(q.Windows) != 0 {
 		t.Fatalf("read %+v (%v)", q, ok)
 	}
-	if !strings.Contains(q.Error, "chatgpt.com/settings/usage") || !strings.Contains(q.Error, "added as ChatGPT") || strings.Contains(q.Error, "side by side") {
+	if !strings.Contains(q.Error, "chatgpt.com/settings/usage") || !strings.Contains(q.Error, "Codex is signed in to the same ChatGPT account") || strings.Contains(q.Error, "added as ChatGPT") || strings.Contains(q.Error, "side by side") {
 		t.Fatalf("said %q", q.Error)
 	}
 	if len(f.forms) != n {

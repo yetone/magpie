@@ -16,9 +16,9 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 
 const twin = "dee@example.com", solo = "solo@example.com", codexUser = "Dee@Example.com · Plus";
-const siwc = "a ChatGPT API account's usage isn't told through OpenAI's API, only at https://chatgpt.com/settings/usage; the same account added as ChatGPT shows it here";
-const siwcKey = "OpenAI's API doesn't tell a ChatGPT API account's usage — see chatgpt.com/settings/usage, or add the account as ChatGPT to see it here";
-const tipKey = "The ChatGPT plan's windows, as the same account added as ChatGPT reads them";
+const siwc = "a ChatGPT API account's usage isn't told through OpenAI's API, only at https://chatgpt.com/settings/usage; magpie shows it here while Codex is signed in to the same ChatGPT account";
+const siwcKey = "OpenAI's API doesn't tell a ChatGPT API account's usage — see chatgpt.com/settings/usage. It shows here while Codex is signed in to the same ChatGPT account";
+const tipKey = "The ChatGPT plan's windows, as Codex's sign-in to the same account reads them";
 
 const gpt = () => ({
   id: "chatgpt-api", name: "ChatGPT API", icon: "openai", chat: "", responses: "https://api.openai.com/v1", anthropic: "", catalog: "", routing: "",

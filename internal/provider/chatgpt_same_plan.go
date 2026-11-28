@@ -24,8 +24,10 @@ import (
 // the way the usage ledger's calls are keyed. They are matched on what the
 // tokens say, never on a name: the ChatGPT account (workspace) id and the
 // user's id, both known and both equal. Two Team seats of one email share
-// a name and a user, not an account id; an account whose tokens don't say
-// both is matched to none.
+// a name and a user, not an account id. OpenAI's Sign in with ChatGPT
+// tokens say neither, so an account is also matched to the Codex sign-in
+// whose app list was read holding its client id once (siwcTwinKnown,
+// chatgpt_app_twin.go); nothing is asked here.
 func SamePlanAccounts() map[string]string {
 	ls := sharedLogins()
 	type who struct{ account, user string }
@@ -47,9 +49,6 @@ func SamePlanAccounts() map[string]string {
 		}
 	}
 	out := map[string]string{}
-	if len(codex) == 0 {
-		return out
-	}
 	for _, l := range ls {
 		if l.Agent != ChatGPTAPIID {
 			continue
@@ -58,12 +57,16 @@ func SamePlanAccounts() map[string]string {
 		if !ok {
 			continue
 		}
+		key := ChatGPTAPIID + "\x00" + strings.ToLower(l.User)
 		w := who{chatgptAccountID(c.IDToken, c.Access), chatgptUserID(c.IDToken, c.Access)}
-		if w.account == "" || w.user == "" {
+		if to, ok := codex[w]; ok && w.account != "" && w.user != "" {
+			out[key] = to
 			continue
 		}
-		if to, ok := codex[w]; ok {
-			out[ChatGPTAPIID+"\x00"+strings.ToLower(l.User)] = to
+		// OpenAI's own tokens say neither: the Codex sign-in whose app
+		// list holds this account's client id (siwcTwin), as read already
+		if to, ok := siwcTwinKnown(siwcAppID(c)); ok {
+			out[key] = to
 		}
 	}
 	return out
@@ -188,10 +191,19 @@ func samePlanReadings(ctx context.Context, own map[string]SubscriptionQuota) map
 	out := maps.Clone(own)
 	for user, l := range twins {
 		q, ok := read[l.User]
-		if !ok || len(q.Windows) == 0 && !q.ReadDeferred {
+		if !ok {
 			continue
 		}
 		mine := own[user]
+		if len(q.Windows) == 0 && !q.ReadDeferred {
+			if q.Error == "" {
+				continue
+			}
+			// the twin's read failed: why, not where else to look
+			mine.Error, mine.SeeAt, mine.SamePlan = q.Error, "", l.User
+			out[user] = mine
+			continue
+		}
 		q.Provider, q.Name, q.Icon, q.User = mine.Provider, mine.Name, mine.Icon, mine.User
 		q.Plan = cmp.Or(q.Plan, mine.Plan)
 		q.SeeAt = ""

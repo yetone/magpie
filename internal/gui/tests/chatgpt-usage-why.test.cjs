@@ -89,8 +89,8 @@ for (const [engine, browserType] of [["chromium", chromium], ["webkit", webkit]]
       }
       // a ChatGPT API account (siwcNoUsage): OpenAI's API tells no usage,
       // and the line says where it is told (danzi002 on Discord)
-      const siwc = "a ChatGPT API account's usage isn't told through OpenAI's API, only at https://chatgpt.com/settings/usage; the same account added as ChatGPT shows it here";
-      const siwcKey = "OpenAI's API doesn't tell a ChatGPT API account's usage — see chatgpt.com/settings/usage, or add the account as ChatGPT to see it here";
+      const siwc = "a ChatGPT API account's usage isn't told through OpenAI's API, only at https://chatgpt.com/settings/usage; magpie shows it here while Codex is signed in to the same ChatGPT account";
+      const siwcKey = "OpenAI's API doesn't tell a ChatGPT API account's usage — see chatgpt.com/settings/usage. It shows here while Codex is signed in to the same ChatGPT account";
       const [siwcSaid, siwcWant] = await page.evaluate(([e, k]) => [quotaError(e), t(k)], [siwc, siwcKey]);
       assert.equal(siwcSaid, siwcWant, `${at}: a ChatGPT API account says where its usage is`);
       assert.ok(siwcSaid.includes("chatgpt.com/settings/usage"), at);

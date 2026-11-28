@@ -469,15 +469,16 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	if l.Agent == ChatGPTAPIID {
 		// a ChatGPT plan through OpenAI's API (chatgpt_api.go): OpenAI
-		// tells its usage nowhere magpie can ask, only at SIWCUsageURL, so
-		// its row says so and what does show it, the account added as
-		// ChatGPT (danzi002 on Discord: accounts added through the API
-		// show no allowance, ones signed in as ChatGPT do). It used to be
-		// read below as a Codex account: a saved one said "chatgpt-api
-		// accounts can't be used side by side", the one in use read
-		// Codex's own sign-in ("Codex is signed out; run codex login", or
-		// another account's allowance under its name).
-		return SubscriptionQuota{Provider: l.Agent, Plan: l.Plan, Windows: []QuotaWindow{}, Error: siwcNoUsage, SeeAt: SIWCUsageURL}
+		// tells its usage nowhere for the account itself, only at
+		// SIWCUsageURL, so it is read with the Codex sign-in of the same
+		// ChatGPT account (siwcQuota, tmr11235 on X), or its row says
+		// where to look (danzi002 on Discord: accounts added through the
+		// API showed no allowance). It used to be read below as a Codex
+		// account: a saved one said "chatgpt-api accounts can't be used
+		// side by side", the one in use read Codex's own sign-in ("Codex
+		// is signed out; run codex login", or another account's
+		// allowance under its name).
+		return siwcQuota(ctx, l)
 	}
 	if l.Agent == "copilot" {
 		for _, c := range copilotLogins(copilotConfigDir()) {
