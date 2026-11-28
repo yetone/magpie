@@ -5323,6 +5323,10 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .pop.am-pop::before { content: ""; position: absolute; left: calc(var(--ox, 24px) - 6px); top: -5px; width: 12px; height: 12px; background: var(--pop-bg); transform: rotate(45deg); border-radius: 2px 0 0 0; box-shadow: -.5px -.5px 0 color-mix(in srgb, var(--fg) 10%, transparent); }
 .pop.am-pop.up::before { top: auto; bottom: -5px; border-radius: 0 0 2px 0; box-shadow: .5px .5px 0 color-mix(in srgb, var(--fg) 10%, transparent); }
 .am-head { padding: 0 12px; }
+/* the title, and by provider or by maker at its right */
+.am-ht { display: flex; align-items: center; gap: 8px; }
+.am-ht .am-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-by button { height: 22px; padding: 0 8px; font-size: 11.5px; }
 .am-t { font-size: 14px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); }
 .am-d { margin-top: 3px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .am-tools { display: flex; align-items: center; gap: 8px; margin: 12px 12px 6px; }
@@ -5385,6 +5389,8 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-mr .ic-stack .disc > .ic { width: 11px !important; height: 11px !important; }
 .am-mr .n { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color .15s; }
 .am-mr .x { flex: none; font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+/* by maker, whose it is: a provider's name, cut short before the model's */
+.am-mr .x.am-pv { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .am-mr .ck { flex: none; display: inline-flex; justify-content: center; width: 16px; color: var(--accent); }
 .am-mr.off .n { color: var(--faint); }
 .am-mr.lock { cursor: default; }
@@ -5414,7 +5420,7 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .pop.am-pop.ordering .am-own { display: none; }
 /* Codex's list in the order it shows it (#855): the whole list, dragged by
    any row; its grip shows only on the row under the pointer */
-.pop.am-pop.ordering .am-search, .pop.am-pop.ordering .am-rail { display: none; }
+.pop.am-pop.ordering .am-search, .pop.am-pop.ordering .am-rail, .pop.am-pop.ordering .am-by { display: none; }
 .am-order { padding-top: 4px; }
 .am-rows.am-order .am-mr { padding-left: 14px; cursor: grab; user-select: none; -webkit-user-select: none; }
 .am-or .grip { flex: none; width: 6px; height: 11px; margin-right: -4px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; }

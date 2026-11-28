@@ -11,8 +11,8 @@
 // serves with none picked are still its first 24.
 // advgroups.js imports it as the Providers page first draws, which an
 // editor waits for, and app.js when it draws a provider's models without
-// it (they show in the vendor's order for that moment); it weighs nothing
-// on the core.
+// it (they show in the vendor's order for that moment), and an agent's
+// model list as it opens (makerGroups); it weighs nothing on the core.
 // It also holds a model's API menu (modelAPIPick), opened from a chip's
 // right-click.
 
@@ -64,14 +64,19 @@ function newer(a, b) {
 
 const makerOf = (m) => (RANK.includes(m.maker) ? m.maker : "");
 
-// modelOrder: models in the order drawn, and put(chip, model), which
-// appends a chip to chips under its maker's label
-window.modelOrder = function (models, chips) {
+// byMaker: models by maker, then the newest first
+function byMaker(models) {
   const rank = (m) => (makerOf(m) ? RANK.indexOf(m.maker) : RANK.length);
   // the name shown, else its id, where it says a version
   const ver = (m) => { const a = versionOf(m.name || m.id); return a.v.length || !m.name ? a : versionOf(m.id); };
   // Other stays in the vendor's order: its numbers are different makers'
-  const list = models.map((m, i) => [m, rank(m), makerOf(m) && ver(m), i]).sort((a, b) => a[1] - b[1] || (a[2] && newer(a[2], b[2])) || a[3] - b[3]).map((x) => x[0]);
+  return models.map((m, i) => [m, rank(m), makerOf(m) && ver(m), i]).sort((a, b) => a[1] - b[1] || (a[2] && newer(a[2], b[2])) || a[3] - b[3]).map((x) => x[0]);
+}
+
+// modelOrder: models in the order drawn, and put(chip, model), which
+// appends a chip to chips under its maker's label
+window.modelOrder = function (models, chips) {
+  const list = byMaker(models);
   const many = new Set(models.map(makerOf)).size > 1;
   let last;
   return {
@@ -101,4 +106,19 @@ window.modelAPIPick = function (c, p, id, apis, apiNow, draw) {
     draw();
     status(v ? t("{model} is asked on {api} once saved", { model: id, api: apiLabel(v) }) : t("{model} is asked as its vendor's list says once saved", { model: id }), "ok");
   }, "API this model is asked on", "model-api-menu");
+};
+
+// makerGroups: an agent's model list by maker, as the editor has a
+// provider's (elis_pina on X: 给Agent配置模型的那里也加一个分类): a group
+// a maker, in the editor's order, named and drawn by its logo, its models
+// the newest first, each provider's together where they tie. A group's
+// name is its key, apart from any provider's.
+window.makerGroups = function (models) {
+  const out = [];
+  for (const m of byMaker(models)) {
+    const k = makerOf(m);
+    if (out.at(-1)?.key !== k) out.push({ key: k, name: "\0" + k, label: k ? t(MAKERS[k]) : t("Other"), icon: k, models: [] });
+    out.at(-1).models.push(m);
+  }
+  return out;
 };

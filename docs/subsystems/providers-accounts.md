@@ -405,8 +405,8 @@ listed models keep their `Available` names unchanged
 The provider editor draws a provider's models by maker, the newest first
 (WJaunita45604 on X). `/api/providers` gives each model its `maker`: the
 logo the agents' pickers draw by it (`agent.ModelIcon` on its id, else its
-name; `named` in [`providers.go`](../../internal/gui/providers.go)), empty
-for one magpie doesn't know. [`modelorder.js`](../../internal/gui/assets/modelorder.js),
+name; `modelMaker` in [`model_maker.go`](../../internal/gui/model_maker.go),
+which an agent's model list asks too), empty for one magpie doesn't know. [`modelorder.js`](../../internal/gui/assets/modelorder.js),
 imported with advgroups.js as the Providers page first draws (which the
 editor waits for, #7051), puts each maker's models under its
 name (Anthropic, OpenAI, Google, DeepSeek, xAI, Qwen, Moonshot AI, Zhipu,

@@ -3419,7 +3419,7 @@ async function openAgentModels(a, anchor, ev) {
   // joins: shown only its picks, it takes in the models ticked in a
   // provider's editor too (eiyuuzaki2333 on X)
   let models, ordered = false, only = false, own = false, ownHidden = false, joins = false;
-  try { [{ models, ordered, only = false, own = false, ownHidden = false, joins = false }] = await Promise.all([api("agent-models/" + encodeURIComponent(a.id)), import("./agentjoin.js").catch(() => {})]); }
+  try { [{ models, ordered, only = false, own = false, ownHidden = false, joins = false }] = await Promise.all([api("agent-models/" + encodeURIComponent(a.id)), import("./agentjoin.js").catch(() => {}), import("./modelorder.js").catch(() => {})]); }
   catch (e) {
     if (agentModelsLoading === loading) { loading.drop(); statusErr(e); }
     return;
@@ -3433,7 +3433,16 @@ async function openAgentModels(a, anchor, ev) {
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-label", t("{agent}'s model list", { agent: a.name }));
   const head = el("div", "am-head");
-  head.append(el("div", "am-t", t("{agent}'s model list", { agent: a.name })),
+  // by provider, or by maker as a provider's editor has its models
+  // (elis_pina on X), kept for the next time
+  let byMaker = !!window.makerGroups && kept("agentModelsBy", "") === "maker";
+  const segBy = el("div", "am-seg am-by"), byP = el("button", "", t("By provider")), byM = el("button", "", t("By maker"));
+  byP.type = byM.type = "button";
+  segBy.append(byP, byM);
+  segBy.hidden = !window.makerGroups;
+  const ht = el("div", "am-ht");
+  ht.append(el("div", "am-t", t("{agent}'s model list", { agent: a.name })), segBy);
+  head.append(ht,
     el("div", "am-d", t("Models turned off don't show in {agent}'s model picker; other agents can still use them.", { agent: a.name })));
   // the models the agent reaches itself, not through magpie, shown in its
   // picker beside magpie's or left out (MizuIro-H, #1642): not in the list
@@ -3482,35 +3491,45 @@ async function openAgentModels(a, anchor, ev) {
   let disarm = () => {};
   foot.append(onlyBox, el("span", "sp"), hideAll, el("span", "am-dot", "·"), reset, joinBox);
   // groups as the catalog has them, routing groups first; a long one
-  // starts folded, unless the agent is set to a model in it
+  // starts folded, unless the agent is set to a model in it. By maker,
+  // the routing groups stay first, a group of their own
   const groups = [];
   const regroup = () => {
     groups.length = 0;
     for (const m of models) {
+      if (byMaker && m.group !== ROUTING_GROUPS) continue;
       let g = groups.find((x) => x.name === m.group);
       if (!g) groups.push(g = { name: m.group, icon: m.icon, models: [] });
       g.models.push(m);
     }
     groups.sort((x, y) => (y.name === ROUTING_GROUPS) - (x.name === ROUTING_GROUPS));
+    if (byMaker) groups.push(...makerGroups(models.filter((m) => m.group !== ROUTING_GROUPS)));
   };
+  const gname = (g) => g.label || (g.name === ROUTING_GROUPS ? t(g.name) : g.name);
   regroup();
-  // folding is for telling providers apart: routing groups don't count,
-  // so a group switched on never folds away the one provider's models
-  // (shiqi_40904 on Discord)
-  const providers = groups.filter((g) => g.name !== ROUTING_GROUPS).length;
-  const shut = new Set(groups.filter((g) => providers > 1 && g.models.length > 8 && !g.models.some((m) => m.inUse)).map((g) => g.name));
+  // folding is for telling providers (or makers) apart: routing groups
+  // don't count, so a group switched on never folds away the one
+  // provider's models (shiqi_40904 on Discord); once a way of grouping
+  const shut = new Set(), folded = new Set();
+  const fold = () => {
+    if (folded.has(byMaker)) return;
+    folded.add(byMaker);
+    const n = groups.filter((g) => g.name !== ROUTING_GROUPS).length;
+    for (const g of groups) if (n > 1 && g.models.length > 8 && !g.models.some((m) => m.inUse)) shut.add(g.name);
+  };
+  fold();
   // with a few providers, a rail of them down the left: one picked shows
   // its models alone, so a long list is one click away rather than a
   // scroll down past the others (蓝猫 on Discord); a search looks in all
-  const railed = groups.length > 2 && innerWidth >= 600;
-  let pick = "";
-  const rail = el("div", "am-rail");
-  if (railed) {
-    const body = el("div", "am-body");
-    body.append(rail, list);
-    box.classList.add("railed");
-    box.append(head, tools, body, foot);
-  } else box.append(head, tools, list, foot);
+  let railed = false, pick = "";
+  const rail = el("div", "am-rail"), body = el("div", "am-body");
+  const lay = () => {
+    railed = groups.length > 2 && innerWidth >= 600;
+    box.classList.toggle("railed", railed);
+    if (railed) body.replaceChildren(rail, list);
+    box.replaceChildren(head, tools, railed ? body : list, foot);
+  };
+  lay();
   const drawRail = () => {
     if (!railed) return;
     const top = rail.scrollTop;
@@ -3545,11 +3564,10 @@ async function openAgentModels(a, anchor, ev) {
     };
     const all = el("span", "ic");
     all.append(svg("M3 4.5h10M3 8h10M3 11.5h10", 14, 1.5));
-    item("", t("All providers"), all, models, (full) => (full ? hideAll : reset).click());
+    item("", t(byMaker ? "All makers" : "All providers"), all, models, (full) => (full ? hideAll : reset).click());
     for (const g of groups) {
-      const route = g.name === ROUTING_GROUPS;
-      item(g.name, route ? t(g.name) : g.name, route ? svg(FAN, 14, 1.5) : icon(g.icon || "generic"), g.models, (full, free) => {
-        for (const m of free) { m.hidden = full; if (full) kept.add(m.id); }
+      item(g.name, gname(g), g.name === ROUTING_GROUPS ? svg(FAN, 14, 1.5) : icon(g.icon || "generic"), g.models, (full, free) => {
+        for (const m of free) { m.hidden = full; if (full) held.add(m.id); }
         save();
         draw();
       });
@@ -3557,7 +3575,7 @@ async function openAgentModels(a, anchor, ev) {
     rail.scrollTop = top;
   };
   // under "Shown", one just turned off stays until the view changes
-  let onlyShown = false, kept = new Set();
+  let onlyShown = false, held = new Set();
   // under "Order", the models shown, as the agent lists them
   let ordering = false;
 
@@ -3711,8 +3729,8 @@ async function openAgentModels(a, anchor, ev) {
     drawRail();
     for (const g of groups) {
       if (pick && !words && g.name !== pick) continue;
-      const rows = g.models.filter((m) => (!onlyShown || !m.hidden || kept.has(m.id)) &&
-        (!words || [m.name, m.id, g.name].some((s) => s.toLowerCase().includes(words))));
+      const rows = g.models.filter((m) => (!onlyShown || !m.hidden || held.has(m.id)) &&
+        (!words || [m.name, m.id, gname(g), m.group].some((s) => s.toLowerCase().includes(words))));
       if (!rows.length) continue;
       const on = g.models.filter((m) => !m.hidden).length;
       const folded = !words && !pick && shut.has(g.name);
@@ -3724,7 +3742,7 @@ async function openAgentModels(a, anchor, ev) {
       const tw = el("span", "tw");
       tw.append(svg(CHEV, 10, 1.7));
       fold.append(tw, g.name === ROUTING_GROUPS ? svg(FAN, 14, 1.5) : icon(g.icon || "generic"),
-        el("span", "gn", g.name === ROUTING_GROUPS ? t(g.name) : g.name), el("span", "c", `${on} / ${g.models.length}`));
+        el("span", "gn", gname(g)), el("span", "c", `${on} / ${g.models.length}`));
       fold.onclick = () => { shut.has(g.name) ? shut.delete(g.name) : shut.add(g.name); draw(); };
       const free = g.models.filter((m) => !m.inUse);
       const allOn = free.every((m) => !m.hidden);
@@ -3732,7 +3750,7 @@ async function openAgentModels(a, anchor, ev) {
       all.type = "button";
       all.hidden = !free.length;
       all.onclick = () => {
-        for (const m of free) { m.hidden = allOn; if (allOn) kept.add(m.id); }
+        for (const m of free) { m.hidden = allOn; if (allOn) held.add(m.id); }
         save();
         draw();
       };
@@ -3761,14 +3779,15 @@ async function openAgentModels(a, anchor, ev) {
             d.append(icon(m.icons[0] || "generic"));
             lg = el("span", "ic-stack");
             lg.append(d);
-          } else lg = m.logo && !route ? icon(m.logo) : el("span", "ic");
+          } else lg = g.label ? icon(m.icon || "generic") : m.logo && !route ? icon(m.logo) : el("span", "ic");
           if (route && !m.icons?.length) lg.append(svg(FAN, 14, 1.5));
           lg.classList.add("lg");
-          r.append(lg, n, el("span", "x", ctxShort(m.context)), ck);
+          // by maker, a row says whose it is: its provider's logo and name
+          r.append(lg, n, ...(g.label ? [el("span", "x am-pv", m.group)] : []), el("span", "x", ctxShort(m.context)), ck);
           if (m.inUse) r.setAttribute("aria-disabled", "true");
           else r.onclick = () => {
             m.hidden = !m.hidden;
-            if (m.hidden) kept.add(m.id);
+            if (m.hidden) held.add(m.id);
             save();
             draw();
           };
@@ -3789,7 +3808,7 @@ async function openAgentModels(a, anchor, ev) {
   const view = (shown, order = false) => {
     onlyShown = shown;
     ordering = order;
-    kept = new Set();
+    held = new Set();
     segAll.classList.toggle("on", !shown && !order);
     segOn.classList.toggle("on", shown && !order);
     segOrder.classList.toggle("on", order);
@@ -3807,6 +3826,23 @@ async function openAgentModels(a, anchor, ev) {
     list.scrollTop = 0;
     draw();
   };
+  const by = (maker) => {
+    if (maker === byMaker) return;
+    byMaker = maker;
+    keep("agentModelsBy", maker ? "maker" : "");
+    mark();
+    regroup();
+    fold();
+    pick = "";
+    lay();
+    place();
+    list.scrollTop = 0;
+    draw();
+  };
+  const mark = () => { byP.classList.toggle("on", !byMaker); byM.classList.toggle("on", byMaker); };
+  mark();
+  byP.onclick = () => by(false);
+  byM.onclick = () => by(true);
   segAll.onclick = () => view(false);
   segOn.onclick = () => view(true);
   segOrder.onclick = () => view(false, true);
@@ -3854,18 +3890,22 @@ async function openAgentModels(a, anchor, ev) {
     for (const m of models) m.hidden = false;
   });
   twice(hideAll, () => t("Hide {n}, of every provider? Click again", { n: models.filter((m) => !m.inUse && !m.hidden).length }), () => {
-    for (const m of models) if (!m.inUse && !m.hidden) { m.hidden = true; kept.add(m.id); }
+    for (const m of models) if (!m.inUse && !m.hidden) { m.hidden = true; held.add(m.id); }
   });
   draw();
 
   document.body.append(box);
   // under the line, or over it where there's no room; the list scrolls
   const r = anchor.getBoundingClientRect(), pad = 8, top = popTop(pad);
-  const w = Math.min(railed ? 580 : 380, innerWidth - pad * 2);
-  box.style.width = w + "px";
-  const x = Math.max(pad, Math.min(r.left - 10, innerWidth - w - pad));
-  box.style.left = x + "px";
-  box.style.setProperty("--ox", Math.max(18, Math.min(w - 18, r.left + Math.min(r.width, 60) / 2 - x)) + "px");
+  // its width, the rail's room or not, again when the grouping changes it
+  function place() {
+    const r = me.anchor.getBoundingClientRect(), w = Math.min(railed ? 580 : 380, innerWidth - pad * 2);
+    box.style.width = w + "px";
+    const x = Math.max(pad, Math.min(r.left - 10, innerWidth - w - pad));
+    box.style.left = x + "px";
+    box.style.setProperty("--ox", Math.max(18, Math.min(w - 18, r.left + Math.min(r.width, 60) / 2 - x)) + "px");
+  }
+  place();
   const below = innerHeight - r.bottom - 8 - pad, above = r.top - 8 - top;
   const want = Math.min(560, box.scrollHeight);
   if (want > below && above > below) {

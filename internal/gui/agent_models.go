@@ -81,7 +81,11 @@ type agentModelJSON struct {
 	// Logo is its maker's: known by the model's family, or its provider's
 	// when that is the maker; "" when neither says, and for a group, which
 	// has Icons
-	Logo    string `json:"logo,omitempty"`
+	Logo string `json:"logo,omitempty"`
+	// Maker is its maker's logo as a provider's editor groups it
+	// (modelMaker), which the list groups it by when asked to (elis_pina
+	// on X); "" for a group and a maker magpie doesn't know
+	Maker   string `json:"maker,omitempty"`
 	Context int    `json:"context,omitempty"`
 	Hidden  bool   `json:"hidden,omitempty"`
 	// InUse: the agent is set to it, so it can't be taken out
@@ -301,10 +305,11 @@ func agentModelList(a *agent.Agent) []agentModelJSON {
 		if m.Name == "" {
 			m.Name = e.Model
 		}
-		m.Logo = agent.ModelIcon(e.Model)
+		m.Maker = modelMaker(e.Model, e.Name)
+		m.Logo = m.Maker
 		if e.Group != "" {
 			// a group shows its providers' icons, as it does everywhere else
-			m.Group, m.Icons, m.Logo = agent.RoutingGroups, e.Icons, ""
+			m.Group, m.Icons, m.Logo, m.Maker = agent.RoutingGroups, e.Icons, "", ""
 		} else if m.Logo == "" {
 			if p := provider.Preset(e.Provider.Preset); p != nil && p.Kind == provider.KindVendor {
 				m.Logo = e.Provider.Icon
