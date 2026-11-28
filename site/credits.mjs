@@ -10,6 +10,12 @@
 //   - a commit's GitHub author and Co-authored-by names other than the
 //     maintainer's and bots'.
 //
+// An X credit is the GitHub person's when that GitHub user's public profile
+// names the X account (its twitter_username, which the user sets
+// themselves; looked up by credits-cli.mjs). It goes under the GitHub
+// login, via X and GitHub. Nothing else joins two names: never a similar
+// spelling, never an email.
+//
 // A lone word in brackets is often code ("(nogui)", "(P3)", "(Codex)"), so it
 // counts only when it is shaped like a handle with digits ("mrwl666") or the
 // same name is credited plainly somewhere else ("axelburks on Discord").
@@ -144,10 +150,13 @@ const coName = (c) => (typeof c === "string" ? { name: c, email: "" } : c);
 // Each commit's people. commits: [{ subject, author, email, parents,
 // coauthors: [{ name, email }] }]
 // issueAuthors: Map or object of "repo#n" → login (a bot's ends in "[bot]").
+// xAccounts: Map or object of GitHub login → the X handle its public profile
+// names ("" for none).
 // Returns an array beside commits, each [{ key, name, via, github }].
-export function credit(commits, { issueAuthors = {}, exclude = [] } = {}) {
+export function credit(commits, { issueAuthors = {}, exclude = [], xAccounts = {} } = {}) {
   const authorOf = issueAuthors instanceof Map ? (k) => issueAuthors.get(k) : (k) => issueAuthors[k];
   const ex = new Set([...exclude].map((s) => lower(String(s).trim())).filter(Boolean));
+  const onX = xLogins(xAccounts);
   const parsed = commits.map((c) => parse(c.subject));
   // names credited plainly anywhere, so a lone bracketed one can be trusted
   const known = new Set();
@@ -170,7 +179,11 @@ export function credit(commits, { issueAuthors = {}, exclude = [] } = {}) {
       people.set(key, { key, name, via: via ? [via] : [], github: github || "" });
     };
     for (const n of parsed[i].names) {
-      if (n.sure || known.has(lower(n.name)) || (DIGITED.test(n.name) && !/^[0-9a-f]+$/i.test(n.name)) || NUMBERED.test(n.name)) add(n.name, n.via, "");
+      if (!(n.sure || known.has(lower(n.name)) || (DIGITED.test(n.name) && !/^[0-9a-f]+$/i.test(n.name)) || NUMBERED.test(n.name))) continue;
+      // an X handle a GitHub profile names is that GitHub person
+      const gh = n.via === "X" ? onX.get(lower(n.name)) : "";
+      if (gh) { if (!left(n.name, ex)) add(gh, "X", gh); continue; }
+      add(n.name, n.via, "");
     }
     for (const r of parsed[i].refs) {
       const a = authorOf(refKey(r));
@@ -182,6 +195,29 @@ export function credit(commits, { issueAuthors = {}, exclude = [] } = {}) {
     }
     return [...people.values()];
   });
+}
+
+// lowercased X handle → the GitHub login whose public profile names it. A
+// handle two logins both name is nobody's: either could have typed it.
+const X_HANDLE = /^[A-Za-z0-9_]{1,15}$/;
+function xLogins(xAccounts) {
+  const pairs = xAccounts instanceof Map ? [...xAccounts] : Object.entries(xAccounts || {});
+  const by = new Map();
+  for (const [login, handle] of pairs) {
+    const h = String(handle || "").trim().replace(/^@/, "");
+    if (!login || BOT.test(login) || !X_HANDLE.test(h)) continue;
+    const k = lower(h);
+    by.set(k, by.has(k) && lower(by.get(k) || "") !== lower(login) ? null : login);
+  }
+  for (const [k, v] of by) if (!v) by.delete(k);
+  return by;
+}
+
+// the GitHub logins credit() found, to look up their X accounts
+export function logins(perCommit) {
+  const seen = new Map();
+  for (const list of perCommit) for (const p of list) if (p.github && !seen.has(lower(p.github))) seen.set(lower(p.github), p.github);
+  return [...seen.values()];
 }
 
 // every person across commits, merged by key

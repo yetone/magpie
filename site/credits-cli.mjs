@@ -15,13 +15,16 @@
 // The issue and PR authors a subject's "(#N)" names are asked of GitHub's
 // GraphQL API with GH_TOKEN, GITHUB_TOKEN or `gh auth token`. When that
 // can't be read, those people are left out (and `wall` keeps the authors
-// its last output knew); the rest still goes out. Names in
-// contributors-exclude.txt are never given.
+// its last output knew); the rest still goes out. The same API gives each
+// credited GitHub user's public X account (twitter_username), so an X
+// credit under that handle is that GitHub person; a user it can't read
+// joins nobody (and `wall` keeps the accounts its last output knew). Names
+// in contributors-exclude.txt are never given.
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { credit, everyone, thanks, wall, refKey, parse, renderWall } from "./credits.mjs";
+import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins } from "./credits.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const warn = (m) => process.stderr.write(`credits: ${m}\n`);
@@ -97,12 +100,51 @@ export async function authors(refs, { known = {}, fetchImpl = globalThis.fetch, 
   return got;
 }
 
+// GitHub login → the X handle its public profile names, asked fresh each
+// time. Only logins with one are in the map. A login GitHub doesn't answer
+// keeps what known had for it, or is left out: unknown joins nobody.
+export async function xAccounts(users, { known = {}, fetchImpl = globalThis.fetch, tok = token() } = {}) {
+  const got = {};
+  const kept = (l) => { if (known[l]) got[l] = known[l]; };
+  const list = [...new Set(users.filter((l) => /^[A-Za-z0-9-]{1,39}$/.test(l)))];
+  if (!list.length) return got;
+  if (!tok) { warn(`no GitHub token: X accounts of ${list.length} people not read`); list.forEach(kept); return got; }
+  for (let i = 0; i < list.length; i += 100) {
+    const chunk = list.slice(i, i + 100);
+    const q = `query { ${chunk.map((l, j) => `u${j}: user(login: ${JSON.stringify(l)}) { login twitterUsername }`).join(" ")} }`;
+    try {
+      const res = await fetchImpl("https://api.github.com/graphql", {
+        method: "POST",
+        headers: { Authorization: `bearer ${tok}`, "Content-Type": "application/json", "User-Agent": "magpie-credits" },
+        body: JSON.stringify({ query: q }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      const data = body && body.data;
+      if (!data) throw new Error(JSON.stringify((body && body.errors) || body).slice(0, 300));
+      chunk.forEach((l, j) => {
+        const u = data[`u${j}`];
+        if (u === undefined) return kept(l); // not answered
+        // null: no such user any more, so no X account
+        if (u && u.twitterUsername && String(u.login).toLowerCase() === l.toLowerCase()) got[l] = String(u.twitterUsername);
+      });
+    } catch (e) {
+      warn(`X accounts not read (${e.message}); those people keep their last or none`);
+      chunk.forEach(kept);
+    }
+  }
+  return got;
+}
+
 async function cmdThanks(range) {
   if (!range) throw new Error("usage: credits-cli.mjs thanks <from>..<to>");
   const commits = log(["--no-merges", range]);
   const refs = commits.flatMap((c) => parse(c.subject).refs);
   const issueAuthors = await authors(refs);
-  const people = everyone(credit(commits, { issueAuthors, exclude: excluded() }));
+  const exclude = excluded();
+  const x = await xAccounts(logins(credit(commits, { issueAuthors, exclude })));
+  const people = everyone(credit(commits, { issueAuthors, exclude, xAccounts: x }));
   const en = thanks(people, "en");
   if (en) process.stdout.write(en + "\n" + thanks(people, "zh") + "\n");
 }
@@ -130,8 +172,10 @@ async function cmdWall(out = join(here, "public", "contributors.json")) {
   const released = commits.filter((c) => c.v && c.parents < 2);
   const refs = released.flatMap((c) => parse(c.subject).refs);
   const issueAuthors = await authors(refs, { known: before.issueAuthors || {} });
-  const people = wall(released, { issueAuthors, exclude: excluded() });
-  const data = { generated: new Date().toISOString(), head: commits.length ? commits.at(-1).sha : "", issueAuthors, people };
+  const exclude = excluded();
+  const x = await xAccounts(logins(credit(released, { issueAuthors, exclude })), { known: before.xAccounts || {} });
+  const people = wall(released, { issueAuthors, exclude, xAccounts: x });
+  const data = { generated: new Date().toISOString(), head: commits.length ? commits.at(-1).sha : "", issueAuthors, xAccounts: x, people };
   const put = (file, text) => { writeFileSync(file + ".tmp", text); renameSync(file + ".tmp", file); };
   put(out, JSON.stringify(data) + "\n");
   const dir = join(dirname(out), "contributors");

@@ -2,8 +2,8 @@
 // one from yetone/magpie's own history, word for word.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parse, credit, everyone, thanks, what, wall, renderWall } from "./credits.mjs";
-import { authors, excluded } from "./credits-cli.mjs";
+import { parse, credit, everyone, thanks, what, wall, renderWall, logins } from "./credits.mjs";
+import { authors, excluded, xAccounts } from "./credits-cli.mjs";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -145,5 +145,64 @@ test("issue authors GitHub can't give are left out, not guessed", async () => {
     assert.deepEqual(await authors(refs, { fetchImpl: down, tok: "t" }), {});
     assert.deepEqual(await authors(refs, { fetchImpl: down, tok: "t", known: { "yetone/magpie#1": "alice" } }), { "yetone/magpie#1": "alice" });
     assert.deepEqual(await authors(refs, { fetchImpl: ok, tok: "" }), {});
+  } finally { process.stderr.write = err; }
+});
+
+// realLemonawa on X is GitHub's Lemonawa: Lemonawa's public profile names
+// realLemonawa as its X account (twitter_username).
+const lemon = [
+  { subject: "gateway: a reported call keeps the model asked for and the one that answered (req, served) (#3534, realLemonawa on X)", v: "0.1.5000" },
+  { subject: "gui: an auto restart brings a minimised main window back minimised on Windows (#3495, realLemonawa on X)", v: "0.1.5001" },
+  { subject: "groups: a model one provider serves can be a found group too, under Advanced (realLemonawa on X)", v: "0.1.5002" },
+];
+const lemonAuthors = { "yetone/magpie#3534": "Lemonawa", "yetone/magpie#3495": "Lemonawa" };
+
+test("an X credit is the GitHub person whose public profile names that X account", () => {
+  const x = { Lemonawa: "realLemonawa" };
+  const people = wall(lemon, { issueAuthors: lemonAuthors, xAccounts: x });
+  assert.deepEqual(people.map((p) => [p.name, p.github, p.via]), [["Lemonawa", "Lemonawa", ["X", "GitHub"]]]);
+  assert.deepEqual(people[0].releases.map((r) => r.v), ["0.1.5002", "0.1.5001", "0.1.5000"]);
+  // the release notes thank them once, by the GitHub name
+  const once = everyone(credit(lemon, { issueAuthors: lemonAuthors, xAccounts: x }));
+  assert.deepEqual(once.map((p) => p.name), ["Lemonawa"]);
+  assert.equal(thanks(once, "en").startsWith("Thanks to Lemonawa, whose"), true);
+  // as a Map, and with the handle written "@reallemonawa"
+  assert.equal(wall(lemon, { issueAuthors: lemonAuthors, xAccounts: new Map([["Lemonawa", "@reallemonawa"]]) }).length, 1);
+  // the logins to look up are the GitHub people credit() found
+  assert.deepEqual(logins(credit(lemon, { issueAuthors: lemonAuthors })), ["Lemonawa"]);
+});
+
+test("names are never joined by a similar spelling, another platform or a shared claim", () => {
+  // nothing names the X account: two people, as credited
+  assert.deepEqual(wall(lemon, { issueAuthors: lemonAuthors }).map((p) => p.name).sort(), ["Lemonawa", "realLemonawa"]);
+  // a profile naming another X account joins nobody
+  assert.equal(wall(lemon, { issueAuthors: lemonAuthors, xAccounts: { Lemonawa: "lemonawa" } }).length, 2);
+  // a Discord name isn't an X account
+  const discord = [{ subject: "redact: a decimal's digits are not masked as a number of their own (willz, Discord)", v: "0.1.2560" }];
+  assert.deepEqual(wall(discord, { xAccounts: { someone: "willz" } }).map((p) => [p.name, p.github]), [["willz", undefined]]);
+  // two logins naming one X account: either could have typed it, so neither
+  const two = wall(lemon, { issueAuthors: { ...lemonAuthors, "yetone/magpie#3495": "someoneElse" }, xAccounts: { Lemonawa: "realLemonawa", someoneElse: "realLemonawa" } });
+  assert.deepEqual(two.map((p) => p.name).sort(), ["Lemonawa", "realLemonawa", "someoneElse"]);
+  // an X handle on the exclusion list stays left out
+  assert.deepEqual(wall(lemon.slice(2), { xAccounts: { Lemonawa: "realLemonawa" }, exclude: ["realLemonawa"] }), []);
+});
+
+test("X accounts GitHub can't give join nobody", async () => {
+  const ok = async (_, req) => {
+    assert.match(JSON.parse(req.body).query, /u0: user\(login: "Lemonawa"\) \{ login twitterUsername \}/);
+    return { ok: true, json: async () => ({ data: { u0: { login: "Lemonawa", twitterUsername: "realLemonawa" }, u1: { login: "alice", twitterUsername: null }, u2: null } }) };
+  };
+  assert.deepEqual(await xAccounts(["Lemonawa", "alice", "gone"], { fetchImpl: ok, tok: "t" }), { Lemonawa: "realLemonawa" });
+  const down = async () => ({ ok: false, status: 502 });
+  const err = process.stderr.write;
+  process.stderr.write = () => true;
+  try {
+    assert.deepEqual(await xAccounts(["Lemonawa"], { fetchImpl: down, tok: "t" }), {});
+    // a failed read keeps what the last list knew
+    assert.deepEqual(await xAccounts(["Lemonawa", "alice"], { fetchImpl: down, tok: "t", known: { Lemonawa: "realLemonawa" } }), { Lemonawa: "realLemonawa" });
+    assert.deepEqual(await xAccounts(["Lemonawa"], { fetchImpl: ok, tok: "" }), {});
+    // asked fresh: a profile that dropped its X account no longer joins
+    const dropped = async () => ({ ok: true, json: async () => ({ data: { u0: { login: "Lemonawa", twitterUsername: null } } }) });
+    assert.deepEqual(await xAccounts(["Lemonawa"], { fetchImpl: dropped, tok: "t", known: { Lemonawa: "realLemonawa" } }), {});
   } finally { process.stderr.write = err; }
 });
