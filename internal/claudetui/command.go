@@ -49,6 +49,13 @@ const Unanswered = ", not answered in "
 // told the whole conversation: the bridge tries one again only on this.
 const EndedEarly = "Claude Code ended before it showed its prompt"
 
+// ScreenRequest is the control request that asks the helper for Claude
+// Code's screen as it stands (#8075): answered at once, while Claude Code
+// starts and while a message is pasted too, with the rows in its
+// response's "rows" (tuidrive.Term.Screen). It only reads the screen:
+// nothing is typed.
+const ScreenRequest = "magpie_screen"
+
 // WSLEnv holds, as JSON (WSL), how to run a Claude Code that is in a WSL
 // distro: the helper, on Windows, runs wsl.exe in its pseudo console.
 const WSLEnv = "MAGPIE_CLAUDE_TUI_WSL"

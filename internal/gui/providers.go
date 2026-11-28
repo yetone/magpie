@@ -3665,6 +3665,16 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/claude/mode", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, gateway.ClaudeModeNow())
 	})
+	// each hidden Claude Code's screen as it stands, for the Claude
+	// editor's look at where a run is (#8075); asked while it is open
+	mux.HandleFunc("GET /api/claude/screens", func(rw http.ResponseWriter, r *http.Request) {
+		runs, err := claudeScreens(r.Context())
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, runs)
+	})
 	// Codex's background app-server, left on the account before a switch
 	// or on the model list before a change (the Agents row's Restart):
 	// restarting it (Codex 0.162's sessions on it reconnect, after a turn

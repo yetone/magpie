@@ -84,6 +84,15 @@ window.claudeModeDraw = function (box, m) {
   else if (!on) said = t("Every request runs as claude -p");
   else if (last && last.tui) said = t("Last request {ago}: interactive mode", { ago: ago(last.at) });
   if (said) v.append(el("span", "cc-said" + (on && !m.tui ? " bad" : ""), said));
+  // what each hidden Claude Code shows now (#8075, claudescreen.js)
+  if (on && m.tui) {
+    const b = el("button", "text cc-screen-btn", t("Show screen"));
+    b.type = "button";
+    b.title = t("What each hidden Claude Code shows on its screen now");
+    b.setAttribute("aria-expanded", "false");
+    b.onclick = () => (window.claudeScreenToggle ? claudeScreenToggle(v, b) : import("./claudescreen.js").then(() => claudeScreenToggle(v, b), () => {}));
+    v.append(b);
+  }
   box.replaceChildren(...field(t("Claude Code runs as"), v, ""));
 };
 // the editor going away takes its tip with it

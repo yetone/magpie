@@ -2006,7 +2006,19 @@ func (r *subscriptionRun) cliControl(request map[string]any) error {
 
 // cliControlWithin is cliControl, answered within wait, while ctx lasts.
 func (r *subscriptionRun) cliControlWithin(ctx context.Context, request map[string]any, wait time.Duration) error {
-	id := randomToken()
+	reply, err := r.control(ctx, randomToken(), request, wait)
+	if err != nil {
+		return err
+	}
+	if reply.Subtype != "success" {
+		return fmt.Errorf("Claude settings: %s", reply.Error)
+	}
+	return nil
+}
+
+// control asks request of Claude Code, as id, and is its answer, within
+// wait while ctx lasts.
+func (r *subscriptionRun) control(ctx context.Context, id string, request map[string]any, wait time.Duration) (controlReply, error) {
 	ch := make(chan controlReply, 1)
 	// one that ended says how, and the last it wrote to stderr: "Claude
 	// Code ended" alone left the user nothing to act on
@@ -2014,7 +2026,7 @@ func (r *subscriptionRun) cliControlWithin(ctx context.Context, request map[stri
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
-		return r.endedBefore(what)
+		return controlReply{}, r.endedBefore(what)
 	}
 	if r.controls == nil {
 		r.controls = map[string]chan controlReply{}
@@ -2028,23 +2040,20 @@ func (r *subscriptionRun) cliControlWithin(ctx context.Context, request map[stri
 	}()
 	line, _ := json.Marshal(map[string]any{"type": "control_request", "request_id": id, "request": request})
 	if err := r.tell(line); err != nil {
-		return err
+		return controlReply{}, err
 	}
 	t := time.NewTimer(wait)
 	defer t.Stop()
 	select {
 	case reply, ok := <-ch:
 		if !ok {
-			return r.endedBefore(what)
+			return controlReply{}, r.endedBefore(what)
 		}
-		if reply.Subtype != "success" {
-			return fmt.Errorf("Claude settings: %s", reply.Error)
-		}
-		return nil
+		return reply, nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return controlReply{}, ctx.Err()
 	case <-t.C:
-		return &controlUnanswered{fmt.Sprintf("%s in %s", what, wait)}
+		return controlReply{}, &controlUnanswered{fmt.Sprintf("%s in %s", what, wait)}
 	}
 }
 
@@ -3751,6 +3760,9 @@ type controlReply struct {
 	Error     string `json:"error"`
 	Response  struct {
 		Rewound bool `json:"rewound"`
+		// the interactive mode's screen, row by row, answering a look at
+		// it (claudetui.ScreenRequest)
+		Rows []string `json:"rows"`
 	} `json:"response"`
 }
 
@@ -3849,6 +3861,14 @@ func (r *subscriptionRun) rewind(turn string) error {
 	case <-t.C:
 		return errors.New("Claude Code did not answer in " + rewindLongest.String())
 	}
+}
+
+// looked says a control_response answers a look at the screen (screen).
+func looked(raw json.RawMessage) bool {
+	var reply struct {
+		RequestID string `json:"request_id"`
+	}
+	return json.Unmarshal(raw, &reply) == nil && strings.HasPrefix(reply.RequestID, screenPrefix)
 }
 
 // answered hands a control_response to the request waiting on it.
@@ -4871,6 +4891,12 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			} `json:"event"`
 		}
 		if json.Unmarshal(b, &envelope) != nil {
+			return
+		}
+		if envelope.Type == "control_response" && looked(envelope.Response) {
+			// a look at the screen (screen) comes at any time, and is
+			// no message's end: one told in whole messages goes on
+			r.answered(envelope.Response)
 			return
 		}
 		var whole struct {

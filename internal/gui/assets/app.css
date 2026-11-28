@@ -3219,6 +3219,14 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .cc-pick .opt { flex: none; }
 .cc-said { font-size: 12px; color: var(--muted); }
 .cc-said.bad { color: var(--red); }
+/* each hidden Claude Code's screen, opened under the row (claudescreen.js) */
+.cc-screens { flex-basis: 100%; min-width: 0; display: grid; gap: 8px; }
+.cc-screen { min-width: 0; }
+.cc-screen .h { margin-bottom: 4px; font-size: 12px; color: var(--muted); }
+.cc-screen pre { margin: 0; padding: 8px 10px; max-height: 320px; overflow: auto; border-radius: 6px; border: 1px solid var(--line-2); background: var(--code-bg, var(--card-2)); font: 11px/1.35 var(--code-font, var(--code)); white-space: pre; tab-size: 8; }
+.cc-screen-none { font-size: 12px; color: var(--muted); }
+.cc-screen-none.bad { color: var(--red); }
+.cc-screen pre.none { font-family: inherit; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: normal; }
 .cc-tip { position: fixed; z-index: 1000; width: min(400px, calc(100vw - 16px)); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--card); box-shadow: 0 12px 32px rgba(0, 0, 0, .18); font-size: 12px; line-height: 1.5; color: var(--fg); pointer-events: none; animation: mask-tip .16s var(--ease); }
 .cc-m + .cc-m { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line-2); }
 .cc-m .h { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }

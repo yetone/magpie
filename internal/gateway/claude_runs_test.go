@@ -1,8 +1,10 @@
 package gateway
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/claudetui"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -166,4 +169,114 @@ func TestClaudeRunsNamesEachProcess(t *testing.T) {
 			}
 		}
 	})
+}
+
+// screensOf asks srv for its runs with their screens, as `magpie
+// claude-code screen` does.
+func screensOf(t *testing.T, srv *Server) ClaudeRuns {
+	t.Helper()
+	r := httptest.NewRequest("GET", ClaudeRunsPath+"?screen=1", nil)
+	r.RemoteAddr, r.Host = "127.0.0.1:50123", "127.0.0.1:3425"
+	r.Header.Set("User-Agent", "Go-http-client/1.1")
+	w := httptest.NewRecorder()
+	lanGuard(srv.Handler()).ServeHTTP(w, r)
+	var out ClaudeRuns
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &out) != nil {
+		t.Fatalf("%s?screen=1: %d %s", ClaudeRunsPath, w.Code, w.Body.String())
+	}
+	return out
+}
+
+// A hidden interactive Claude Code that seems stuck shows where: its
+// screen as it stands, asked of its helper (claudetui.ScreenRequest), row
+// by row as drawn, with the home folders and secrets on it masked as the
+// logs mask them (FremontDango on Discord, #8075). A -p run says it draws
+// none, and a helper that doesn't answer is said so in screenWait, not
+// waited on.
+func TestClaudeRunsShowTheScreen(t *testing.T) {
+	was := screenWait
+	screenWait = 500 * time.Millisecond
+	t.Cleanup(func() { screenWait = was })
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := "sk-ant-oat01-" + strings.Repeat("Ab3", 30)
+	drawn := []string{
+		"╭─── Claude Code ───╮",
+		"│   cwd: " + filepath.Join(home, "work", "proj") + "   │",
+		"│   C:\\Users\\alice\\proj  /home/bob/x   │",
+		"│ > key " + token + " │",
+		"╰───────────────────╯",
+	}
+	s := New()
+	b := s.subscription
+	tui := func(token string, answer bool, started time.Time) {
+		input, stdin := io.Pipe()
+		stdout, output := io.Pipe()
+		run := &subscriptionRun{bridge: b, token: token, stdin: stdin, tui: true, model: "claude-opus-5-5", started: started}
+		b.mu.Lock()
+		b.runs[token] = run
+		b.mu.Unlock()
+		t.Cleanup(func() { stdin.Close(); input.Close(); output.Close(); stdout.Close() })
+		go run.readOutput(stdout)
+		go func() {
+			sc := bufio.NewScanner(input)
+			for sc.Scan() {
+				var ctl struct {
+					RequestID string `json:"request_id"`
+					Request   struct {
+						Subtype string `json:"subtype"`
+					} `json:"request"`
+				}
+				if !answer || json.Unmarshal(sc.Bytes(), &ctl) != nil || ctl.Request.Subtype != claudetui.ScreenRequest {
+					continue
+				}
+				line, _ := json.Marshal(map[string]any{"type": "control_response", "response": map[string]any{
+					"subtype": "success", "request_id": ctl.RequestID, "response": map[string]any{"rows": drawn}}})
+				_, _ = output.Write(append(line, '\n'))
+			}
+		}()
+	}
+	now := time.Now()
+	tui("drawn", true, now.Add(-3*time.Second))
+	tui("stuck", false, now.Add(-2*time.Second))
+	b.mu.Lock()
+	b.runs["print"] = &subscriptionRun{bridge: b, token: "print", model: "claude-sonnet-5", started: now.Add(-time.Second)}
+	b.mu.Unlock()
+	t.Cleanup(b.abortAll)
+
+	if l := listClaudeRuns(t, s); len(l.Runs) != 3 || l.Runs[0].Screen != nil || l.Runs[0].ScreenWhy != "" {
+		t.Fatalf("screens read unasked: %+v", l.Runs)
+	}
+	start := time.Now()
+	l := screensOf(t, s)
+	if d := time.Since(start); d > screenWait+5*time.Second {
+		t.Errorf("the looks took %s, screenWait %s", d, screenWait)
+	}
+	if len(l.Runs) != 3 {
+		t.Fatalf("runs %+v", l.Runs)
+	}
+	got := l.Runs[0].Screen
+	if len(got) != len(drawn) || got[0] != drawn[0] || got[4] != drawn[4] || l.Runs[0].ScreenWhy != "" {
+		t.Fatalf("the screen read %q (%s), drawn %q", got, l.Runs[0].ScreenWhy, drawn)
+	}
+	whole := strings.Join(got, "\n")
+	for _, no := range []string{home, "alice", "bob", token} {
+		if strings.Contains(whole, no) {
+			t.Errorf("the screen keeps %q: %q", no, got)
+		}
+	}
+	if got[1] != "│   cwd: "+filepath.Join("~", "work", "proj")+"   │" {
+		t.Errorf("the home folder's row reads %q", got[1])
+	}
+	if !strings.HasPrefix(got[3], "│ > key ") {
+		t.Errorf("the key's row reads %q", got[3])
+	}
+	if r := l.Runs[1]; r.Screen != nil || !strings.Contains(r.ScreenWhy, "couldn't be read") {
+		t.Errorf("a helper that doesn't answer: %+v", r)
+	}
+	if r := l.Runs[2]; r.Screen != nil || !strings.Contains(r.ScreenWhy, "draws no screen") {
+		t.Errorf("a -p run: %+v", r)
+	}
 }

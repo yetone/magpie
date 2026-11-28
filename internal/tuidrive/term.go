@@ -338,6 +338,24 @@ func (t *Term) LastScreen() string {
 	return p
 }
 
+// Screen is the screen as it stands, row by row as drawn, for a person
+// to look at while it runs (magpie claude-code screen, #8075): the boxes
+// and the spaces between words kept, the blank rows under the last drawn
+// left out. None before the agent draws.
+func (t *Term) Screen() []string {
+	if t == nil {
+		return nil
+	}
+	rows := strings.Split(t.Now(), "\n")
+	for len(rows) > 0 && strings.TrimSpace(rows[len(rows)-1]) == "" {
+		rows = rows[:len(rows)-1]
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return rows
+}
+
 // Rows is the screen as it stands, row by row, for a log to keep whole
 // (LastScreen keeps its end): each row's words (words), the rows with none
 // left out. None before the agent draws.

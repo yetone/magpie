@@ -529,12 +529,7 @@ var homePath = lazyre.New(`(?i)(?:\b[a-z]:)?[\\/]+(?:users|home)[\\/]+[^\\/\s"'â
 // collapsed, and only its start and end kept when it is long.
 func logSafe(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if home, err := os.UserHomeDir(); err == nil && len(home) > 1 {
-		for _, h := range []string{home, filepath.ToSlash(home), strings.ReplaceAll(home, "/", `\`)} {
-			s = strings.ReplaceAll(s, h, "~")
-		}
-	}
-	s = homePath.ReplaceAllString(s, "~")
+	s = homeSafe(s)
 	s = redact.Scrub(s)
 	const head, tail = 300, 500
 	if len(s) > head+tail {

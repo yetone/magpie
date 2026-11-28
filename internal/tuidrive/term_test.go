@@ -3,6 +3,7 @@ package tuidrive
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -94,5 +95,20 @@ func TestLastScreenOfLinesAlone(t *testing.T) {
 	}
 	if rows := s.Rows(); len(rows) != 0 {
 		t.Fatalf("rows of lines alone: %q", rows)
+	}
+}
+
+// Screen keeps a row as it was drawn, box and spacing, for a person to
+// read (#8075), and leaves out the blank rows under it.
+func TestScreenAsDrawn(t *testing.T) {
+	if got := New().Screen(); got != nil {
+		t.Fatalf("nothing drawn: %q", got)
+	}
+	s := New()
+	s.Feed([]byte("╭──╮\r\n│ > hi   there │\r\n╰──╯\r\n\r\n"))
+	got := s.Screen()
+	want := []string{"╭──╮", "│ > hi   there │", "╰──╯"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("screen: %q, want %q", got, want)
 	}
 }

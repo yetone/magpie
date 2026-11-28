@@ -180,6 +180,7 @@ const (
 
 // cliForRoute is the command that does what a route does, as `magpie …`.
 var cliForRoute = map[string]string{
+	"GET /api/claude/screens":              "magpie claude-code screen",
 	"GET /api/agent-models/{id}":           "magpie models",
 	"GET /api/settings":                    "magpie settings list",
 	"POST /api/settings":                   "magpie settings set",

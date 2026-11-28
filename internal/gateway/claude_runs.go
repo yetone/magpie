@@ -14,11 +14,25 @@ package gateway
 // named so) and "magpie", with nothing to say they are magpie's or why
 // they stay (@Candydidi3 on X: "magpie里拉起很多子进程"). This lists each
 // with its pid, model, account, what it waits for and since when.
+//
+// With ?screen=1 each run of Claude Code's interactive mode (claudetui)
+// has its screen as it stands too, masked as the logs are (screenSafe),
+// for `magpie claude-code screen` and the Claude editor's look at it: a
+// run that seems stuck shows where (FremontDango on Discord, #8075). It
+// is read from the helper, which only reads it: nothing is typed.
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/claudetui"
+	"github.com/yetone/magpie/internal/redact"
 )
 
 // ClaudeRunsPath is where the gateway lists its Claude Code runs.
@@ -39,6 +53,11 @@ type ClaudeRun struct {
 	Ends time.Time `json:"ends,omitzero"`
 	// RSS is Claude Code's resident memory in bytes, 0 when not read.
 	RSS int64 `json:"rss,omitempty"`
+	// Screen is, asked for (?screen=1), the interactive Claude Code's
+	// screen as it stands, row by row, masked (screenSafe); ScreenWhy
+	// says why there is none.
+	Screen    []string `json:"screen,omitempty"`
+	ScreenWhy string   `json:"screenWhy,omitempty"`
 }
 
 // ClaudeRuns is what ClaudeRunsPath answers.
@@ -60,8 +79,9 @@ type ClaudeRuns struct {
 // a turn is under way or its client's tools run: its timer (endIn).
 const runTimeout = 30 * time.Minute
 
-// claudeRunList is the bridge's runs, oldest first, and claudeRoom's count.
-func (b *subscriptionBridge) claudeRunList() ClaudeRuns {
+// claudeRunList is the bridge's runs, oldest first, and claudeRoom's count;
+// with screens, each one's screen as it stands (screen).
+func (b *subscriptionBridge) claudeRunList(ctx context.Context, screens bool) ClaudeRuns {
 	type seen struct {
 		run  *subscriptionRun
 		idle time.Time
@@ -77,6 +97,7 @@ func (b *subscriptionBridge) claudeRunList() ClaudeRuns {
 	}
 	b.mu.Unlock()
 	out := ClaudeRuns{Object: "claude-runs", Runs: []ClaudeRun{}, IdleMost: idleMost, IdleFor: idleLongest}
+	var listed []*subscriptionRun // out.Runs' runs, in their order
 	for _, s := range all {
 		r := s.run
 		r.mu.Lock()
@@ -102,6 +123,18 @@ func (b *subscriptionBridge) claudeRunList() ClaudeRuns {
 			}
 		}
 		out.Runs = append(out.Runs, c)
+		listed = append(listed, r)
+	}
+	if screens {
+		// each asked at once: a helper that doesn't answer holds up
+		// screenWait, not the others' looks
+		var looks sync.WaitGroup
+		for i, r := range listed {
+			looks.Go(func() {
+				out.Runs[i].Screen, out.Runs[i].ScreenWhy = r.screen(ctx)
+			})
+		}
+		looks.Wait()
 	}
 	slices.SortFunc(out.Runs, func(a, b ClaudeRun) int { return a.Started.Compare(b.Started) })
 	claudeRoom.mu.Lock()
@@ -119,5 +152,57 @@ func (s *Server) claudeRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, s.subscription.claudeRunList())
+	writeJSON(w, http.StatusOK, s.subscription.claudeRunList(r.Context(), r.URL.Query().Get("screen") == "1"))
+}
+
+// screenWait is how long a helper may take to answer a look at its screen:
+// it answers at once (claudetui's reading), so one that doesn't is stuck
+// or gone.
+var screenWait = 2 * time.Second
+
+// screenPrefix begins a look's request id: its answer is told apart from
+// the others' in readOutput, as it answers no message.
+const screenPrefix = "screen-"
+
+// screen is the interactive Claude Code's screen as it stands, masked
+// (screenSafe), asked of its helper (claudetui.ScreenRequest); or why
+// there is none.
+func (r *subscriptionRun) screen(ctx context.Context) ([]string, string) {
+	r.mu.Lock()
+	tui, in := r.tui, r.stdin != nil
+	r.mu.Unlock()
+	if !tui || !in {
+		return nil, "Claude Code runs as claude -p here, which draws no screen"
+	}
+	reply, err := r.control(ctx, screenPrefix+randomToken(), map[string]any{"subtype": claudetui.ScreenRequest}, screenWait)
+	switch {
+	case err != nil:
+		return nil, "the screen couldn't be read: " + logSafe(err.Error())
+	case reply.Subtype != "success":
+		return nil, "the screen couldn't be read: " + logSafe(reply.Error)
+	case len(reply.Response.Rows) == 0:
+		return nil, "Claude Code hasn't drawn anything yet"
+	}
+	return screenSafe(reply.Response.Rows), ""
+}
+
+// screenSafe is a screen's rows masked as logSafe masks a log line, the
+// layout kept: secrets out (redact.Scrub), this user's home folder and any
+// other written ~.
+func screenSafe(rows []string) []string {
+	s := strings.Join(rows, "\n")
+	s = homeSafe(s)
+	s = redact.Scrub(s)
+	return strings.Split(s, "\n")
+}
+
+// homeSafe writes ~ for this user's home folder in s, in each of its
+// spellings, and for any other home folder (homePath).
+func homeSafe(s string) string {
+	if home, err := os.UserHomeDir(); err == nil && len(home) > 1 {
+		for _, h := range []string{home, filepath.ToSlash(home), strings.ReplaceAll(home, "/", `\`)} {
+			s = strings.ReplaceAll(s, h, "~")
+		}
+	}
+	return homePath.ReplaceAllString(s, "~")
 }

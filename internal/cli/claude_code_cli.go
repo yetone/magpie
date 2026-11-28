@@ -19,7 +19,8 @@ import (
 const claudeCodeUsage = "usage: magpie claude-code                  which Claude Code the Claude subscription runs\n" +
 	"       magpie claude-code install [--yes]  download Anthropic's own build of Claude Code for magpie (a server or container without one)\n" +
 	"       magpie claude-code remove           delete the Claude Code magpie downloaded\n" +
-	"       magpie claude-code runs [N|auto]    the Claude Code processes running for Claude subscriptions, and how many may run at once (auto: what this machine's memory holds)"
+	"       magpie claude-code runs [N|auto]    the Claude Code processes running for Claude subscriptions, and how many may run at once (auto: what this machine's memory holds)\n" +
+	"       magpie claude-code screen [pid]     what each hidden Claude Code shows on its screen now, to see where a run is stuck"
 
 // claudeCodeCmd: magpie claude-code [install [--yes]|remove]. A Claude
 // subscription is answered by Claude Code, and signed in to through it; a
@@ -54,6 +55,8 @@ func claudeCodeCmd(args []string) error {
 		return nil
 	case "runs":
 		return claudeCodeRuns(args[1:])
+	case "screen":
+		return claudeCodeScreen(args[1:])
 	case "-h", "--help", "help":
 		fmt.Println(claudeCodeUsage)
 		return nil
@@ -116,7 +119,7 @@ func claudeCodeRuns(args []string) error {
 // (@Candydidi3 on X asked why magpie started so many).
 func printClaudeRuns() {
 	base := claudeCode.gateway()
-	runs, err := fetchClaudeRuns(base)
+	runs, err := fetchClaudeRuns(base, "")
 	fmt.Println()
 	if err != nil {
 		fmt.Println(muted.Render("  " + err.Error()))
@@ -134,25 +137,7 @@ func printClaudeRuns() {
 	fmt.Println(head)
 	now := time.Now()
 	for _, r := range runs.Runs {
-		state := map[string]string{"answering": "answering", "idle": "kept for its next turn", "tools": "waiting on your agent's tools"}[r.State]
-		if state == "" {
-			state = r.State
-		}
-		line := fmt.Sprintf("  pid %-7d %-22s %s %s", r.PID, r.Model, state, runSpan(now.Sub(r.Since)))
-		var tail []string
-		if r.State != "answering" && !r.Ends.IsZero() && r.Ends.After(now) {
-			tail = append(tail, "ends in "+runSpan(r.Ends.Sub(now)))
-		}
-		if r.RSS > 0 {
-			tail = append(tail, bytesSize(uint64(r.RSS)))
-		}
-		if r.Account != "" {
-			tail = append(tail, r.Account)
-		}
-		if len(tail) > 0 {
-			line += muted.Render(" · " + strings.Join(tail, " · "))
-		}
-		fmt.Println(line)
+		fmt.Println(claudeRunLine(r, now))
 	}
 	for _, l := range []string{
 		"Each conversation on a Claude account (each subagent too) is answered by Claude Code, which a task",
@@ -162,6 +147,86 @@ func printClaudeRuns() {
 	} {
 		fmt.Println(muted.Render("  " + l))
 	}
+}
+
+// claudeRunLine is a run's line in the list: its pid, model, what it waits
+// for and since when, until when it is kept, its memory and account.
+func claudeRunLine(r gateway.ClaudeRun, now time.Time) string {
+	state := map[string]string{"answering": "answering", "idle": "kept for its next turn", "tools": "waiting on your agent's tools"}[r.State]
+	if state == "" {
+		state = r.State
+	}
+	line := fmt.Sprintf("  pid %-7d %-22s %s %s", r.PID, r.Model, state, runSpan(now.Sub(r.Since)))
+	var tail []string
+	if r.State != "answering" && !r.Ends.IsZero() && r.Ends.After(now) {
+		tail = append(tail, "ends in "+runSpan(r.Ends.Sub(now)))
+	}
+	if r.RSS > 0 {
+		tail = append(tail, bytesSize(uint64(r.RSS)))
+	}
+	if r.Account != "" {
+		tail = append(tail, r.Account)
+	}
+	if len(tail) > 0 {
+		line += muted.Render(" · " + strings.Join(tail, " · "))
+	}
+	return line
+}
+
+// claudeCodeScreen: magpie claude-code screen [pid]. The Claude
+// subscription's bridge runs Claude Code's interactive mode hidden, in a
+// terminal of magpie's (claudetui), and one that seems stuck said nothing
+// of where until it ended (FremontDango on Discord, #8075). This prints
+// each one's screen as it stands, masked as the logs are; it only reads
+// it, nothing is typed.
+func claudeCodeScreen(args []string) error {
+	pid := 0
+	switch {
+	case len(args) > 1:
+		return fmt.Errorf("magpie claude-code screen takes one pid\n%s", claudeCodeUsage)
+	case len(args) == 1 && (args[0] == "-h" || args[0] == "--help"):
+		fmt.Println(claudeCodeUsage)
+		return nil
+	case len(args) == 1:
+		v, err := strconv.Atoi(args[0])
+		if err != nil || v < 1 {
+			return fmt.Errorf("magpie claude-code screen takes a pid from magpie claude-code runs, not %q", args[0])
+		}
+		pid = v
+	}
+	base := claudeCode.gateway()
+	runs, err := fetchClaudeRuns(base, "?screen=1")
+	if err != nil {
+		return err
+	}
+	shown, now := 0, time.Now()
+	for _, r := range runs.Runs {
+		if pid != 0 && r.PID != pid {
+			continue
+		}
+		if shown > 0 {
+			fmt.Println()
+		}
+		shown++
+		fmt.Println(claudeRunLine(r, now))
+		switch {
+		case len(r.Screen) > 0:
+			for _, row := range r.Screen {
+				fmt.Println("    " + row)
+			}
+		case r.ScreenWhy != "":
+			fmt.Println(muted.Render("    " + r.ScreenWhy))
+		default:
+			return fmt.Errorf("the magpie at %s is older than this one and doesn't show Claude Code's screen: update it", base)
+		}
+	}
+	switch {
+	case pid != 0 && shown == 0:
+		return fmt.Errorf("no Claude Code of magpie's has pid %d: magpie claude-code runs lists them", pid)
+	case shown == 0:
+		fmt.Println(muted.Render("no Claude Code running for Claude subscription conversations"))
+	}
+	return nil
 }
 
 // runSpan says a duration the way the run list does: 45s, 12m, 1h5m.
@@ -179,13 +244,14 @@ func runSpan(d time.Duration) string {
 	return fmt.Sprintf("%dh%dm", h, m)
 }
 
-// fetchClaudeRuns asks the gateway at base for its Claude Code runs. The
+// fetchClaudeRuns asks the gateway at base for its Claude Code runs, query
+// added to the path ("?screen=1" for their screens). The
 // error says why there is no list: nothing answers (no magpie running, so
 // no Claude Code of magpie's either), or a magpie too old to tell.
-func fetchClaudeRuns(base string) (gateway.ClaudeRuns, error) {
+func fetchClaudeRuns(base, query string) (gateway.ClaudeRuns, error) {
 	var out gateway.ClaudeRuns
 	c := &http.Client{Timeout: 10 * time.Second}
-	res, err := c.Get(base + gateway.ClaudeRunsPath)
+	res, err := c.Get(base + gateway.ClaudeRunsPath + query)
 	if err != nil {
 		return out, fmt.Errorf("no magpie answers at %s, so none of its Claude Code is running", base)
 	}

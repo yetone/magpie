@@ -1855,6 +1855,47 @@ Claude Code 2.1.311 against a mock API got 8 concurrent subagent-like
 requests. It kept 6 Claude Code and 6 helpers, and the list named the same
 6 pids that `ps` showed. Quitting magpie ended all 12 within a second.
 
+### What a hidden run shows (`?screen=1`, #8075)
+
+An interactive run's Claude Code draws into a terminal no one sees
+(`tuidrive.Term`, 200x50 in the helper), and one that seemed stuck said
+nothing of where until it ended (FremontDango on Discord). Asked with
+`?screen=1`, the list gives each run's `screen`, the terminal's rows as
+drawn (`Term.Screen`: boxes and spacing kept, the blank rows under them
+left out), or `screenWhy` when there is none: a `-p` run draws no screen,
+one not drawn yet, or one whose read failed. Without it nothing is read, so
+`magpie claude-code runs` and its polls cost what they did.
+
+The gateway asks the helper over its stdin (`subscriptionRun.screen`): a
+`control_request` of subtype `claudetui.ScreenRequest` with a `screen-`
+request id, answered by a `control_response` whose `response.rows` are the
+screen. The helper reads its stdin from the start, in a goroutine of its
+own (`reading`), so it answers while Claude Code is still starting, while
+a turn is typed in and while its reply is read (`looked`, which writes past
+everything held); every other line goes on, in order, to the loop that was
+there before (`take`), so `initialize` is still answered after `ready`.
+The gateway's reader (`readOutput`) hands a `screen-` reply to its waiter
+before anything else is done with the line, so it never settles a turn's
+unstreamed message. Each run is asked at once and given `screenWait` (2s);
+a run that doesn't answer in time says so and holds up no other.
+
+Nothing leaves the process unmasked: `screenSafe` replaces the home folder
+in each of its spellings, and any other user's (`homeSafe`, which
+`logSafe` uses too), and scrubs tokens and keys as the logs do
+(`redact.Scrub`). Nothing is typed into the terminal; there is no route
+that does.
+
+`magpie claude-code screen [pid]` prints each run's line and its screen,
+or why there is none. The Claude Code provider editor's Claude Code runs as
+row has Show screen in the interactive mode (`claudemode.js`), which opens
+each run's screen under the row and reads `GET /api/claude/screens` every
+second while it is open (`claudescreen.js`, imported on the first press):
+the GUI's Go side asks the gateway (`claude_screens.go`), since the
+gateway's route answers no page. `TestClaudeRunsShowTheScreen`,
+`TestShimShowsItsScreenWhileStarting`, `TestScreenAsDrawn`,
+`TestClaudeCodeScreenPrintsEachRunsScreen`, `TestClaudeScreensAskTheGateway`,
+`claude-screen.test.cjs`.
+
 ## How large one Claude Code process may grow (`claudeRunBudget`, #3256)
 
 `claudeRoom` bounds how many Claude Code processes run, not how large each

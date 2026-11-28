@@ -1673,3 +1673,71 @@ func drawn(all []byte, from int) *shim {
 	s.Feed(all[from:])
 	return s
 }
+
+// The screen is answered while Claude Code is still starting (#8075):
+// FAKE_STALL draws "Starting up…" and never a prompt, so the helper is in
+// ready, where it read nothing of its input before and the look waited
+// out the 45s. The rows are as drawn, and nothing is typed.
+func TestShimShowsItsScreenWhileStarting(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	tmp := filepath.Join(home, "tmp")
+	_ = os.Mkdir(tmp, 0o700)
+	cmd := exec.Command(exe, append([]string{fakePath(t)}, pArgs...)...)
+	cmd.Env = append(os.Environ(), "MAGPIE_TUI_TEST=shim", "FAKE_STALL=1", "HOME="+home, "XDG_CACHE_HOME="+filepath.Join(home, "cache"),
+		"LOCALAPPDATA="+filepath.Join(home, "cache"), "TMPDIR="+tmp, "TMP="+tmp, "TEMP="+tmp, "CLAUDE_CONFIG_DIR="+filepath.Join(home, "claude"))
+	stdin, _ := cmd.StdinPipe()
+	stdout, _ := cmd.StdoutPipe()
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	got := make(chan map[string]any, 16)
+	go func() {
+		sc := bufio.NewScanner(stdout)
+		for sc.Scan() {
+			var m map[string]any
+			_ = json.Unmarshal(sc.Bytes(), &m)
+			got <- m
+		}
+		close(got)
+	}()
+	// asked again until the fake has drawn: a first look may come before
+	by := time.After(20 * time.Second)
+	for i := 0; ; i++ {
+		id := fmt.Sprintf("screen-%d", i)
+		b, _ := json.Marshal(map[string]any{"type": "control_request", "request_id": id, "request": map[string]any{"subtype": ScreenRequest}})
+		if _, err := stdin.Write(append(b, '\n')); err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		select {
+		case m = <-got:
+		case <-by:
+			t.Fatal("no answer to the look at the screen in 20s, while Claude Code starts")
+		}
+		if m == nil {
+			t.Fatal("the helper ended")
+		}
+		resp, _ := m["response"].(map[string]any)
+		if m["type"] != "control_response" || resp["request_id"] != id || resp["subtype"] != "success" {
+			t.Fatalf("answered %v", m)
+		}
+		inner, _ := resp["response"].(map[string]any)
+		rows, ok := inner["rows"].([]any)
+		if !ok {
+			t.Fatalf("no rows: %v", m)
+		}
+		if slices.Contains(rows, any("Starting up…")) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}

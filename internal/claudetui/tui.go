@@ -18,6 +18,7 @@ package claudetui
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -219,6 +220,9 @@ func Run(args []string) error {
 		})
 		defer t.Stop()
 	}
+	// read from now on, for a look at the screen (ScreenRequest) to be
+	// answered while Claude Code starts; what else comes waits for it
+	in := s.reading(os.Stdin)
 	s.doing.Store("showed no prompt")
 	if err := s.ready(); err != nil {
 		signal.Reset()
@@ -228,7 +232,7 @@ func Run(args []string) error {
 	}
 	s.emit(map[string]any{"type": "system", "subtype": "init", "session_id": s.sid})
 	go s.tail(from)
-	if err := s.input(os.Stdin); err != nil {
+	if err := s.take(in); err != nil {
 		// a message Claude Code didn't take, or its end mid-turn: said
 		// on the line magpie logs, as fail's are, with the screen whole
 		s.say(os.Stderr, err.Error())
@@ -625,11 +629,65 @@ func (s *shim) emit(v any) {
 }
 
 // input reads the bridge's stream-json: user messages, sent to Claude Code,
-// and control requests, of which interactive mode takes none but initialize.
-func (s *shim) input(r io.Reader) error {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64<<10), 64<<20)
-	for sc.Scan() {
+// and control requests, of which interactive mode takes none but initialize
+// and ScreenRequest.
+func (s *shim) input(r io.Reader) error { return s.take(s.reading(r)) }
+
+// inLines are the bridge's, as reading reads them; err is why they ended,
+// set once ch is closed.
+type inLines struct {
+	ch  chan []byte
+	err error
+}
+
+// reading reads r's lines, from now on: a look at the screen is answered
+// as it comes, even while a message is pasted or Claude Code starts
+// (looked), and every other line is handed on in order, to take.
+func (s *shim) reading(r io.Reader) *inLines {
+	l := &inLines{ch: make(chan []byte, 64)}
+	go func() {
+		defer close(l.ch)
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 64<<10), 64<<20)
+		for sc.Scan() {
+			if s.looked(sc.Bytes()) {
+				continue
+			}
+			l.ch <- bytes.Clone(sc.Bytes())
+		}
+		l.err = sc.Err()
+	}()
+	return l
+}
+
+// looked answers b when it asks for the screen (ScreenRequest), with its
+// rows as drawn: past what is held (tell), as it answers no message.
+func (s *shim) looked(b []byte) bool {
+	if !bytes.Contains(b, []byte(ScreenRequest)) {
+		return false
+	}
+	var m struct {
+		Type      string `json:"type"`
+		RequestID string `json:"request_id"`
+		Request   struct {
+			Subtype string `json:"subtype"`
+		} `json:"request"`
+	}
+	if json.Unmarshal(b, &m) != nil || m.Type != "control_request" || m.Request.Subtype != ScreenRequest {
+		return false
+	}
+	rows := s.Screen()
+	if rows == nil {
+		rows = []string{}
+	}
+	s.tell(map[string]any{"type": "control_response", "response": map[string]any{
+		"subtype": "success", "request_id": m.RequestID, "response": map[string]any{"rows": rows}}})
+	return true
+}
+
+// take does what the bridge's lines ask, in order.
+func (s *shim) take(in *inLines) error {
+	for b := range in.ch {
 		var m struct {
 			Type      string `json:"type"`
 			UUID      string `json:"uuid"`
@@ -642,7 +700,7 @@ func (s *shim) input(r io.Reader) error {
 			} `json:"message"`
 			Command string `json:"command"`
 		}
-		if json.Unmarshal(sc.Bytes(), &m) != nil {
+		if json.Unmarshal(b, &m) != nil {
 			continue
 		}
 		switch m.Type {
@@ -684,7 +742,7 @@ func (s *shim) input(r io.Reader) error {
 			}
 		}
 	}
-	return sc.Err()
+	return in.err
 }
 
 // how long a command's panel may take to be drawn, and how long it stays

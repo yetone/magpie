@@ -11,6 +11,8 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -207,5 +209,69 @@ func TestClaudeCodeRunsListsTheProcesses(t *testing.T) {
 	out, err = claudeCodeOut(t, "runs")
 	if err != nil || !strings.Contains(out, "none of its Claude Code is running") {
 		t.Fatalf("with no magpie running, runs said (%v):\n%s", err, out)
+	}
+}
+
+// `magpie claude-code screen` prints what each hidden Claude Code shows
+// now, as the gateway read it, its layout kept, to see where a run is
+// stuck (FremontDango on Discord, #8075); with a pid, that run's alone.
+// A -p run says why it has none; a magpie too old to read screens, and a
+// pid magpie doesn't run, are said so.
+func TestClaudeCodeScreenPrintsEachRunsScreen(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	now := time.Now()
+	runs := gateway.ClaudeRuns{Object: "claude-runs", Runs: []gateway.ClaudeRun{
+		{PID: 4512, Model: "claude-opus-5-5", Account: "me@example.com", State: "answering", Since: now.Add(-40 * time.Second),
+			Screen: []string{"╭───────────────╮", "│ ✻ Thinking…   │", "╰───────────────╯"}},
+		{PID: 4520, Model: "claude-sonnet-5", State: "idle", Since: now.Add(-time.Minute), ScreenWhy: "Claude Code runs as claude -p here, which draws no screen"},
+	}}
+	var asked atomic.Value
+	var mu sync.Mutex // runs, changed between asks
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != gateway.ClaudeRunsPath {
+			http.NotFound(w, r)
+			return
+		}
+		asked.Store(r.URL.RawQuery)
+		mu.Lock()
+		defer mu.Unlock()
+		json.NewEncoder(w).Encode(runs)
+	}))
+	defer srv.Close()
+	old := claudeCode.gateway
+	claudeCode.gateway = func() string { return srv.URL }
+	t.Cleanup(func() { claudeCode.gateway = old })
+	out, err := claudeCodeOut(t, "screen")
+	if err != nil || asked.Load() != "screen=1" {
+		t.Fatalf("asked %v: %v", asked.Load(), err)
+	}
+	for _, want := range []string{"pid 4512", "answering 40s", "    │ ✻ Thinking…   │", "pid 4520", "draws no screen"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("screen says no %q:\n%s", want, out)
+		}
+	}
+	out, err = claudeCodeOut(t, "screen", "4520")
+	if err != nil || strings.Contains(out, "4512") || !strings.Contains(out, "pid 4520") {
+		t.Fatalf("screen 4520 (%v):\n%s", err, out)
+	}
+	if _, err := claudeCodeOut(t, "screen", "99"); err == nil || !strings.Contains(err.Error(), "no Claude Code of magpie's has pid 99") {
+		t.Fatalf("an unknown pid: %v", err)
+	}
+	if _, err := claudeCodeOut(t, "screen", "--yes"); err == nil {
+		t.Fatal("a flag it doesn't know was taken")
+	}
+	mu.Lock()
+	runs.Runs[0].Screen = nil
+	mu.Unlock()
+	if _, err := claudeCodeOut(t, "screen", "4512"); err == nil || !strings.Contains(err.Error(), "doesn't show Claude Code's screen") {
+		t.Fatalf("an older magpie: %v", err)
+	}
+	mu.Lock()
+	runs.Runs = nil
+	mu.Unlock()
+	if out, err := claudeCodeOut(t, "screen"); err != nil || !strings.Contains(out, "no Claude Code running") {
+		t.Fatalf("none running (%v):\n%s", err, out)
 	}
 }
