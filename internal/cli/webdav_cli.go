@@ -148,7 +148,7 @@ const githubUsage = `usage:
   magpie github                           whether sync is on, where to, and how the last sync went
   magpie github on github://owner/repo[/folder] [branch=…] [keys=no] [agents=no] [library=no]
                                           keep the encrypted setup in an existing GitHub repository; asks for a token and passphrase
-  magpie github set k=v…                  change it: address, branch, providers, settings, profiles, keys, agents,
+  magpie github set k=v…                  change it: address, branch, commit-as, providers, settings, profiles, keys, agents,
                                           library, memory, usage, sign-ins, provider-settings-here (yes|no)
   magpie github now                       sync now
   magpie github preview                   what syncing now would change, here and on the server; nothing is changed
@@ -167,6 +167,9 @@ const githubUsage = `usage:
              The first sync initializes an empty repository's default branch;
              other branches must already exist.
   passphrase the same on every computer; GitHub only ever receives the sealed file.
+  commit-as  who the sync's commits are by, as "name <email>"; default: ` + davsync.DefaultCommitName + `,
+             so they count in no one's contributions. A GitHub App's bot:
+             "<slug>[bot] <<app id>+<slug>[bot]@users.noreply.github.com>". The token still writes
   sign-ins   yes: the subscriptions' accounts and the plugins' sign-ins go too, sealed with the
              passphrase. Off unless set
   sign-ins-except
@@ -344,6 +347,7 @@ func syncSet(k syncKind, args []string, on bool) error {
 			Providers: c.Providers, Settings: c.Settings, Profiles: c.Profiles}
 		if o, ok := c.Kept(k.name); ok { // its server, as it was kept when sync moved from it
 			next.URL, next.User, next.Endpoint, next.Region, next.PathStyle, next.Branch = o.URL, o.User, o.Endpoint, o.Region, o.PathStyle, o.Branch
+			next.GitName, next.GitEmail = o.GitName, o.GitEmail
 		}
 		c = next
 	}
@@ -377,6 +381,10 @@ func syncSet(k syncKind, args []string, on bool) error {
 			c.User = v
 		case key == "branch" && k.cmd == "github":
 			c.Branch = v
+		case key == "commit-as" && k.cmd == "github": // "name <email>", or default
+			if c.GitName, c.GitEmail, ok = commitAs(v); !ok {
+				return fmt.Errorf("commit-as=\"name <email>\" or commit-as=default, not %q", v)
+			}
 		case key == "bucket" && k.cmd == "s3":
 			bucket = &v
 		case key == "prefix" && k.cmd == "s3":
@@ -437,7 +445,7 @@ func syncSet(k syncKind, args []string, on bool) error {
 		case k.cmd == "s3":
 			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins, sign-ins-except, provider-settings-here)", key)
 		case k.cmd == "github":
-			return fmt.Errorf("unknown field %q (address, branch, token, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins, sign-ins-except, provider-settings-here)", key)
+			return fmt.Errorf("unknown field %q (address, branch, commit-as, token, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins, sign-ins-except, provider-settings-here)", key)
 		default:
 			return fmt.Errorf("unknown field %q (address, user, password, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins, sign-ins-except, provider-settings-here)", key)
 		}
@@ -511,6 +519,22 @@ func syncSet(k syncKind, args []string, on bool) error {
 	return nil
 }
 
+// commitAs is commit-as's "name <email>": the two parts, or none for
+// default (davsync checks what they are).
+func commitAs(v string) (name, email string, ok bool) {
+	v = strings.TrimSpace(v)
+	if strings.EqualFold(v, "default") {
+		return "", "", true
+	}
+	name, rest, ok := strings.Cut(v, "<")
+	email, tail, closed := strings.Cut(rest, ">")
+	if !ok || !closed || strings.TrimSpace(tail) != "" {
+		return "", "", false
+	}
+	name, email = strings.TrimSpace(name), strings.TrimSpace(email)
+	return name, email, name != "" && email != ""
+}
+
 // s3Parts are an s3:// address's bucket and prefix.
 func s3Parts(address string) (bucket, prefix string) {
 	rest, _ := strings.CutPrefix(strings.TrimSpace(address), "s3://")
@@ -579,6 +603,9 @@ func syncShow(k syncKind) error {
 	} else if v.Kind == "github" {
 		if v.Branch != "" {
 			who = append(who, v.Branch)
+		}
+		if v.GitName != "" {
+			who = append(who, "commits as "+v.GitName+" <"+v.GitEmail+">")
 		}
 		if v.PasswordSet {
 			who = append(who, "token saved")

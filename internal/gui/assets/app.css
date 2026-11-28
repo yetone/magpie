@@ -5838,6 +5838,10 @@ body.linux .action-confirm::backdrop { -webkit-backdrop-filter: none; backdrop-f
 .editor.sync-form .sync-except { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
 .editor.sync-form .sync-except[hidden] { display: none; }
 .sync-except .sync-except-pick { flex: 1 1 auto; max-width: 360px; }
+.editor.sync-form .sync-commit-as { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; font-size: 13px; }
+.editor.sync-form .sync-commit-as[hidden], .editor.sync-form .sync-commit-say[hidden] { display: none; }
+.sync-commit-as input { flex: 1 1 150px; min-width: 0; }
+.sync-commit-as input[type="email"] { flex-basis: 220px; }
 .sync-preview .sync-items { display: grid; gap: 2px; margin: -2px 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--pill); font-size: 12.5px; max-height: 180px; overflow-y: auto; }
 .sync-preview .sync-item { display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
 .sync-preview .sync-item span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

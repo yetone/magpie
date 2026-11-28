@@ -16,9 +16,47 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 const githubMaxFile = 64 << 20
+
+// DefaultCommitName and DefaultCommitEmail are who GitHub sync's commits
+// are by when the setup names no one (IceCodeNew, #4579). A commit sent
+// with no author or committer is the token owner's, and GitHub counted
+// every sync in their contribution graph, which goes by the author's
+// email. This is GitHub Actions' bot user (id 41898282, type Bot, as
+// api.github.com/users/github-actions%5Bbot%5D answers): an address of a
+// bot no person can sign in as, so the commits are counted for no one,
+// and one no other GitHub user can take, as a made-up
+// <name>@users.noreply.github.com could be.
+const (
+	DefaultCommitName  = "github-actions[bot]"
+	DefaultCommitEmail = "41898282+github-actions[bot]@users.noreply.github.com"
+)
+
+// commitEmailRe is an address's shape: something, @, a domain with a dot.
+var commitEmailRe = lazyre.New(`^[^\s<>@]+@[^\s<>@.]+(\.[^\s<>@.]+)+$`)
+
+// commitAs is who c's commits are by: its GitName and GitEmail, both or
+// neither, none being the defaults. A GitHub App's bot is
+// <slug>[bot] <<app id>+<slug>[bot]@users.noreply.github.com>; the token
+// still does the writing, the App's key is never asked for.
+func commitAs(c Config) (map[string]string, error) {
+	name, email := strings.TrimSpace(c.GitName), strings.TrimSpace(c.GitEmail)
+	switch {
+	case name == "" && email == "":
+		name, email = DefaultCommitName, DefaultCommitEmail
+	case name == "" || email == "":
+		return nil, errors.New("GitHub sync commits as a name and an email together: give both, or neither for " + DefaultCommitName)
+	case strings.ContainsAny(name, "<>\x00\r\n"):
+		return nil, errors.New("the name GitHub sync commits as can't have <, > or a line break in it")
+	case !commitEmailRe.MatchString(email):
+		return nil, fmt.Errorf("the email GitHub sync commits as must be an address, like %s, not %q", DefaultCommitEmail, email)
+	}
+	return map[string]string{"name": name, "email": email}, nil
+}
 
 // githubPart is the most of a backup one request sends. A blob goes up as
 // base64 in a JSON body, a third bigger than the file, and GitHub refuses a
@@ -86,6 +124,8 @@ type github struct {
 	ready                       bool
 	empty                       bool
 	client                      *http.Client
+	// who is every commit's author and committer (commitAs)
+	who map[string]string
 }
 
 // newGitHub accepts github://owner/repo/prefix. Only GitHub's API receives
@@ -123,6 +163,10 @@ func newGitHub(c Config) (*github, error) {
 	if strings.ContainsAny(c.Password, " \t\r\n") {
 		return nil, errors.New("the GitHub branch or token contains invalid whitespace")
 	}
+	who, err := commitAs(c)
+	if err != nil {
+		return nil, err
+	}
 	client := *syncClient
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if req.URL.Scheme != "https" || req.URL.Host != "api.github.com" {
@@ -134,7 +178,7 @@ func newGitHub(c Config) (*github, error) {
 		return nil
 	}
 	return &github{repo: u.Host + "/" + parts[0], prefix: strings.Join(parts[1:], "/"),
-		branch: branch, token: c.Password, client: &client}, nil
+		branch: branch, token: c.Password, client: &client, who: who}, nil
 }
 
 // send calls the repository's API; a non-empty ref reads at that branch or
@@ -564,7 +608,8 @@ func (g *github) gitCommit(ctx context.Context, name string, writes []githubWrit
 	} else if res != nil {
 		return version{}, githubError(res)
 	}
-	if res, err := g.githubJSON(ctx, http.MethodPost, "git/commits", map[string]any{"message": message, "tree": tree.SHA, "parents": []string{head}}, &made); err != nil {
+	if res, err := g.githubJSON(ctx, http.MethodPost, "git/commits", map[string]any{"message": message, "tree": tree.SHA, "parents": []string{head},
+		"author": g.who, "committer": g.who}, &made); err != nil {
 		return version{}, err
 	} else if res != nil {
 		return version{}, githubError(res)
@@ -619,7 +664,8 @@ func (g *github) initialize(ctx context.Context) error {
 // contents writes through the Contents API, which only an empty repository's
 // first write uses.
 func (g *github) contents(ctx context.Context, name string, data []byte, sha string, remove bool) (version, error) {
-	in := map[string]string{"message": "magpie: sync " + name, "content": base64.StdEncoding.EncodeToString(data)}
+	in := map[string]any{"message": "magpie: sync " + name, "content": base64.StdEncoding.EncodeToString(data),
+		"author": g.who, "committer": g.who}
 	// Omitting branch lets the first backup initialize an empty repository.
 	if !g.empty {
 		in["branch"] = g.branch

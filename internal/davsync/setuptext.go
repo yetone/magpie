@@ -26,6 +26,8 @@ type Setup struct {
 	Region    string `json:"region,omitempty"`
 	PathStyle bool   `json:"pathStyle,omitempty"`
 	Branch    string `json:"branch,omitempty"`
+	GitName   string `json:"gitName,omitempty"`
+	GitEmail  string `json:"gitEmail,omitempty"`
 	// Providers, Settings and Profiles are false when left out of sync;
 	// nil, as from a magpie before they could be, is synced.
 	Providers *bool `json:"providers,omitempty"`
@@ -60,7 +62,7 @@ func SetupText() (string, error) {
 		return "", ErrSetupOff
 	}
 	b, err := json.Marshal(Setup{URL: c.URL, User: c.User, Password: c.Password, Endpoint: c.Endpoint, Region: c.Region,
-		PathStyle: c.PathStyle, Branch: c.Branch, Keys: c.Keys, Agents: c.Agents, Library: c.library(), Memory: c.memoryOn(),
+		PathStyle: c.PathStyle, Branch: c.Branch, GitName: c.GitName, GitEmail: c.GitEmail, Keys: c.Keys, Agents: c.Agents, Library: c.library(), Memory: c.memoryOn(),
 		Usage: c.Usage, SignIns: c.SignIns, Providers: offOnly(c.Providers), Settings: offOnly(c.Settings), Profiles: offOnly(c.Profiles)})
 	if err != nil {
 		return "", err

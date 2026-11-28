@@ -56,6 +56,22 @@ type githubFixture struct {
 	beforeRef func()
 	// requests counts each method and path, to show which API wrote.
 	requests []string
+	// commitsBy is each commit's author and committer, as
+	// "API: author | committer", in the order they were made.
+	commitsBy []string
+}
+
+// fixtureIdent is a commit's author or committer as GitHub's API takes it.
+type fixtureIdent struct{ Name, Email string }
+
+func (f *githubFixture) by(api string, author, committer *fixtureIdent) {
+	say := func(i *fixtureIdent) string {
+		if i == nil {
+			return "none"
+		}
+		return i.Name + " <" + i.Email + ">"
+	}
+	f.commitsBy = append(f.commitsBy, api+": "+say(author)+" | "+say(committer))
 }
 
 type fixtureTree struct {
@@ -235,11 +251,15 @@ func (f *githubFixture) serve(w http.ResponseWriter, r *http.Request) {
 		fail(404, "Not Found")
 		return
 	}
-	var in struct{ Message, Branch, SHA, Content string }
+	var in struct {
+		Message, Branch, SHA, Content string
+		Author, Committer             *fixtureIdent
+	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Message == "" {
 		fail(422, "Invalid request")
 		return
 	}
+	f.by("contents", in.Author, in.Committer)
 	initialBranch := in.Branch
 	if in.Branch == "" {
 		in.Branch = f.defaultBranch
@@ -349,10 +369,12 @@ func (f *githubFixture) serveGit(w http.ResponseWriter, r *http.Request, base st
 		send(201, map[string]string{"sha": sha})
 	case rest == "commits" && r.Method == http.MethodPost:
 		var in struct {
-			Message, Tree string
-			Parents       []string
+			Message, Tree     string
+			Parents           []string
+			Author, Committer *fixtureIdent
 		}
 		json.NewDecoder(r.Body).Decode(&in)
+		f.by("git/commits", in.Author, in.Committer)
 		if _, ok := f.trees[in.Tree]; !ok || in.Message == "" || len(in.Parents) != 1 {
 			fail(422, "Invalid commit")
 			return true

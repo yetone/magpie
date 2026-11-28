@@ -568,6 +568,30 @@ switch that anyone with the file and the passphrase can use those accounts.
 - Tokens are separate from the library's GitHub token, sent only to
   `https://api.github.com`, and must differ from the encryption passphrase.
   Repository history retains older encrypted versions.
+- Every commit sync makes, through the Contents API (an empty
+  repository's first write and its `README.md`) and the Git Data API alike,
+  names its author and committer (`commitAs`, `github.who`). With neither
+  sent, GitHub made them the token's owner, and every sync counted in their
+  contribution graph (IceCodeNew, #4579). GitHub credits a commit to the
+  account its author email belongs to, so the default is GitHub Actions'
+  bot (`DefaultCommitName`, `DefaultCommitEmail`: `github-actions[bot]`,
+  `41898282+github-actions[bot]@users.noreply.github.com`, a Bot account no
+  one can sign up as), never a made-up noreply address someone could own.
+  `Config.GitName` and `GitEmail` name another, a GitHub App's bot most
+  likely (`<slug>[bot]`, `<app id>+<slug>[bot]@users.noreply.github.com`);
+  the token still writes, so the App needs no key of its own. Both or
+  neither: a name with `<`, `>` or a line break, or an email that isn't
+  shaped as an address, is refused by `newGitHub`, so `Configure`, Preview
+  and each sync check it. Empty is the default, so a `sync.json` from before
+  it commits as the bot with no save, and the default typed in is kept as
+  empty. The identity is GitHub's own: kept with GitHub's server when sync
+  moves to another kind (`Server`), carried by the setup text, dropped for
+  WebDAV and S3, and not part of `stateKey`, so changing it makes no new
+  backup. Settings › Sync shows it under Advanced, GitHub only, prefilled
+  with the default (`View.CommitDefault`) and with Use default once
+  changed; the save posts `gitName`/`gitEmail` only when it isn't the
+  default or wasn't before. The CLI: `magpie github set commit-as="name
+  <email>"`, or `commit-as=default`.
 - Repository and branch access is checked before a file's 404 can mean
   "no backup yet." Failed reads and malformed metadata fail sync.
 - Only the ref endpoint's explicit `409: Git Repository is empty.` allows
@@ -730,8 +754,8 @@ dependencies may need installing again there
 
 ```sh
 go test -tags nogui ./internal/davsync
-go test -tags nogui ./internal/cli -run 'TestGitHubCmd|TestWebdavCmd|TestS3Cmd'
-node --test internal/gui/tests/github-sync.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/sync-other-kind.test.cjs internal/gui/tests/sync-follow-server.test.cjs
+go test -tags nogui ./internal/cli -run 'TestGitHubCmd|TestWebdavCmd|TestS3Cmd|TestCommitAsArg'
+node --test internal/gui/tests/github-sync.test.cjs internal/gui/tests/sync-commit-as.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/sync-other-kind.test.cjs internal/gui/tests/sync-follow-server.test.cjs
 ```
 
 `TestGitHubEmptyRepository` covers the first encrypted backup initializing an
@@ -754,6 +778,13 @@ head (each blob sent once) and an empty repository;
 to a second computer.
 `TestGitHubNotBackup` covers backend-specific recovery
 advice when the repository holds an empty or foreign file.
+`TestGitHubCommitsAs` checks the author and committer of the Contents
+API's first commit and the Git Data API's next, by default, from a
+`sync.json` from before the choice, with the default typed in, with a
+GitHub App's bot and for a backup in parts; `TestGitHubCommitAsChecked`
+covers refused identities, WebDAV dropping it, Status, the setup text and
+the server kept for moving back; `TestCommitAsArg` the CLI's `commit-as`;
+`sync-commit-as.test.cjs` the form.
 
 Go tests use `testenv` homes and HTTP fixtures. Browser tests use isolated
 API fixtures in Chromium and WebKit. A live GitHub write requires a test

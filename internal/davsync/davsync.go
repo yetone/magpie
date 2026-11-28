@@ -85,8 +85,14 @@ type Config struct {
 	PathStyle bool   `json:"pathStyle,omitempty"`
 	// GitHub alone: an empty branch uses the repository's default branch.
 	Branch string `json:"branch,omitempty"`
-	Keys   bool   `json:"keys"`   // providers carry their API keys
-	Agents bool   `json:"agents"` // the agents' models go too
+	// GitHub alone: who the sync's commits are by, its author and
+	// committer (#4579). Both empty, as in a setup made before the
+	// choice, is DefaultCommitName and DefaultCommitEmail, so no sync
+	// counts in the token owner's contribution graph.
+	GitName  string `json:"gitName,omitempty"`
+	GitEmail string `json:"gitEmail,omitempty"`
+	Keys     bool   `json:"keys"`   // providers carry their API keys
+	Agents   bool   `json:"agents"` // the agents' models go too
 	// Providers, Settings and Profiles are whether each of those parts
 	// goes; nil, as in a setup made before they could be left out, is yes.
 	// A part left out stays as it is on each computer (jinpwng on X,
@@ -175,14 +181,18 @@ type Server struct {
 	Region    string `json:"region,omitempty"`
 	PathStyle bool   `json:"pathStyle,omitempty"`
 	Branch    string `json:"branch,omitempty"`
+	GitName   string `json:"gitName,omitempty"`
+	GitEmail  string `json:"gitEmail,omitempty"`
 }
 
 func (c Config) where() Server {
-	return Server{URL: c.URL, User: c.User, Password: c.Password, Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Branch: c.Branch}
+	return Server{URL: c.URL, User: c.User, Password: c.Password, Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Branch: c.Branch,
+		GitName: c.GitName, GitEmail: c.GitEmail}
 }
 
 func (s Server) config() Config {
-	return Config{URL: s.URL, User: s.User, Password: s.Password, Endpoint: s.Endpoint, Region: s.Region, PathStyle: s.PathStyle, Branch: s.Branch}
+	return Config{URL: s.URL, User: s.User, Password: s.Password, Endpoint: s.Endpoint, Region: s.Region, PathStyle: s.PathStyle, Branch: s.Branch,
+		GitName: s.GitName, GitEmail: s.GitEmail}
 }
 
 // Kept is an inactive server, including setups saved before Servers existed.
@@ -366,11 +376,15 @@ func Configure(c Config) error {
 	c.URL, c.User = strings.TrimSpace(c.URL), strings.TrimSpace(c.User)
 	c.Endpoint, c.Region = strings.TrimSpace(c.Endpoint), strings.TrimSpace(c.Region)
 	c.Branch = strings.TrimSpace(c.Branch)
+	c.GitName, c.GitEmail = strings.TrimSpace(c.GitName), strings.TrimSpace(c.GitEmail)
+	if c.GitName == DefaultCommitName && c.GitEmail == DefaultCommitEmail {
+		c.GitName, c.GitEmail = "", "" // the default as typed stays the default
+	}
 	if !c.S3() { // WebDAV's own: nothing of an S3 setup left behind
 		c.Endpoint, c.Region, c.PathStyle = "", "", false
 	}
 	if !c.GitHub() {
-		c.Branch = ""
+		c.Branch, c.GitName, c.GitEmail = "", "", ""
 	} else {
 		c.User = ""
 		c.Password = strings.TrimSpace(c.Password)
@@ -569,13 +583,19 @@ type View struct {
 	Region        string `json:"region,omitempty"`
 	PathStyle     bool   `json:"pathStyle,omitempty"`
 	Branch        string `json:"branch,omitempty"`
-	Library       bool   `json:"library"`
-	Memory        bool   `json:"memory"`
-	Providers     bool   `json:"providers"`
-	Settings      bool   `json:"settings"`
-	Profiles      bool   `json:"profiles"`
-	Usage         bool   `json:"usage,omitempty"`
-	SignIns       bool   `json:"signIns,omitempty"`
+	// GitName and GitEmail are who GitHub sync commits as, none for
+	// CommitDefault (Config.GitName)
+	GitName  string `json:"gitName,omitempty"`
+	GitEmail string `json:"gitEmail,omitempty"`
+	// CommitDefault is who GitHub sync commits as when no one is named
+	CommitDefault CommitAs `json:"commitDefault"`
+	Library       bool     `json:"library"`
+	Memory        bool     `json:"memory"`
+	Providers     bool     `json:"providers"`
+	Settings      bool     `json:"settings"`
+	Profiles      bool     `json:"profiles"`
+	Usage         bool     `json:"usage,omitempty"`
+	SignIns       bool     `json:"signIns,omitempty"`
 	// SignInsExcept are the subscriptions whose sign-ins stay out
 	// (Config.SignInsExcept)
 	SignInsExcept []string `json:"signInsExcept,omitempty"`
@@ -627,19 +647,28 @@ type OtherView struct {
 	Region      string `json:"region,omitempty"`
 	PathStyle   bool   `json:"pathStyle,omitempty"`
 	Branch      string `json:"branch,omitempty"`
+	GitName     string `json:"gitName,omitempty"`
+	GitEmail    string `json:"gitEmail,omitempty"`
+}
+
+// CommitAs is a commit's name and email.
+type CommitAs struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
 // Status is sync's setup and how the last sync went.
 func Status() View {
 	c, ok := Load()
 	if !ok {
-		return View{Keys: true, Agents: true, Library: true, Memory: true, Providers: true, Settings: true, Profiles: true}
+		return View{Keys: true, Agents: true, Library: true, Memory: true, Providers: true, Settings: true, Profiles: true, CommitDefault: commitDefault}
 	}
 	st := loadState()
 	v := View{On: true, URL: c.URL, User: c.User, PasswordSet: c.Password != "", PassphraseSet: c.Passphrase != "",
 		Keys: c.Keys, Agents: c.Agents, Library: c.library(), Memory: c.memoryOn(), Error: st.Error, Notice: st.Notice,
 		Providers: c.syncs("providers"), Settings: c.syncs("settings"), Profiles: c.syncs("profiles"),
 		Kind: strings.ToLower(c.Kind()), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Branch: c.Branch,
+		GitName: c.GitName, GitEmail: c.GitEmail, CommitDefault: commitDefault,
 		Auto: int(c.auto() / time.Minute), FollowServer: c.FollowServer}
 	if st.Key == stateKey(c) {
 		v.Last = st.Last
@@ -669,17 +698,19 @@ func Status() View {
 	}
 	if o := c.Other; o != nil {
 		v.Other = &OtherView{Kind: strings.ToLower(o.config().Kind()), URL: o.URL, User: o.User, PasswordSet: o.Password != "",
-			Endpoint: o.Endpoint, Region: o.Region, PathStyle: o.PathStyle, Branch: o.Branch}
+			Endpoint: o.Endpoint, Region: o.Region, PathStyle: o.PathStyle, Branch: o.Branch, GitName: o.GitName, GitEmail: o.GitEmail}
 	}
 	for kind, s := range c.Servers {
 		if v.Servers == nil {
 			v.Servers = map[string]OtherView{}
 		}
 		v.Servers[kind] = OtherView{Kind: kind, URL: s.URL, User: s.User, PasswordSet: s.Password != "",
-			Endpoint: s.Endpoint, Region: s.Region, PathStyle: s.PathStyle, Branch: s.Branch}
+			Endpoint: s.Endpoint, Region: s.Region, PathStyle: s.PathStyle, Branch: s.Branch, GitName: s.GitName, GitEmail: s.GitEmail}
 	}
 	return v
 }
+
+var commitDefault = CommitAs{DefaultCommitName, DefaultCommitEmail}
 
 // Dismiss clears the notice, and with a restore's, its undo.
 func Dismiss() error {
