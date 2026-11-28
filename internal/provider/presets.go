@@ -635,6 +635,17 @@ var presets = []PresetDef{
 	{ID: "gmicloud", Name: "GMI Cloud", Icon: "gmicloud", Kind: KindRelay,
 		Chat:    "https://api.gmi-serving.com/v1",
 		Website: "https://www.gmicloud.ai", KeysURL: "https://console.gmicloud.ai"},
+	// Nebius Token Factory (pinmmis on X), once Nebius AI Studio: open
+	// models of every maker, as vendor/model ids, on OpenAI's chat
+	// completions at api.tokenfactory.nebius.com/v1, the key as Bearer, its
+	// list at /v1/models (docs.tokenfactory.nebius.com/api-reference). Its
+	// OpenAPI also has /v1/responses, but no doc says which models it
+	// serves, so only Chat is set. The regional hosts
+	// (api.tokenfactory.<region>.nebius.com, public-serverless) take the
+	// same key; this one serves every model and routes by itself.
+	{ID: "nebius", Name: "Nebius Token Factory", Short: "Nebius", Icon: "nebius", Kind: KindRelay, Catalog: "nebius",
+		Chat:    "https://api.tokenfactory.nebius.com/v1",
+		Website: "https://docs.tokenfactory.nebius.com", KeysURL: "https://tokenfactory.nebius.com/project/api-keys"},
 	{ID: "opencode-go", Name: "OpenCode Go", Icon: "opencode", Kind: KindRelay, Catalog: "opencode-go",
 		Chat: OpenCodeGoChat, Responses: OpenCodeGoChat, Anthropic: OpenCodeGoAnthropic,
 		// Go's decision models (Jev 1.14, Gemini Decision 1 and GPT-6 Luna

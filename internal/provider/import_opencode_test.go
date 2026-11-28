@@ -231,6 +231,7 @@ func TestImportOpenCodeVendorPresets(t *testing.T) {
 		"volcengine-coding-plan": "volcengine",
 		"alibaba-token-plan-cn":  "bailian-token-plan",
 		"tencent-token-plan":     "tencent-cloud",
+		"nebius":                 "nebius",
 	}
 	entries := ""
 	for id := range want {

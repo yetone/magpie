@@ -43,7 +43,7 @@ var openCodePresets = map[string]string{
 	"xai": "xai", "moonshotai": "moonshot", "moonshotai-cn": "moonshot-cn", "mistral": "mistral",
 	"groq": "groq", "openrouter": "openrouter", "togetherai": "together", "fireworks-ai": "fireworks",
 	"siliconflow-cn": "siliconflow", "nvidia": "nvidia", "aihubmix": "aihubmix", "302ai": "302ai",
-	"ollama-cloud": "ollama-cloud", "vercel": "vercel",
+	"ollama-cloud": "ollama-cloud", "vercel": "vercel", "nebius": "nebius",
 	"zhipuai": "zhipu", "zai": "zai", "alibaba": "qwen", "alibaba-cn": "qwen-cn",
 	"minimax": "minimax", "modelscope": "modelscope", "kilo": "kilo", "cline-pass": "clinepass",
 	"kimi-code-plan-cn": "kimi-code-cn", "kimi-code-plan-global": "kimi-code",
