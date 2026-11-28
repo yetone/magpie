@@ -70,7 +70,7 @@ func TestCachedCardsTellBackgroundReadings(t *testing.T) {
 		return q.Windows[0].Used
 	}
 	q := cardOf(CachedCards(time.Now()), "codex", "me@example.com")
-	if used(q) != 37 || q.Name != "Codex" || q.Kind != "subscription" || q.AsOf != nil || q.Error != "" {
+	if used(q) != 37 || q.Name != "ChatGPT" || q.Kind != "subscription" || q.AsOf != nil || q.Error != "" {
 		t.Fatalf("after the background read: %+v", q)
 	}
 	// restarted: nothing read yet, the reading kept on disk, dated
@@ -79,7 +79,7 @@ func TestCachedCardsTellBackgroundReadings(t *testing.T) {
 	loginUsageCache.Unlock()
 	ForgetKeptCardsForTest()
 	q = cardOf(CachedCards(time.Now()), "codex", "me@example.com")
-	if used(q) != 37 || q.AsOf == nil || q.Name != "Codex" {
+	if used(q) != 37 || q.AsOf == nil || q.Name != "ChatGPT" {
 		t.Fatalf("after a restart: %+v", q)
 	}
 	if n := asked.Load(); n != 1 {

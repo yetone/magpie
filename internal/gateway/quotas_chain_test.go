@@ -111,7 +111,7 @@ func TestRemoteChainPassesOnCards(t *testing.T) {
 		byID[q.Provider] = q
 	}
 	c, ok := byID["m2/m1/codex"]
-	if !ok || c.Name != "Codex · M1 · M2" || c.From != "M2" || c.User != "a@x.com" || c.Kind != "subscription" ||
+	if !ok || c.Name != "ChatGPT · M1 · M2" || c.From != "M2" || c.User != "a@x.com" || c.Kind != "subscription" ||
 		len(c.Windows) != 2 || c.Windows[0].Used != 37 || c.Windows[1].Used != 12 {
 		t.Fatalf("magpie1's Codex card at magpie3: %+v (all: %+v)", c, byID)
 	}

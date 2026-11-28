@@ -586,7 +586,7 @@ func CodexWarmAtOf(user string) (string, bool) {
 func SetCodexWarmAt(user, at string) error {
 	user = strings.ToLower(strings.TrimSpace(user))
 	if user == "" {
-		return fmt.Errorf("which Codex account?")
+		return fmt.Errorf("which ChatGPT account?")
 	}
 	s := settings.Load()
 	of := maps.Clone(s.CodexWarmAtOf)

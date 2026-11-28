@@ -135,7 +135,7 @@ func TestRemoteMagpieCards(t *testing.T) {
 		return nil
 	}
 	c := find(subs, "office/codex")
-	if c == nil || c.Name != "Codex · Office" || c.From != "Office" || c.User != "a@x.com" || c.Icon != "codex" || len(c.Windows) != 1 || c.Windows[0].Used != 40 {
+	if c == nil || c.Name != "ChatGPT · Office" || c.From != "Office" || c.User != "a@x.com" || c.Icon != "codex" || len(c.Windows) != 1 || c.Windows[0].Used != 40 {
 		t.Fatalf("subscription card: %+v", c)
 	}
 	// a Codex reset is used there when pressed here (#3850); a check-in

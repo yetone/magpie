@@ -223,7 +223,7 @@ func TestSubscriptionUsageEachAccount(t *testing.T) {
 		}
 	}
 	if len(codex) != 2 || codex[0].User != "work@example.com" || codex[0].Windows[0].Used != 97 ||
-		codex[1].User != "me@example.com" || codex[1].Windows[0].Used != 12 || codex[1].Name != "Codex" {
+		codex[1].User != "me@example.com" || codex[1].Windows[0].Used != 12 || codex[1].Name != "ChatGPT" {
 		t.Fatalf("cards %+v", codex)
 	}
 }

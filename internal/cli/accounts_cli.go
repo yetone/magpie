@@ -57,7 +57,7 @@ func accountsCmd(args []string) error {
 		if pp, err := pluginProvider(context.Background(), s); err == nil {
 			return provider.PluginID(pp.ID), nil
 		}
-		return "", fmt.Errorf("%q: only Claude Code, Codex, Copilot, Gemini CLI, Antigravity, Zed, Factory, Xiaomi MiMo and plugins' accounts can be added and switched\n%s", s, usage)
+		return "", fmt.Errorf("%q: only Claude Code, ChatGPT (codex), Copilot, Gemini CLI, Antigravity, Zed, Factory, Xiaomi MiMo and plugins' accounts can be added and switched\n%s", s, usage)
 	}
 	if len(args) > 1 && args[1] == "project" {
 		if len(args) != 5 {

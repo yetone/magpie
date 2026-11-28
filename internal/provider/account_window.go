@@ -106,7 +106,7 @@ func sameWindowName(w QuotaWindow, name string) bool {
 type KeyWindow struct {
 	Account  string    `json:"account"`  // "<provider>/<user>"
 	Window   string    `json:"window"`   // the window's name, as the account's card says it
-	Provider string    `json:"provider"` // the card's name: "Codex", "Claude"
+	Provider string    `json:"provider"` // the card's name: "ChatGPT", "Claude"
 	User     string    `json:"user"`
 	Alias    string    `json:"alias,omitempty"`
 	Start    time.Time `json:"start"`

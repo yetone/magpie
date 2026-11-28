@@ -262,11 +262,11 @@ func quotaResetCmd(args []string) error {
 	}
 	if held == nil {
 		if user != "" {
-			return fmt.Errorf("no Codex account %s", user)
+			return fmt.Errorf("no ChatGPT account %s", user)
 		}
 		return fmt.Errorf("Codex isn't signed in")
 	}
-	who := cmp.Or(held.User, "the Codex account")
+	who := cmp.Or(held.User, "the ChatGPT account")
 	if held.Resets == nil && held.Error == "" {
 		return fmt.Errorf("%s holds no rate-limit reset", who)
 	}
@@ -362,7 +362,7 @@ func quotaAutoResetCmd(args []string) error {
 	if !set && user == "" {
 		on := settings.Load().CodexAutoReset
 		if len(on) == 0 {
-			fmt.Println(muted.Render("no Codex account uses a reset by itself ·"), "magpie quota auto-reset <account> on")
+			fmt.Println(muted.Render("no ChatGPT account uses a reset by itself ·"), "magpie quota auto-reset <account> on")
 			return nil
 		}
 		for _, u := range on {
@@ -586,7 +586,7 @@ func quotaCreditsCmd(args []string) error {
 		s := settings.Load()
 		off, first, last := s.CodexNoCredits, s.CodexCreditsFirst, s.CodexCreditsLast
 		if len(off) == 0 && len(first) == 0 && len(last) == 0 {
-			fmt.Println(muted.Render("every Codex account spends its credits once its allowance is used up ·"), "magpie quota credits <account> first|last|off")
+			fmt.Println(muted.Render("every ChatGPT account spends its credits once its allowance is used up ·"), "magpie quota credits <account> first|last|off")
 			return nil
 		}
 		for _, u := range off {
@@ -649,7 +649,7 @@ func codexAccountNamed(user string) (string, error) {
 	}
 	if !slices.ContainsFunc(provider.Logins("codex"), func(l provider.Login) bool { return strings.EqualFold(l.User, user) }) {
 		if live, ok := provider.CodexSignedIn(); !ok || !strings.EqualFold(live, user) {
-			return "", fmt.Errorf("no Codex account %s", user)
+			return "", fmt.Errorf("no ChatGPT account %s", user)
 		}
 	}
 	return user, nil

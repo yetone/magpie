@@ -94,7 +94,7 @@ func TestChatGPTAccountSearchesByItsWebSearch(t *testing.T) {
 	if p, m, ok := searcher(); !ok || p.ID != "codex" || m != codexSearchModel {
 		t.Fatalf("searcher = %s/%s %v, want codex by its web search", p.ID, m, ok)
 	}
-	if got := AutoSearcher(); !strings.HasPrefix(got, "Codex") || strings.Contains(got, "@search") {
+	if got := AutoSearcher(); !strings.HasPrefix(got, "ChatGPT") || strings.Contains(got, "@search") {
 		t.Fatalf("AutoSearcher = %q", got)
 	}
 	said, hits, err := s.webSearch(context.Background(), "Go 1.26")

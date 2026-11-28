@@ -156,7 +156,7 @@ func TestCodexHeldSignInServedWithoutRestart(t *testing.T) {
 	var tried, models []string
 	usedUp(t, &tried, &models)
 	code, body := codexPost(t, `{"model":"gpt-5.5","stream":true,"input":"ping"}`)
-	if code != 429 || strings.Join(tried, ",") != "acct-1" || !strings.Contains(body, "Codex: The usage limit") {
+	if code != 429 || strings.Join(tried, ",") != "acct-1" || !strings.Contains(body, "ChatGPT: The usage limit") {
 		t.Fatalf("not served through routing: %d %s tried %v", code, body, tried)
 	}
 }

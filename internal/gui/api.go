@@ -2511,7 +2511,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		if strings.TrimSpace(in.User) == "" {
-			fail(rw, fmt.Errorf("which Codex account?"))
+			fail(rw, fmt.Errorf("which ChatGPT account?"))
 			return
 		}
 		set := func() error { return provider.SetCodexAutoReset(in.User, in.On) }
@@ -2568,7 +2568,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		if strings.TrimSpace(in.User) == "" {
-			fail(rw, fmt.Errorf("which Codex account?"))
+			fail(rw, fmt.Errorf("which ChatGPT account?"))
 			return
 		}
 		// on alone keeps first or last as it was; either said sets it,

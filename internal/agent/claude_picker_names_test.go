@@ -116,8 +116,8 @@ func TestClaudePickerSubscriptionSaysItsProvider(t *testing.T) {
 	catalog.Changed = SyncCatalog
 	t.Cleanup(func() { catalog.Changed = nil })
 	for _, c := range []struct{ mode, label, note string }{
-		{provider.SuffixOn, "GPT-5.5 · Codex", "me@example.com · via magpie"},
-		{provider.SuffixOff, "GPT-5.5", "Codex · me@example.com · via magpie"},
+		{provider.SuffixOn, "GPT-5.5 · ChatGPT", "me@example.com · via magpie"},
+		{provider.SuffixOff, "GPT-5.5", "ChatGPT · me@example.com · via magpie"},
 	} {
 		if err := provider.SetSuffixMode(c.mode); err != nil {
 			t.Fatal(err)

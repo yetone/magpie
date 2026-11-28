@@ -1155,7 +1155,7 @@ func codexAccount(home string) (Provider, bool) {
 		ms = codexPoolModels(ms)
 		return ms, catalog.SaveLive("codex", CodexBase, ms)
 	}
-	return Provider{ID: "codex", Name: "Codex", Icon: "codex-color", Responses: CodexBase, Website: "https://chatgpt.com/codex", Account: acct}, true
+	return Provider{ID: "codex", Name: "ChatGPT", Icon: "codex-color", Responses: CodexBase, Website: "https://chatgpt.com/codex", Account: acct}, true
 }
 
 // codexToken returns a usable access token for the Codex home dir,

@@ -2566,7 +2566,7 @@ A Codex that isn't connected to magpie goes straight to OpenAI on its own
 sign-in, however many of its accounts are on: magpie only moves Codex's
 sign-in (`auth.json`) as above. Connected, a request the signed-in account
 has no allowance for goes on to the others through the gateway. *Only
-switch Codex's sign-in* under Providers › Codex (or `magpie accounts
+switch Codex's sign-in* under Providers › ChatGPT (or `magpie accounts
 switch-only codex on`) keeps Codex's requests off magpie even then
 (#1907). An `openai_base_url` you wrote yourself stays. The
 Codex app and a running `codex app-server` read the sign-in when they

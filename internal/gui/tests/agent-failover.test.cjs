@@ -4,7 +4,7 @@
 // user's other ChatGPT accounts on in magpie. The row says it goes through
 // magpie for that alone, its title says what turns it off, and its
 // account switch (the Switch accounts only menu) has Only switch Codex's
-// sign-in and Manage accounts…, which opens Providers › Codex, where
+// sign-in and Manage accounts…, which opens Providers › ChatGPT, where
 // those accounts are switched off. A Codex
 // not failing over says what it said before. In every language, at a narrow
 // width too, in Chromium and WebKit; no click moves the page.
@@ -45,7 +45,7 @@ function server(lang) {
 
 // three ChatGPT accounts on, as the reporter's
 const codexProvider = {
-  id: "codex", name: "Codex", icon: "codex-color", chat: "", responses: "", anthropic: "", catalog: "", routing: "smart",
+  id: "codex", name: "ChatGPT", icon: "codex-color", chat: "", responses: "", anthropic: "", catalog: "", routing: "smart",
   models: [{ id: "gpt-5.5", name: "GPT-5.5", on: true }], agents: [], fallback: [], headers: {}, keyList: [],
   account: {
     agent: "codex", agentName: "Codex", user: "me@example.com", plan: "PLUS",
@@ -58,7 +58,7 @@ const codexProvider = {
 };
 
 const said = "Not connected · goes through magpie only to fail over to your other ChatGPT accounts";
-const title = "magpie set openai_base_url in {agent}'s config.toml, so a request the ChatGPT account {agent} is signed in to has no allowance for goes on to your other ChatGPT accounts on in magpie. {agent} keeps to its own models. To stop it, tick Only switch {agent}'s sign-in under Providers › Codex, or switch those accounts off; connecting {agent} adds magpie's models.";
+const title = "magpie set openai_base_url in {agent}'s config.toml, so a request the ChatGPT account {agent} is signed in to has no allowance for goes on to your other ChatGPT accounts on in magpie. {agent} keeps to its own models. To stop it, tick Only switch {agent}'s sign-in under Providers › ChatGPT, or switch those accounts off; connecting {agent} adds magpie's models.";
 const manage = "Manage accounts…";
 const only = "Only switch {agent}'s sign-in";
 const plain = "Not connected · {agent} uses its own settings";
@@ -106,8 +106,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => new URL(location.href).searchParams.get("view") === "providers");
         await page.waitForFunction(() => new URL(location.href).searchParams.get("edit") === "codex");
         // its editor, with the accounts to switch off, is what opens
-        await page.waitForFunction(() => !document.querySelector("#modal").hidden && document.querySelector("#modal").innerText.startsWith("Codex"));
-        assert.ok(await page.locator(".row.provider.selected[data-id=codex]").count(), "Codex is the one open");
+        await page.waitForFunction(() => !document.querySelector("#modal").hidden && document.querySelector("#modal").innerText.startsWith("ChatGPT"));
+        assert.ok(await page.locator(".row.provider.selected[data-id=codex]").count(), "the ChatGPT row is the one open");
         assert.deepEqual(dialogs, []);
         assert.deepEqual(errors, []);
         assert.ok(top.every((v) => v === 0 || v === undefined), `page was scrolled ${top}`);

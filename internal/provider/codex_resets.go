@@ -387,7 +387,7 @@ func codexUserSign(ctx context.Context, user string) (who, tok, accountID string
 			return who, tok, accountID, renew, err
 		}
 	}
-	return "", "", "", nil, fmt.Errorf("no Codex account %q", user)
+	return "", "", "", nil, fmt.Errorf("no ChatGPT account %q", user)
 }
 
 // codexUserWindows reads the windows and resets of the Codex account user

@@ -1183,7 +1183,7 @@ func claudeScopeModel(name string) string {
 // codexSubscriptionUsage is the card of the Codex account user, signed in
 // in dir.
 func codexSubscriptionUsage(ctx context.Context, dir, user string) SubscriptionQuota {
-	q := SubscriptionQuota{Provider: "codex", Name: "Codex", Icon: "codex-color", Windows: []QuotaWindow{}}
+	q := SubscriptionQuota{Provider: "codex", Name: "ChatGPT", Icon: "codex-color", Windows: []QuotaWindow{}}
 	if holding(ctx) {
 		q.Error = errNotAsked.Error()
 		return q

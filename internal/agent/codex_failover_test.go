@@ -204,7 +204,7 @@ func TestCodexFailoverOnlyKeepsOwnModels(t *testing.T) {
 	if cfg := read(); !strings.Contains(cfg, "openai_base_url") {
 		t.Fatalf("not the reporter's state:\n%s", cfg)
 	}
-	if cx.Wired() || !cx.FailingOver() || !CodexOwnOnly() || !strings.Contains(cx.FailoverSaid(), "Providers › Codex") {
+	if cx.Wired() || !cx.FailingOver() || !CodexOwnOnly() || !strings.Contains(cx.FailoverSaid(), "Providers › ChatGPT") {
 		t.Errorf("wired %v, failing over %v, own only %v, said %q", cx.Wired(), cx.FailingOver(), CodexOwnOnly(), cx.FailoverSaid())
 	}
 	if got := models(); len(got) != 1 || got[0] != "gpt-5.5" {

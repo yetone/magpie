@@ -345,6 +345,11 @@ func namedRemoteCards(p Provider, cards []SubscriptionQuota) []SubscriptionQuota
 		if q.Provider == "" || catalog.Loops(q.Via) || !wanted(q.Provider) {
 			continue
 		}
+		if q.Provider == "codex" {
+			// a magpie before the ChatGPT plan's card was named for it
+			// (tmr11235 on X) still calls it "Codex"
+			q.Name = accountCard("codex").name
+		}
 		q.Provider = p.ID + "/" + q.Provider
 		q.Name += " · " + name
 		q.From = name
@@ -638,10 +643,10 @@ const errRemoteResetUnknown = "%s didn't say in time whether the reset was used;
 func UseRemoteCodexReset(ctx context.Context, id, user, credit string) (ResetOutcome, error) {
 	p, card, ok := remoteOf(id)
 	if !ok || card != "codex" {
-		return ResetOutcome{}, fmt.Errorf("%s is no remote magpie's Codex card", id)
+		return ResetOutcome{}, fmt.Errorf("%s is no remote magpie's ChatGPT card", id)
 	}
 	if user == "" {
-		return ResetOutcome{}, errors.New("name the Codex account whose reset is used")
+		return ResetOutcome{}, errors.New("name the ChatGPT account whose reset is used")
 	}
 	q := url.Values{"user": {user}}
 	if credit != "" {

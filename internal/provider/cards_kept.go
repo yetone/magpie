@@ -34,7 +34,7 @@ func accountCard(agent string) cardFace {
 	case "claude":
 		return cardFace{"Claude Code", "claude-color"}
 	case "codex":
-		return cardFace{"Codex", "codex-color"}
+		return cardFace{"ChatGPT", "codex-color"}
 	case "copilot":
 		return cardFace{"Copilot", "githubcopilot"}
 	case QoderCNID:
