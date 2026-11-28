@@ -114,13 +114,14 @@ func (l *Library) hubServerFor(t *Target) *Server {
 	if k := agent.KeyAt(base); k != gateway.Token {
 		s.Headers = map[string]string{"Authorization": "Bearer " + k}
 	}
+	ss := l.hubServers(t.Agent.ID)
+	s.CallTimeout = hubEntryCall(ss)
 	// Pi connects to a server it doesn't wait for (the hub's, reached by
 	// codemode) while the first prompt is already written, so only a
 	// description gives that prompt its line of what the hub serves
 	// (extensions/mcp, serverSummary): told the router's instructions
 	// alone, a Pi asked about a repository never saw DeepWiki (11-01)
 	if t.MCP != nil && t.MCP.Format == fmtPiNative {
-		ss := l.hubServers(t.Agent.ID)
 		s.about = gateway.HubLine(hubAbouts(ss))
 		for _, a := range ss {
 			if serverKey(a) == artifactsKey {
@@ -131,6 +132,28 @@ func (l *Library) hubServerFor(t *Target) *Server {
 		}
 	}
 	return s
+}
+
+// hubCallMargin is how much longer than the longest call timeout among
+// the hub's servers an agent is given for a call of the hub: the hub ends
+// the call at the server's own, and the agent is told which server didn't
+// answer rather than reaching its own timeout first.
+const hubCallMargin = 10
+
+// hubEntryCall is the tool timeout of the hub's entry for an agent given
+// ss through it: the longest call timeout among them and hubCallMargin.
+// 0 when none is longer than the hub's own wait (gateway.HubCallWait),
+// which the agent's own timeout is over already: a shorter one would cut
+// the others' calls.
+func hubEntryCall(ss []*Server) int {
+	most := 0
+	for _, s := range ss {
+		most = max(most, s.CallTimeout)
+	}
+	if time.Duration(most)*time.Second <= gateway.HubCallWait() {
+		return 0
+	}
+	return most + hubCallMargin
 }
 
 // HubLink is the link that adds the hub to app, at this computer's
@@ -373,7 +396,7 @@ func (theHub) Tools(ctx context.Context, agentID string) []gateway.HubTool {
 				if json.Unmarshal(t["name"], &name) != nil || name == "" || slices.Contains(s.DisabledTools, name) {
 					continue
 				}
-				lists[i] = append(lists[i], gateway.HubTool{Server: s.Name, Tool: name, Spec: t, Roots: wantsCaller(s)})
+				lists[i] = append(lists[i], gateway.HubTool{Server: s.Name, Tool: name, Spec: t, Roots: wantsCaller(s), Wait: s.callWait()})
 			}
 		}()
 	}

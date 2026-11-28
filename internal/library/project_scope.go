@@ -64,6 +64,9 @@ type claudeLocal struct {
 	Servers []string `json:"servers,omitempty"`
 	// Off are the names magpie put in its disabledMcpServers
 	Off []string `json:"off,omitempty"`
+	// Call is the tool timeout magpie wrote in the hub's entry there
+	// (callKeys): one other than it is the user's
+	Call float64 `json:"call,omitempty"`
 }
 
 // claudeRoot is the key Claude Code keeps dir's project under: the main
@@ -145,6 +148,8 @@ func (l *Library) projectHubs(p *Project) map[string]*Server {
 			}
 		}
 		hs.URL += url.PathEscape(gateway.HubProjectSep + projectKey(p.Dir))
+		// the project's own servers' call timeouts, beside the agent's
+		hs.CallTimeout = hubEntryCall(l.hubServers(id + gateway.HubProjectSep + projectKey(p.Dir)))
 		out[id] = hs
 	}
 	return out
@@ -213,7 +218,7 @@ func (l *Library) syncClaudeLocal(p *Project, hub *Server, fail func(what string
 	}
 	rec := &claudeLocal{Root: root}
 	if p.Claude != nil {
-		rec.Servers, rec.Off = p.Claude.Servers, p.Claude.Off
+		rec.Servers, rec.Off, rec.Call = p.Claude.Servers, p.Claude.Off, p.Claude.Call
 	}
 	// the hub's entry
 	var servers []string
@@ -237,14 +242,20 @@ func (l *Library) syncClaudeLocal(p *Project, hub *Server, fail func(what string
 			}
 		}
 		if hub != nil {
-			if err := edit.SetJSON(path, edit.KV{Path: base + ".mcpServers." + hub.Name, Value: (&mcpFile{Format: fmtClaude}).merged(hub, old)}); err != nil {
+			f := &mcpFile{Format: fmtClaude}
+			hub = withWrote(hub, timesWrote{call: rec.Call})
+			if err := edit.SetJSON(path, edit.KV{Path: base + ".mcpServers." + hub.Name, Value: f.merged(hub, old)}); err != nil {
 				fail("claude", err)
 			} else {
 				servers = append(servers, hub.Name)
+				rec.Call = f.callWritten(hub, old)
 			}
 		}
 	}
 	rec.Servers = servers
+	if hub == nil || !slices.Contains(servers, hub.Name) {
+		rec.Call = 0
+	}
 	// the servers turned off: the user's own names there stay theirs
 	var cur []string
 	if raw, ok := edit.GetJSONRaw(path, base+".disabledMcpServers"); ok {

@@ -296,7 +296,7 @@ func targetOf(a *agent.Agent) *Target {
 		d := a.Dir
 		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
 		t.Override = filepath.Join(d, "AGENTS.override.md")
-		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative}
+		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative, Call: &omoCallKey}
 		t.Skills = filepath.Join(d, "skills")
 	case "mu":
 		// mu is Pi 1.4.0 (packages/coding-agent, qybaihe/mu b71cd18) on
@@ -565,7 +565,7 @@ func targetOf(a *agent.Agent) *Target {
 		// names, or its URL's origin) is listed as needing approval until it
 		// is switched on in WorkBuddy, which magpie leaves to the user
 		// (#1266). Its skills are in skills/ there.
-		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtClaude}
+		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtClaude, NoCallKey: true}
 		t.Skills = filepath.Join(a.Dir, "skills")
 		// Its instructions are the Custom Instructions of its
 		// Personalization settings: personalization.customPrompt in
@@ -584,7 +584,7 @@ func targetOf(a *agent.Agent) *Target {
 		// 2.162.0); mcpServers as Claude Code's, and no approval for a
 		// user's server (isAllowed asks only of a project's). Its skills
 		// are in skills/ in its folder (getHomeSkillsDir) (#1266).
-		t.MCP = &mcpFile{Path: codebuddyMCP(a.Dir), Format: fmtClaude}
+		t.MCP = &mcpFile{Path: codebuddyMCP(a.Dir), Format: fmtClaude, NoCallKey: true}
 		t.Skills = filepath.Join(a.Dir, "skills")
 		// Its user-wide instructions are CODEBUDDY.md in its folder, else
 		// CODEBUDDY.mdc there (MemoryLoader.loadUserMemories, 2.164.0)
@@ -657,7 +657,7 @@ func targetOf(a *agent.Agent) *Target {
 		// from mcp.json in its folder (`atomcode mcp add --global`, the same
 		// mcpServers as omp's) and its skills from skills/ there
 		t.Instructions = filepath.Join(a.Dir, "ATOMCODE.md")
-		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtOmp}
+		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtOmp, Call: &atomCallKey}
 		t.Skills = filepath.Join(a.Dir, "skills")
 	case "qwen":
 		// Qwen Code reads QWEN.md (and AGENTS.md) in its global folder,
@@ -897,7 +897,7 @@ func wslTargetOf(a *agent.Agent) *Target {
 		d := j(h, ".omo", "agent")
 		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
 		t.Override = filepath.Join(d, "AGENTS.override.md")
-		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative}
+		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative, Call: &omoCallKey}
 		t.Skills = filepath.Join(d, "skills")
 	case "mu":
 		d := j(h, ".mu", "agent")
@@ -930,7 +930,7 @@ func wslTargetOf(a *agent.Agent) *Target {
 		t.MCP = &mcpFile{Path: filepath.Join(filepath.Dir(a.Path), "cline_mcp_settings.json"), Format: fmtCline}
 		t.Skills = filepath.Join(a.Dir, "skills")
 	case "codebuddy":
-		t.MCP = &mcpFile{Path: codebuddyMCPIn(a.Dir, h), Format: fmtClaude}
+		t.MCP = &mcpFile{Path: codebuddyMCPIn(a.Dir, h), Format: fmtClaude, NoCallKey: true}
 		t.Skills = filepath.Join(a.Dir, "skills")
 		t.Instructions = firstThere(a.Dir, "CODEBUDDY.md", "CODEBUDDY.mdc")
 	case "kimi":

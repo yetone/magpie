@@ -62,6 +62,12 @@ type Server struct {
 	// and list its tools: Codex's startup_timeout_sec (#3168), the only
 	// agent given it. 0 leaves it to the agent (Codex's own is 30s).
 	StartupTimeout int `json:"startupTimeout,omitempty"`
+	// CallTimeout is the seconds a call of one of the server's tools may
+	// take (steinxia on X): the MCP hub waits that long for it, not its
+	// own 50s, and the agents given the server, or the hub with it, are
+	// given a tool timeout past it where their config takes one
+	// (callTimeoutOf). 0 leaves both as they were.
+	CallTimeout int `json:"callTimeout,omitempty"`
 	// IdleTimeout is the seconds a server magpie runs itself (through the
 	// MCP hub, or for Codex at /mcp/run/) is kept with no call before it is
 	// ended, 0 for magpie's own (hubIdle, runIdle); KeepAlive keeps it
@@ -120,6 +126,10 @@ type Server struct {
 	// entry being written, 0 for none: one the entry has otherwise is the
 	// user's, and stays (startupTheirs)
 	startupWrote float64
+	// callWrote is the tool timeout magpie last wrote in the entry, in
+	// the entry's own unit (callKeys), 0 for none: one the entry has
+	// otherwise is the user's, and stays (callTheirs)
+	callWrote float64
 }
 
 // OAuthApp is an OAuth app made with a server's vendor, by the names
@@ -216,6 +226,9 @@ func (s *Server) check() error {
 	}
 	if s.IdleTimeout < 0 || s.IdleTimeout > maxStartupTimeout {
 		return fmt.Errorf("%s: the idle timeout is between 0 (magpie's own) and %d seconds", s.Name, maxStartupTimeout)
+	}
+	if s.CallTimeout < 0 || s.CallTimeout > maxStartupTimeout {
+		return fmt.Errorf("%s: the call timeout is between 0 (magpie's own) and %d seconds", s.Name, maxStartupTimeout)
 	}
 	for k := range s.Env {
 		if strings.TrimSpace(k) == "" {
@@ -399,6 +412,12 @@ type mcpFile struct {
 	// NoCmdRefs: the agent reads no reference in a command or its args,
 	// whatever its format's other agents do (Droid's, cmdRefs)
 	NoCmdRefs bool
+	// NoCallKey: the agent reads no tool timeout in an entry, whatever its
+	// format's other agents do (WorkBuddy's and CodeBuddy's, callKeys)
+	NoCallKey bool
+	// Call is the agent's own tool timeout key, where it isn't its
+	// format's (OmO's, AtomCode's)
+	Call *callKey
 }
 
 // files are every file the servers are written into.
@@ -547,6 +566,12 @@ func selfTimeout(s *Server, def int) int {
 	return def
 }
 
+// callWait is how long the MCP hub waits for a call of one of s's tools:
+// its CallTimeout, 0 for the hub's own.
+func (s *Server) callWait() time.Duration {
+	return time.Duration(s.CallTimeout) * time.Second
+}
+
 // idleFor is how long a server magpie runs is kept with no call: its own
 // IdleTimeout, else def; 0 with KeepAlive, which is never ended for it.
 func (s *Server) idleFor(def time.Duration) time.Duration {
@@ -598,15 +623,52 @@ func startupBehind(s *Server, old map[string]any) bool {
 	return !isNumber(v, float64(s.StartupTimeout))
 }
 
-// wroteStartup is s with the startup timeout magpie last wrote in its
-// entry.
-func wroteStartup(s *Server, v float64) *Server {
-	if s.startupWrote == v {
+// timesWrote is what magpie last wrote in a server's entry of the timeouts it
+// keeps a record of, each in the entry's own unit: Codex's
+// startup_timeout_sec, and the agent's tool timeout (callKeys). One there
+// other than these is the user's.
+type timesWrote struct{ startup, call float64 }
+
+// withWrote is s with the timeouts magpie last wrote in its entry.
+func withWrote(s *Server, w timesWrote) *Server {
+	if s.startupWrote == w.startup && s.callWrote == w.call {
 		return s
 	}
 	c := *s
-	c.startupWrote = v
+	c.startupWrote, c.callWrote = w.startup, w.call
 	return &c
+}
+
+// written is what of the timeouts magpie keeps a record of are its own in
+// the entry it writes for s over old.
+func (f *mcpFile) written(s *Server, old map[string]any) timesWrote {
+	return timesWrote{f.startupWritten(s, old), f.callWritten(s, old)}
+}
+
+// wroteOf is what a record by server, Startup's and Calls', says magpie
+// wrote in name's entry.
+func wroteOf(startup, calls map[string]float64, name string) timesWrote {
+	return timesWrote{startup[name], calls[name]}
+}
+
+// splitWrote is w as the two records, Startup's and Calls', each nil for
+// none; a server with none is left out of each.
+func splitWrote(w map[string]timesWrote) (startup, calls map[string]float64) {
+	for k, v := range w {
+		if v.startup != 0 {
+			if startup == nil {
+				startup = map[string]float64{}
+			}
+			startup[k] = v.startup
+		}
+		if v.call != 0 {
+			if calls == nil {
+				calls = map[string]float64{}
+			}
+			calls[k] = v.call
+		}
+	}
+	return startup, calls
 }
 
 // gooseOldTimeout is the timeout magpie wrote for every Goose server before
@@ -614,10 +676,11 @@ func wroteStartup(s *Server, v float64) *Server {
 const gooseOldTimeout = 300
 
 // behind says whether an entry magpie wrote before lacks the timeout it
-// gives s now: Codex's tool_timeout_sec is missing, or Goose's timeout is
-// still the gooseOldTimeout every server had, or Codex's startup timeout
-// isn't the one s has (startupBehind). A value the user chose is none of
-// these, so it is left as it is.
+// gives s now: its tool timeout isn't the one magpie gives s
+// (callBehind: Codex's tool_timeout_sec missing, Goose's timeout still the
+// gooseOldTimeout every server had), or Codex's startup timeout isn't the
+// one s has (startupBehind). A value the user chose is none of these, so
+// it is left as it is.
 func (f *mcpFile) behind(s *Server, old map[string]any) bool {
 	if f.Format == fmtCodex && old != nil && startupBehind(s, old) {
 		return true
@@ -630,17 +693,185 @@ func (f *mcpFile) behind(s *Server, old map[string]any) bool {
 	if f.Format == fmtPiNative && old != nil && len(piDirect(s)) > 0 && (!piExposed(old) || piDirectBefore(s, old)) {
 		return true
 	}
-	if selfTimeout(s, 0) == 0 {
+	return old != nil && f.callBehind(s, old)
+}
+
+// callKey is, for an agent whose entry for a server says how long the
+// agent waits for one of its tools, that key; per is how many of its units
+// make a second, most the longest the agent takes (0 for no cap), and def
+// the seconds magpie writes for a server that has no CallTimeout. self is
+// whether magpie's own servers that take a while are given theirs there
+// (selfTimeout), as they were before the Library had a call timeout. Each
+// is the agent's own name for it, from its source.
+type callKey struct {
+	key       string
+	per, most int
+	def       int
+	self      bool
+}
+
+// callKeys are the agents' callKey, by format. An agent not here has no
+// such key in a server's entry: Crush's timeout bounds only the start and
+// a ping (crush internal/agent/tools/mcp/init.go), Command Code reads the
+// MCP_TOOL_TIMEOUT variable alone, and Devin, ZCode and TRAE CN document
+// none (TRAE CN's RUN_MCP_TIMEOUT_MS is a variable in the server's own
+// env), so magpie writes nothing for them. Nor for Alma (ten minutes,
+// fixed: server-go/internal/mcpclient/manager.go), Claude Desktop (an
+// admin policy's mcpToolTimeoutSec only) or LiveAgent, whose one
+// timeoutMs bounds the start and a call alike and is the user's.
+var callKeys = map[mcpFormat]callKey{
+	// codex-rs/config/src/mcp_types.rs: tool_timeout_sec, 60s unless set
+	fmtCodex: {key: "tool_timeout_sec", per: 1, self: true},
+	// Goose's extension config: timeout in seconds, for every request
+	// but initialize (agents/extension_manager resolve_timeout; 300 its
+	// own)
+	fmtGoose: {key: "timeout", per: 1, def: gooseOldTimeout, self: true},
+	// mcp-transport-config: requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS
+	// a minute
+	fmtOpenClaw: {key: "requestTimeoutMs", per: 1000, self: true},
+	// hermes-agent tools/mcp_tool_common.py: a server's timeout, in
+	// seconds, bounds each tool call (300 unless set)
+	fmtHermes: {key: "timeout", per: 1},
+	// cline sdk/packages/shared/src/mcp.ts: timeout beside transport, in
+	// seconds, 60 unless set and held to 1..3600
+	fmtCline: {key: "timeout", per: 1, most: 3600},
+	// Kimi Code's mcpCore config-schema.ts: toolTimeoutMs, the SDK's
+	// minute unless set; the old kimi-cli and Bub, which read the same
+	// mcp.json, keep a key they don't know and wait as they did
+	fmtKimi: {key: "toolTimeoutMs", per: 1000},
+	// zed settings_content/src/project.rs: a context server's timeout,
+	// in seconds, for every request (60 unless set, 600 at most)
+	fmtZed: {key: "timeout", per: 1, most: 600},
+	// kiro.dev/docs/mcp/configuration: timeout, in milliseconds, each
+	// request's (amazon-q-developer-cli custom_tool.rs, 120000 unless
+	// set)
+	fmtKiro: {key: "timeout", per: 1000},
+	// Claude Code's mcpServers: timeout, in milliseconds, a tool call's
+	// whole (MCP_TOOL_TIMEOUT unless set; it lifts the five minutes a
+	// call over HTTP may go without a word too). Droid reads the same
+	// key (180000 unless set)
+	fmtClaude: {key: "timeout", per: 1000},
+	// Gemini CLI's mcpServers: timeout, in milliseconds, for a call and
+	// the start alike (MCP_DEFAULT_TIMEOUT_MSEC, ten minutes, unless set)
+	fmtGemini: {key: "timeout", per: 1000},
+	// OpenCode's mcp: timeout, in milliseconds, for a call, the start
+	// and the tool list (packages/opencode/src/mcp; v2 reads the number
+	// as all three too, config/migrate.ts migrateMcpTimeout)
+	fmtOpenCode: {key: "timeout", per: 1000},
+	// Copilot CLI's mcpServers: timeout, in milliseconds (180000 unless
+	// set; `copilot mcp add --timeout`)
+	fmtCopilot: {key: "timeout", per: 1000},
+	// Grok Build's config.toml: tool_timeout_sec, in seconds (6000 unless
+	// set); Kigi's is the same (kigi-config-types/src/mcp.rs)
+	fmtGrok: {key: "tool_timeout_sec", per: 1},
+	// Pi's own mcp.json: timeout, in seconds, each request's, a call's
+	// too (pi-coding-agent docs/mcp.md, DEFAULT_TIMEOUT_SECONDS 60); mu's
+	// is Pi's. OmO's is its own (targets.go)
+	fmtPiNative: {key: "timeout", per: 1},
+	// pi-mcp-adapter's and pi-mcp-extension's requestTimeoutMs, in
+	// milliseconds, a call's and the start's (docs/servers.md;
+	// config-compat.ts, 30000 unless set)
+	fmtPi: {key: "requestTimeoutMs", per: 1000},
+	// omp's timeout, in milliseconds, for every request it sends the
+	// server (src/mcp/timeout.ts, a call ten minutes unless set); Qoder
+	// reads the same key for a call (qodercli's bundle, MCP_TOOL_TIMEOUT
+	// unless set). AtomCode's is its own (targets.go)
+	fmtOmp: {key: "timeout", per: 1000},
+	// @deepseek-ai/dsh-mcp-client's config: toolCallTimeoutMs, a tool
+	// call's (lib/index.js, 60000 unless set)
+	fmtDsh: {key: "toolCallTimeoutMs", per: 1000},
+}
+
+// OmO's mcp.json takes requestTimeoutMs, in milliseconds, for a call
+// (senpi docs/mcp.md, config-normalize.js; 30000 unless set), and refuses
+// a key it doesn't know, Pi's timeout too.
+var omoCallKey = callKey{key: "requestTimeoutMs", per: 1000}
+
+// AtomCode's mcp.json takes timeout_ms, in milliseconds, for every
+// request (crates/atomcode-capabilities/src/mcp/config.rs, 30000 unless
+// set), not omp's timeout.
+var atomCallKey = callKey{key: "timeout_ms", per: 1000}
+
+// callKey is the agent's callKey, if it reads one.
+func (f *mcpFile) callKey() (callKey, bool) {
+	if f.NoCallKey {
+		return callKey{}, false
+	}
+	if f.Call != nil {
+		return *f.Call, true
+	}
+	k, ok := callKeys[f.Format]
+	return k, ok
+}
+
+func (f *mcpFile) callKeyName() string {
+	k, _ := f.callKey()
+	return k.key
+}
+
+// callFor is the tool timeout magpie gives s in an entry of the agent's,
+// in the entry's unit: s's CallTimeout, else selfTimeout's where the agent
+// is given those; 0 for none, and for an agent with no such key.
+func (f *mcpFile) callFor(s *Server) int {
+	k, ok := f.callKey()
+	if !ok {
+		return 0
+	}
+	sec := s.CallTimeout
+	if sec == 0 && k.self {
+		sec = selfTimeout(s, k.def)
+	}
+	if k.most > 0 {
+		sec = min(sec, k.most)
+	}
+	return sec * k.per
+}
+
+// callTheirs says whether old, an entry of s's, has a tool timeout magpie
+// didn't write: one other than the one magpie wrote last (callWrote), and
+// than the selfTimeout magpie wrote for s before it kept that, or Goose's
+// gooseOldTimeout. That one is the user's, and magpie's value never goes
+// over it.
+func (f *mcpFile) callTheirs(s *Server, old map[string]any) bool {
+	k, ok := f.callKey()
+	if !ok {
 		return false
 	}
-	switch f.Format {
-	case fmtCodex:
-		_, ok := old["tool_timeout_sec"]
-		return !ok
-	case fmtGoose:
-		return isNumber(old["timeout"], gooseOldTimeout)
+	v, ok := old[k.key]
+	if !ok {
+		return false
 	}
-	return false
+	if s.callWrote > 0 && isNumber(v, s.callWrote) {
+		return false
+	}
+	if t := selfTimeout(s, k.def) * k.per; k.self && t > 0 && isNumber(v, float64(t)) {
+		return false
+	}
+	return !(f.Format == fmtGoose && isNumber(v, gooseOldTimeout))
+}
+
+// callBehind says whether old lacks the tool timeout magpie gives s, or
+// has one of magpie's that s no longer has.
+func (f *mcpFile) callBehind(s *Server, old map[string]any) bool {
+	k, ok := f.callKey()
+	if !ok || f.callTheirs(s, old) {
+		return false
+	}
+	want := f.callFor(s)
+	v, ok := old[k.key]
+	if !ok {
+		return want != 0
+	}
+	return !isNumber(v, float64(want))
+}
+
+// callWritten is the tool timeout of magpie's in the entry it writes for
+// s over old, for the next write to know it by: 0 for none.
+func (f *mcpFile) callWritten(s *Server, old map[string]any) float64 {
+	if f.callTheirs(s, old) {
+		return 0
+	}
+	return float64(f.callFor(s))
 }
 
 // piExposed is whether a Pi entry says how its tools reach the model.
@@ -766,7 +997,7 @@ func (f *mcpFile) encode(s *Server) ordered {
 				add("env_keys", pass)
 			}
 		}
-		add("timeout", selfTimeout(s, 300))
+		add("timeout", f.callFor(s))
 	case fmtPi:
 		// pi-mcp-extension reads the transport from "transport",
 		// pi-mcp-adapter from "httpTransport"; each ignores the other's
@@ -864,11 +1095,11 @@ func (f *mcpFile) encode(s *Server) ordered {
 			optional("env", s.Env)
 		}
 		// OpenClaw gives a request a minute unless the entry says more
-		// (mcp-transport-config DEFAULT_REQUEST_TIMEOUT_MS); every other
-		// key fails the whole file (`openclaw config validate`), timeout
-		// among them
-		if t := selfTimeout(s, 0); t > 0 {
-			add("requestTimeoutMs", t*1000)
+		// (mcp-transport-config DEFAULT_REQUEST_TIMEOUT_MS); the retired
+		// timeout and connectTimeout fail the whole file (`openclaw config
+		// validate`, zod-schema.mcp-server.ts)
+		if t := f.callFor(s); t > 0 {
+			add("requestTimeoutMs", t)
 		}
 	case fmtKiro, fmtTrae:
 		// as the docs show them: command/args/env, or url/headers — no
@@ -974,7 +1205,7 @@ func (f *mcpFile) encode(s *Server) ordered {
 			}
 		}
 		// Codex gives a tool a minute unless its entry says more
-		if t := selfTimeout(s, 0); t > 0 {
+		if t := f.callFor(s); t > 0 {
 			add("tool_timeout_sec", t)
 		}
 		// and 30s to start and list its tools unless its entry says more
@@ -997,6 +1228,15 @@ func (f *mcpFile) encode(s *Server) ordered {
 			if len(s.Env) > 0 {
 				add("env", dshRefs(s.Env))
 			}
+		}
+	}
+	switch f.Format {
+	case fmtCodex, fmtGoose, fmtOpenClaw:
+		// written above, in the place the agent's own add puts it
+	default:
+		// how long the agent waits for one of the server's tools (callKeys)
+		if t := f.callFor(s); t > 0 {
+			add(f.callKeyName(), t)
 		}
 	}
 	return o
@@ -1495,18 +1735,21 @@ var owned = map[mcpFormat][]string{
 	fmtPiNative: {"type", "transport", "httpTransport", "url", "headers", "command", "args", "env"},
 	fmtZCode:    {"type", "url", "headers", "command", "args", "env"},
 	fmtDsh:      {"serverName", "transport", "url", "headers", "command", "args", "env"},
-	// timeout, enabled, tools, sampling, auth… are the user's
+	// enabled, tools, sampling, auth… are the user's, and a timeout
+	// magpie didn't write (callKeys)
 	fmtHermes: {"transport", "url", "headers", "command", "args", "env"},
 	fmtAlma:   {"transport", "url", "headers", "command", "args", "env"},
 	fmtOmp:    {"type", "url", "headers", "command", "args", "env"},
 	fmtKimi:   {"transport", "type", "url", "headers", "command", "args", "env"},
 	fmtDevin:  {"transport", "type", "url", "headers", "command", "args", "env"},
-	// enabled and the timeouts are the user's
+	// enabled, startup_timeout_sec and a tool_timeout_sec magpie didn't
+	// write (callKeys) are the user's
 	fmtGrok: {"type", "url", "headers", "command", "args", "env"},
 	// the flat shape's keys go when magpie writes the entry again
 	fmtCline:       {"transport", "type", "transportType", "url", "headers", "command", "args", "cwd", "env"},
 	fmtCommandCode: {"transport", "type", "url", "headers", "command", "args", "env"},
-	// enabled, remote, timeout and oauth are the user's
+	// enabled, remote, oauth and a timeout magpie didn't write
+	// (callKeys) are the user's
 	fmtZed: {"url", "headers", "command", "args", "env"},
 	// disabled, autoApprove, disabledTools and oauth are the user's; a
 	// transport names nothing Kiro reads
@@ -1582,7 +1825,6 @@ func (f *mcpFile) current(name string, m map[string]any, s *Server) (*Server, bo
 func (f *mcpFile) merged(s *Server, old map[string]any) ordered {
 	o := f.encode(s)
 	mine := f.mine(s)
-	behind := f.behind(s, old)
 	// Codex's startup timeout is magpie's unless the user wrote one
 	// (startupTheirs): theirs is kept as it is, below, with no _sec of
 	// magpie's beside a _ms of theirs
@@ -1591,6 +1833,15 @@ func (f *mcpFile) merged(s *Server, old map[string]any) ordered {
 			o = slices.DeleteFunc(o, func(e kv) bool { return e.k == "startup_timeout_sec" })
 		} else {
 			mine = append(slices.Clone(mine), "startup_timeout_sec")
+		}
+	}
+	// the tool timeout is magpie's unless the user wrote one
+	// (callTheirs), kept as it is
+	if k, ok := f.callKey(); ok {
+		if f.callTheirs(s, old) {
+			o = slices.DeleteFunc(o, func(e kv) bool { return e.k == k.key })
+		} else {
+			mine = append(slices.Clone(mine), k.key)
 		}
 	}
 	// an exposure of the user's says how the server's tools reach Pi's
@@ -1603,7 +1854,7 @@ func (f *mcpFile) merged(s *Server, old map[string]any) ordered {
 	// a toolExposure magpie wrote before it named more tools is magpie's
 	ownExposure := f.Format == fmtPiNative && old != nil && piDirectBefore(s, old)
 	for i, e := range o {
-		if v, ok := old[e.k]; ok && !slices.Contains(mine, e.k) && !(behind && f.Format == fmtGoose && e.k == "timeout") && !(ownExposure && e.k == "toolExposure") {
+		if v, ok := old[e.k]; ok && !slices.Contains(mine, e.k) && !(ownExposure && e.k == "toolExposure") {
 			o[i].v = v
 		}
 		// Codex's env_vars as the user wrote them ({ name, source }), or

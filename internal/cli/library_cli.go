@@ -20,9 +20,10 @@ const libraryUsage = `magpie library                     what the library gives 
   magpie library instructions        print the shared instructions
   magpie library instructions set <file|->   replace them with a file's text (- for stdin)
   magpie library instructions agents <a,b…|none>   the agents that get them
-  magpie library mcp add <name> <url | command args…> [agents=a,b…] [header=K=V…] [env=K=V…] [timeout=SECS] [idle=SECS|never] [--local]
+  magpie library mcp add <name> <url | command args…> [agents=a,b…] [header=K=V…] [env=K=V…] [timeout=SECS] [call-timeout=SECS] [idle=SECS|never] [--local]
                                      header= is for a URL, env= for a command; the program's own words go after --
-  magpie library mcp set <name> header=K=V | header-=K | env=K=V | env-=K | timeout=SECS | idle=SECS|never   change one setting of a server
+  magpie library mcp set <name> header=K=V | header-=K | env=K=V | env-=K | timeout=SECS | call-timeout=SECS | idle=SECS|never   change one setting of a server
+                                     timeout= is how long an agent waits for the server to start, call-timeout= for one of its tools
                                      idle= is how long a server magpie runs (the router's, Codex's) is kept unused, never to keep it
   magpie library mcp show <name>     print the server as the library keeps it, as JSON
   magpie library mcp agents <name> <a,b…|none>
@@ -144,14 +145,14 @@ func libraryCmd(args []string) error {
 				unused = s.Name
 			}
 		case len(rest) >= 3 && rest[0] == "set" && !strings.HasPrefix(rest[1], "-"):
-			// header, env, timeout and idle of a server in the library, one at a time (#6111)
+			// header, env, timeouts and idle of a server in the library, one at a time (#6111)
 			var cmd []string
 			var o library.ServerOpts
 			if cmd, o, err = library.SplitServerWords(rest[2:]); err != nil {
 				return err
 			}
 			if len(cmd) > 0 || o.HasAgent || o.Local != nil {
-				return fmt.Errorf("set takes header=K=V, env=K=V, header-=K, env-=K, timeout=SECS and idle=SECS|never, not %q", strings.Join(cmd, " "))
+				return fmt.Errorf("set takes header=K=V, env=K=V, header-=K, env-=K, timeout=SECS, call-timeout=SECS and idle=SECS|never, not %q", strings.Join(cmd, " "))
 			}
 			res, err = library.SetServer(rest[1], o)
 		case len(rest) == 2 && rest[0] == "show" && !strings.HasPrefix(rest[1], "-"):

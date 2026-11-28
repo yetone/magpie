@@ -61,6 +61,9 @@ type HubTool struct {
 	// Roots: the server writes into the agent's project (magpie-image),
 	// so a call is made with the agent's folders (HubCaller)
 	Roots bool
+	// Wait is how long a call of it waits for the server: the call
+	// timeout the server has in the Library, 0 for hubCallWait
+	Wait time.Duration
 }
 
 // HubCaller is who a call of a Roots tool is for: the folders the agent
@@ -193,6 +196,8 @@ type HubServer struct {
 	// another computer's caller by a key the user let use it
 	// (access.Key.Memory), as memoryReaches holds its own route.
 	Memory bool
+	// Wait is how long a call of its tools waits for it, as HubTool's
+	Wait time.Duration
 }
 
 // HubVisitor is who a hub request is from, for what it is given of the
@@ -471,11 +476,46 @@ var MCPHub Hub
 // The hub's budgets: tools/list waits for the servers this long (a server
 // still starting is left out, and listed once it has), and a call this
 // long, under the 60s an MCP client waits for an answer, for the agent to
-// be told which server didn't answer rather than its own timeout.
+// be told which server didn't answer rather than its own timeout. A
+// server with a call timeout of its own in the Library is waited for
+// that long instead (hubWait), and the agents magpie gives the hub are
+// given a timeout past it where their config takes one
+// (library.hubServerFor).
 var (
 	hubListWait = 40 * time.Second
 	hubCallWait = 50 * time.Second
 )
+
+// HubCallWait is how long the hub waits for a call of a server with no
+// call timeout of its own.
+func HubCallWait() time.Duration { return hubCallWait }
+
+// hubWait is how long a call of a server whose own call timeout is d
+// waits: d, else hubCallWait.
+func hubWait(d time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	return hubCallWait
+}
+
+// hubLate is why a call of a server whose own call timeout is d ended
+// unanswered: the wait it ran out of, and where a longer one is set.
+func hubLate(d time.Duration) string {
+	if d > 0 {
+		return "it didn't answer in " + hubSecs(d) + ", the call timeout it has in magpie's Library"
+	}
+	return "it didn't answer in " + hubSecs(hubCallWait) + "; a longer call timeout can be given to it in magpie's Library → MCP, under Advanced"
+}
+
+// hubSecs is d in seconds, as the Library's call timeout is set (300s,
+// not 5m0s); a wait under a second, a test's, as it is.
+func hubSecs(d time.Duration) string {
+	if d >= time.Second && d%time.Second == 0 {
+		return strconv.FormatInt(int64(d/time.Second), 10) + "s"
+	}
+	return d.String()
+}
 
 const hubBody = 4 << 20
 
@@ -881,7 +921,7 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 			}
 		}
 		if hubCodeOn(len(ts)) {
-			list = append(list, hubCodeSpec(where, onDemand, hubSkillsOf(agent)))
+			list = append(list, hubCodeSpec(where, onDemand, hubSkillsOf(agent), hubCodeBudget(ts)))
 		}
 		return map[string]any{"tools": list}, nil
 	case "tools/call":
@@ -956,7 +996,7 @@ func hubToolNamed(ctx context.Context, ts []hubTool, agent, name string) (hubToo
 		if !access.Caller(ctx).MCPAllows(sv.Name, tool) {
 			continue
 		}
-		t := hubTool{HubTool: HubTool{Server: sv.Name, Tool: tool}, name: name}
+		t := hubTool{HubTool: HubTool{Server: sv.Name, Tool: tool, Wait: sv.Wait}, name: name}
 		for _, l := range ts {
 			if l.Server == sv.Name {
 				t.Roots = l.Roots
@@ -1012,13 +1052,13 @@ func (s *Server) hubMCPRun(r *http.Request, agent string, t hubTool, args json.R
 	if len(args) == 0 || string(args) == "null" {
 		args = json.RawMessage(`{}`)
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), hubCallWait)
+	ctx, cancel := context.WithTimeout(r.Context(), hubWait(t.Wait))
 	defer cancel()
 	res, err := MCPHub.Call(ctx, agent, t.Server, t.Tool, args)
 	if err != nil {
 		why := err.Error()
 		if ctx.Err() != nil && r.Context().Err() == nil {
-			why = "it didn't answer in " + hubCallWait.String()
+			why = hubLate(t.Wait)
 		}
 		return toolResult("The MCP server "+t.Server+" couldn't run "+t.Tool+": "+why, true)
 	}

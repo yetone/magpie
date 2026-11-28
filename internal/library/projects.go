@@ -41,6 +41,9 @@ type Project struct {
 	// wrote in each server's entry there (Codex's startup_timeout_sec):
 	// one other than this is the user's
 	Startup map[string]map[string]float64 `json:"startup,omitempty"`
+	// Calls are, by the project's file, the tool timeout magpie wrote in
+	// each server's entry there, as Applied's
+	Calls map[string]map[string]float64 `json:"calls,omitempty"`
 	// MadeFiles are the files magpie made to write servers in, listed in
 	// the .gitignore and taken away again once nothing's left in them
 	MadeFiles []string `json:"madeFiles,omitempty"`

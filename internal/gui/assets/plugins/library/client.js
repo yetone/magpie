@@ -4773,7 +4773,18 @@ magpie.plugin("library", (ctx) => {
       drawKeep = drawHub;
       ed.append(...field(t("Through the MCP router"), hubBox, t("Off gives each agent its own entry for it, as with the router off: for a server that reads its project from the folder it starts in, or keeps a session's state")), ...keepRow);
     }
-    ed.append(err);
+    // how long a call of one of its tools may take (steinxia on X): the
+    // router waits that long, and the agents are given a timeout past it
+    const [more, inner] = advFold({ cls: "advanced lib-servermore", editor: true, open: !!d.callTimeout });
+    const callWait = field2(d.callTimeout || "", lib.mcpHub ? "50" : "", (v) => {
+      callWait.value = v.replace(/\D/g, "").slice(0, 5);
+      d.callTimeout = Number(callWait.value) || 0;
+    });
+    callWait.inputMode = "numeric";
+    callWait.classList.add("lib-calltimeout");
+    callWait.setAttribute("aria-label", t("Tool call timeout"));
+    inner.append(...field(t("Tool call timeout"), callWait));
+    ed.append(more, err);
 
     function drawAgents() {
       agentsBox.replaceChildren(agentChips(all, d.agents, (next) => { d.agents = next; drawAgents(); }, { names: true, blocked: sseBlocked(d), all: true }));
@@ -4899,7 +4910,7 @@ magpie.plugin("library", (ctx) => {
     // send saves the form; s is then the server as saved, for a save after
     // a sign-in's to be of it
     const send = async () => {
-      const body = { old: s ? s.name : "", server: { name: d.name, transport: d.transport, agents: d.agents, startupTimeout: d.startupTimeout || 0, idleTimeout: d.idleTimeout || 0, keepAlive: !!d.keepAlive, local: !!d.local, hub: d.hub || "", note: d.note || "" } };
+      const body = { old: s ? s.name : "", server: { name: d.name, transport: d.transport, agents: d.agents, startupTimeout: d.startupTimeout || 0, callTimeout: d.callTimeout || 0, idleTimeout: d.idleTimeout || 0, keepAlive: !!d.keepAlive, local: !!d.local, hub: d.hub || "", note: d.note || "" } };
       if (d.transport === "stdio") Object.assign(body.server, { command: d.command, args: d.args, env: d.env, shared: d.local ? null : d.shared || null });
       else Object.assign(body.server, { url: d.url, headers: d.headers, oauth: d.transport === "http" && d.oauth?.clientId ? d.oauth : null });
       take(await api("library/servers/save", body));

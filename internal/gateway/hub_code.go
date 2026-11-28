@@ -32,8 +32,21 @@ import (
 const hubCodeTool = "run_code"
 
 // hubCodeWait is how long a script runs in all, its calls included: under
-// the 60s an MCP client gives a call, as hubCallWait is.
+// the 60s an MCP client gives a call, as hubCallWait is. A script with a
+// tool of a server given longer (HubTool.Wait) runs as long as that
+// server's call may (hubCodeBudget).
 var hubCodeWait = hubCallWait
+
+// hubCodeBudget is how long a script against ts runs in all: hubCodeWait,
+// or the longest call timeout among their servers, so a script is never
+// ended before a call of its own tools may be.
+func hubCodeBudget(ts []hubTool) time.Duration {
+	d := hubCodeWait
+	for _, t := range ts {
+		d = max(d, t.Wait)
+	}
+	return d
+}
 
 // hubCodeCalls is how many tool calls one script makes at most, and
 // hubCodeAtOnce how many run at the same time.
@@ -112,7 +125,7 @@ func hubSkillFile(code string) string {
 // hubCodeSpec is run_code as tools/list gives it, its description after
 // where; onDemand says the tools' parameters come from find_tools, and
 // skills are the agent's skills with code.
-func hubCodeSpec(where string, onDemand bool, skills []HubSkill) map[string]any {
+func hubCodeSpec(where string, onDemand bool, skills []HubSkill, wait time.Duration) map[string]any {
 	pre := ""
 	if where != "" {
 		pre = "[" + where + "] "
@@ -128,7 +141,7 @@ func hubCodeSpec(where string, onDemand bool, skills []HubSkill) map[string]any 
 			"Each tool is an async function on `tools`, by its name: `const r = await tools[\"github__search_issues\"]({q: \"bug\"})` (also tools.github__search_issues, with - as _). " + params + " " +
 			"A tool gives back its structured result, else its text (parsed when it is JSON); a tool's error is thrown. " +
 			"The code is the body of an async function: `return` the result. Plain JavaScript only: no require, import, fetch, files or timers. " +
-			fmt.Sprintf("At most %d tool calls and %s in all.", hubCodeCalls, hubCodeWait) +
+			fmt.Sprintf("At most %d tool calls and %s in all.", hubCodeCalls, hubSecs(wait)) +
 			hubSkillsLine(skills) +
 			" To keep code that worked for next time, run it with save_as: it is saved as a skill of the user's, skills.<name>(args), that reads its inputs from `args`.",
 		"inputSchema": json.RawMessage(`{"type":"object","properties":{` +
@@ -225,7 +238,7 @@ func (s *Server) hubCodeRun(r *http.Request, agent string, ts []hubTool, args js
 		skills = append(skills, coderun.Skill{Name: k.Name, Code: k.Code})
 	}
 	res := coderun.Run(r.Context(), exe, coderun.Script{Code: p.Code, Args: p.Args, Tools: names, Skills: skills}, coderun.Limits{
-		Calls: hubCodeCalls, AtOnce: hubCodeAtOnce, Max: hubCodeMax, Heap: hubCodeHeap, Wait: hubCodeWait,
+		Calls: hubCodeCalls, AtOnce: hubCodeAtOnce, Max: hubCodeMax, Heap: hubCodeHeap, Wait: hubCodeBudget(ts),
 	}, call)
 	if p.SaveAs == nil {
 		return res

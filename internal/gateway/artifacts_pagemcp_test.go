@@ -220,3 +220,32 @@ func TestArtifactMCPTimesOut(t *testing.T) {
 		t.Fatalf("%d %v", code, e)
 	}
 }
+
+// A page's call of a server with a call timeout of its own in the Library
+// waits that long, as an agent's does, and running out of it names it.
+func TestArtifactMCPOwnWait(t *testing.T) {
+	h, f, id, tok := mcpPage(t)
+	f.mu.Lock()
+	f.servers[""][0].Wait = time.Hour
+	f.mu.Unlock()
+	f.call = func(ctx context.Context, server, tool string) (json.RawMessage, error) {
+		if d, ok := ctx.Deadline(); !ok || time.Until(d) < 50*time.Minute {
+			return nil, errors.New("not given its hour")
+		}
+		return json.RawMessage(`{"content":[{"type":"text","text":"ok"}]}`), nil
+	}
+	if code, _, e := pageMCPCall(h, id, map[string]any{"t": tok, "op": "call", "server": "github", "tool": "list_issues"}); code != 200 {
+		t.Fatalf("a server given an hour: %d %v", code, e)
+	}
+	f.mu.Lock()
+	f.servers[""][0].Wait = 100 * time.Millisecond
+	f.mu.Unlock()
+	f.call = func(ctx context.Context, server, tool string) (json.RawMessage, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	code, _, e := pageMCPCall(h, id, map[string]any{"t": tok, "op": "call", "server": "github", "tool": "list_issues"})
+	if code != 502 || !strings.Contains(e["message"].(string), "didn't answer in 100ms, the call timeout it has in magpie's Library") {
+		t.Fatalf("past its own timeout: %d %v", code, e)
+	}
+}

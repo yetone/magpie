@@ -279,7 +279,13 @@ func (s *Server) artifactMCP(w http.ResponseWriter, r *http.Request) {
 	use.as("artifact")
 	use.named(c.Tool)
 	ctx := WithHubCaller(r.Context(), HubCaller{Session: "artifact-" + a.ID})
-	ctx, cancel := context.WithTimeout(ctx, hubCallWait)
+	var wait time.Duration
+	for _, sv := range ss {
+		if sv.Name == name {
+			wait = sv.Wait
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, hubWait(wait))
 	defer cancel()
 	res, err := MCPHub.Call(ctx, "", name, c.Tool, input)
 	if err != nil {
@@ -289,7 +295,7 @@ func (s *Server) artifactMCP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			why = "it didn't answer in " + hubCallWait.String()
+			why = hubLate(wait)
 		}
 		artifactMCPError(w, http.StatusBadGateway, "server_unavailable", c.Server, "the MCP server "+c.Server+" couldn't run "+c.Tool+": "+why, map[string]any{"retryable": true})
 		return
