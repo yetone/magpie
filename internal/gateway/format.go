@@ -26,8 +26,9 @@ type Format struct {
 	Schema            json.RawMessage
 	// Strict is the client's strict, nil when it said none.
 	Strict *bool
-	// told is a JSON object asked for in place of a schema the system
-	// prompt already holds (asObject).
+	// told is a JSON object the system prompt already asks for in words:
+	// a schema's (asObject) or a Gemini client's any JSON value
+	// (parseGemini), which inSystem doesn't say again.
 	told bool
 }
 

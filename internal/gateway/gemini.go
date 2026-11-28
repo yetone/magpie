@@ -295,7 +295,10 @@ func parseGemini(body []byte) (*Request, error) {
 		// OpenAI's rule that a json_object's prompt say "JSON"
 		if strings.HasPrefix(gc.ResponseMimeType, "application/json") {
 			ask := "Respond with a single JSON value and nothing else"
-			r.Format = &Format{Type: "json_object"}
+			// told: the ask is the format in words already, so inSystem,
+			// for an upstream that can't take it in a field, doesn't add
+			// "a single JSON object", and an array stays one
+			r.Format = &Format{Type: "json_object", told: true}
 			if s := firstJSON(gc.ResponseJSONSchema, gc.ResponseSchema); s != "" {
 				ask += ", matching this JSON schema:\n" + s
 				r.Format = &Format{Type: "json_schema", Name: formatName, Schema: json.RawMessage(s)}
