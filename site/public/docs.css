@@ -215,8 +215,19 @@ img.cw-av { box-shadow: 0 0 0 1px var(--line); }
 .rp-tip > div { min-width: 0; display: grid; }
 .rp-tip b { color: var(--ink); font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
-.rp-play .i-pause, .rp-play.on .i-play, .rp-sound .i-on, .rp-sound.on .i-off { display: none; }
-.rp-play.on .i-pause, .rp-sound.on .i-on { display: block; }
+.rp-play .i-pause, .rp-play.on .i-play, .rp-sound .i-on, .rp-sound.on .i-off, .rp-full .i-shrink, .rp-full.on .i-grow { display: none; }
+.rp-play.on .i-pause, .rp-sound.on .i-on, .rp-full.on .i-shrink { display: block; }
+.rp-full { color: var(--ink3); transition: color .15s ease; }
+@media (hover: hover) and (pointer: fine) { .rp-full:hover { color: var(--ink); } }
+.rp-full:active { transform: scale(.97); }
+/* the whole browser window (contributors-replay.js setFull) */
+.replay.rp-big { position: fixed; inset: 0; z-index: 60; margin: 0; border: 0; border-radius: 0; display: flex; flex-direction: column; animation: rp-big .24s cubic-bezier(.23, 1, .32, 1); }
+.replay.rp-big .rp-stage { flex: 1; height: auto; min-height: 0; }
+.replay.rp-big .rp-bar { padding-bottom: max(10px, env(safe-area-inset-bottom, 0px)); }
+.replay.rp-big .rp-hud { top: max(12px, env(safe-area-inset-top, 0px)); }
+html.rp-locked { overflow: hidden; }
+@keyframes rp-big { from { opacity: 0; transform: scale(.98); } }
+@keyframes rp-fade { from { opacity: 0; } }
 .rp-sound { color: var(--ink3); transition: color .15s ease; }
 .rp-sound.on { color: var(--ink); }
 .rp-play:active, .rp-sound:active { transform: scale(.97); }
@@ -231,6 +242,7 @@ img.cw-av { box-shadow: 0 0 0 1px var(--line); }
 }
 @media (prefers-reduced-motion: reduce) {
   .rp-feed li, .rp-tip { transform: none !important; }
+  .replay.rp-big { animation-name: rp-fade; }
 }
 table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }

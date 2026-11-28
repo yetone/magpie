@@ -28,19 +28,19 @@
   const WORDS = {
     en: {
       label: "How magpie was built: everyone credited, release by release",
-      play: "Play", pause: "Pause", time: "Time", sound: "Sound",
+      play: "Play", pause: "Pause", time: "Time", sound: "Sound", full: "Fill the window", small: "Exit full window",
       count: (p, r) => `<b>${p}</b> people · <b>${r}</b> releases`,
       who: (n, v) => `${n === 1 ? "1 release" : `${n} releases`} · first in v${v}`,
     },
     zh: {
       label: "magpie 是怎么建起来的：每个版本感谢了谁",
-      play: "播放", pause: "暂停", time: "时间", sound: "声音",
+      play: "播放", pause: "暂停", time: "时间", sound: "声音", full: "全屏", small: "退出全屏",
       count: (p, r) => `<b>${p}</b> 人 · <b>${r}</b> 个版本`,
       who: (n, v) => `${n} 个版本 · 首次在 v${v}`,
     },
     ja: {
       label: "magpie ができるまで：リリースごとに名前が載った人",
-      play: "再生", pause: "一時停止", time: "時間", sound: "サウンド",
+      play: "再生", pause: "一時停止", time: "時間", sound: "サウンド", full: "ウインドウいっぱいに表示", small: "元のサイズに戻す",
       count: (p, r) => `<b>${p}</b> 人 · <b>${r}</b> リリース`,
       who: (n, v) => `${n} リリース · 初めは v${v}`,
     },
@@ -63,7 +63,7 @@
   // (contributors-music.js plays the same steps)
   const BPM = 124, STEPS = 256, BARS = STEPS / 16;
   const STEP_MS = 60000 / BPM / 4;
-  const MAXPX = 44; // a place's size while there are few
+  const MAXPX = 44; // a place's size while there are few, on the page's stage
   const HOLE = 1.6; // the middle, kept for the bird
   const SPRITE = 48; // device pixels a loaded face is kept at
   const KICK = .36; // a bar this intense has a beat (contributors-music.js AT.kick)
@@ -102,14 +102,15 @@
     root.innerHTML = `<div class="rp-stage" role="img"><canvas></canvas><div class="rp-bird"><img class="bird" src="/img/magpie-small.svg" alt="" width="40" height="40"></div><div class="rp-hud"><div><div class="rp-date"></div><div class="rp-ver mono"></div></div><div class="rp-count"></div></div><ol class="rp-feed" aria-hidden="true"></ol><div class="rp-tip" aria-hidden="true"></div></div>` +
       `<div class="rp-bar"><button class="icon-btn rp-play" type="button">${ICON("i-play", '<path d="M5 3.4v9.2c0 .4.4.6.7.4l7-4.6a.5.5 0 0 0 0-.8l-7-4.6c-.3-.2-.7 0-.7.4Z"/>')}${ICON("i-pause", '<rect x="4" y="3" width="2.6" height="10" rx=".8"/><rect x="9.4" y="3" width="2.6" height="10" rx=".8"/>')}</button>` +
       `<div class="rp-hist" role="slider" tabindex="0" aria-valuemin="0"><canvas></canvas></div>` +
-      `<button class="icon-btn rp-sound" type="button" aria-pressed="false">${ICON("i-off", SPEAKER + '<path d="M11.4 6.3l3 3.4M14.4 6.3l-3 3.4"/>', true)}${ICON("i-on", SPEAKER + '<path d="M11.2 5.8a3.2 3.2 0 0 1 0 4.4M12.9 4.2a5.6 5.6 0 0 1 0 7.6"/>', true)}</button></div>`;
+      `<button class="icon-btn rp-sound" type="button" aria-pressed="false">${ICON("i-off", SPEAKER + '<path d="M11.4 6.3l3 3.4M14.4 6.3l-3 3.4"/>', true)}${ICON("i-on", SPEAKER + '<path d="M11.2 5.8a3.2 3.2 0 0 1 0 4.4M12.9 4.2a5.6 5.6 0 0 1 0 7.6"/>', true)}</button>` +
+      `<button class="icon-btn rp-full" type="button" aria-pressed="false">${ICON("i-grow", '<path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9.3 6.7M2.5 13.5l4.2-4.2"/>', true)}${ICON("i-shrink", '<path d="M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4"/>', true)}</button></div>`;
     const stage = root.querySelector(".rp-stage");
     stage.setAttribute("aria-label", W.label);
     const cv = stage.querySelector("canvas"), ctx = cv.getContext("2d");
     const bird = stage.querySelector(".rp-bird");
     const elDate = stage.querySelector(".rp-date"), elVer = stage.querySelector(".rp-ver"), elCount = stage.querySelector(".rp-count");
     const feed = stage.querySelector(".rp-feed"), tip = stage.querySelector(".rp-tip");
-    const btn = root.querySelector(".rp-play"), hist = root.querySelector(".rp-hist"), snd = root.querySelector(".rp-sound");
+    const btn = root.querySelector(".rp-play"), hist = root.querySelector(".rp-hist"), snd = root.querySelector(".rp-sound"), fullBtn = root.querySelector(".rp-full");
     const hv = hist.querySelector("canvas"), hctx = hv.getContext("2d");
     hist.setAttribute("aria-label", W.time);
     hist.setAttribute("aria-valuemax", String(END));
@@ -133,13 +134,15 @@
     colours();
 
     // --- places: a hex lattice, nearest the middle first, stretched to the stage ---
-    let w = 0, h = 0, dpr = 1, ax = 1, ay = 1, cells = [], cx = 0, cy = 0;
+    let w = 0, h = 0, dpr = 1, ax = 1, ay = 1, cells = [], cx = 0, cy = 0, maxPx = MAXPX;
     const layout = () => {
       w = stage.clientWidth; h = stage.clientHeight; dpr = Math.min(2, devicePixelRatio || 1);
       cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
       const hw = hist.clientWidth, hh = hist.clientHeight;
       hv.width = Math.round(hw * dpr); hv.height = Math.round(hh * dpr);
       cx = w / 2; cy = h / 2 + 12;
+      // a stage filling the window lets the first faces grow with it
+      maxPx = Math.max(MAXPX, Math.min(72, Math.round(Math.min(w, h) / 9)));
       ax = Math.sqrt(Math.max(.5, w / Math.max(1, h - 24))); ay = 1 / ax;
       const R = Math.sqrt(N * 0.866 / Math.PI) + HOLE + 2;
       const list = [];
@@ -254,7 +257,7 @@
       wake();
     };
     const toStep = (t) => (t / END) * STEPS;
-    const target = () => Math.min(MAXPX, fit(placed ? cells[Math.min(placed, cells.length) - 1].e : HOLE + 1));
+    const target = () => Math.min(maxPx, fit(placed ? cells[Math.min(placed, cells.length) - 1].e : HOLE + 1));
 
     const arrive = (name) => {
       const li = document.createElement("li");
@@ -525,7 +528,7 @@
         face(ctx, i, x, y, r * (.55 + .45 * q), now);
       }
       ctx.globalAlpha = 1;
-      const bs = Math.max(18, Math.min(40, s * 1.9)) * (1 + .07 * beat);
+      const bs = Math.max(18, Math.min(40 * maxPx / MAXPX, s * 1.9)) * (1 + .07 * beat);
       const tf = `translate(${(cx - bs / 2).toFixed(2)}px, ${(cy - bs / 2).toFixed(2)}px) scale(${(bs / 40).toFixed(4)})`;
       if (tf !== birdAt) bird.style.transform = birdAt = tf;
       hud();
@@ -586,6 +589,32 @@
       withMusic();
     });
     setBtn();
+
+    // --- the whole browser window, not the screen: the page stays where it
+    // was under it, held by a spacer of the replay's height ---
+    let full = false, spacer = null;
+    const setFull = (on) => {
+      if (on === full) return;
+      full = on;
+      if (on) {
+        spacer = document.createElement("div");
+        spacer.style.height = root.offsetHeight + "px";
+        spacer.style.margin = getComputedStyle(root).margin;
+        root.after(spacer);
+      } else if (spacer) { spacer.remove(); spacer = null; }
+      root.classList.toggle("rp-big", on);
+      document.documentElement.classList.toggle("rp-locked", on);
+      fullBtn.classList.toggle("on", on);
+      fullBtn.setAttribute("aria-pressed", String(on));
+      fullBtn.setAttribute("aria-label", on ? W.small : W.full);
+      fullBtn.title = on ? W.small : W.full;
+      showTip(-1);
+    };
+    fullBtn.setAttribute("aria-label", W.full); fullBtn.title = W.full;
+    fullBtn.addEventListener("click", () => setFull(!full));
+    addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && full && !e.defaultPrevented) { e.preventDefault(); setFull(false); fullBtn.focus(); }
+    });
 
     // --- the bar: drag or keys to move through time ---
     let dragging = false, was = false;

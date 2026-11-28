@@ -3,7 +3,8 @@
 // *.test.mjs, so CI's `node --test site/*.test.mjs` (no browsers there)
 // leaves it out; run it by hand where Playwright is on NODE_PATH, after
 // `node site/credits-cli.mjs wall` has built public/contributors.json (or
-// with WALL_JSON naming such a file):
+// with WALL_JSON naming such a file, and REPLAY_JSON the replay's
+// public/contributors/replay.json):
 //   node site/wall.browser.mjs [screenshot-dir]
 // The server puts each language's table (renderWall) into the page's
 // #wall, as worker.js withWall does with the one the deploy rendered.
@@ -18,11 +19,14 @@ const pub = new URL("./public/", import.meta.url);
 const shots = process.argv[2];
 if (shots) await mkdir(shots, { recursive: true });
 const data = JSON.parse(await readFile(process.env.WALL_JSON || new URL("contributors.json", pub), "utf8"));
+const replay = await readFile(process.env.REPLAY_JSON || new URL("contributors/replay.json", pub)).catch(() => null);
+if (!replay) console.log("no replay.json: the replay's checks are left out");
 const tables = Object.fromEntries(["en", "zh", "ja"].map((l) => [l, renderWall(data, l)]));
 
 const types = { html: "text/html; charset=utf-8", js: "text/javascript", css: "text/css", json: "application/json", svg: "image/svg+xml", png: "image/png", txt: "text/plain" };
 const server = createServer(async (req, res) => {
   let p = decodeURIComponent(new URL(req.url, "http://x").pathname).replace(/^\/+/, "");
+  if (p === "contributors/replay.json" && replay) { res.writeHead(200, { "content-type": types.json }); res.end(replay); return; }
   if (!/\.\w+$/.test(p)) p += ".html";
   try {
     let body = await readFile(new URL(p, pub));
@@ -117,6 +121,30 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
         r = await visible(page, "#" + ROW);
         assert.ok(r.top >= r.pad - 2 && r.top < r.h / 2, `the hidden row wasn't brought into view: ${JSON.stringify(r)}`);
         assert.equal(await input.inputValue(), "");
+
+        // the replay fills the browser window and gives the page back as it was
+        if (replay) {
+          await page.waitForSelector("#replay .rp-full");
+          await page.evaluate(() => scrollTo({ top: document.getElementById("replay").offsetTop - 120, behavior: "instant" }));
+          const before = await page.evaluate(() => ({ y: scrollY, h: document.getElementById("replay").getBoundingClientRect().height, top: document.getElementById("list").getBoundingClientRect().top }));
+          await page.click("#replay .rp-full");
+          await page.waitForTimeout(400);
+          const big = await page.evaluate(() => {
+            const b = document.getElementById("replay").getBoundingClientRect(), st = document.querySelector("#replay .rp-stage"), bar = document.querySelector("#replay .rp-bar").getBoundingClientRect();
+            return { x: b.left, y: b.top, w: b.width, h: b.height, vw: innerWidth, vh: innerHeight, cv: st.querySelector("canvas").width / Math.min(2, devicePixelRatio || 1), sw: st.clientWidth, barBottom: bar.bottom, pressed: document.querySelector("#replay .rp-full").getAttribute("aria-pressed"), list: document.getElementById("list").getBoundingClientRect().top, sy: scrollY, ov: getComputedStyle(document.documentElement).overflow };
+          });
+          assert.ok(Math.abs(big.x) < 1 && Math.abs(big.y) < 1 && Math.abs(big.w - big.vw) < 1 && Math.abs(big.h - big.vh) < 1, `not the whole window: ${JSON.stringify(big)}`);
+          assert.ok(Math.abs(big.barBottom - big.vh) < 1, `the bar isn't at the bottom: ${JSON.stringify(big)}`);
+          assert.ok(Math.abs(big.cv - big.sw) < 2, `the picture wasn't drawn at the new size: ${JSON.stringify(big)}`);
+          assert.equal(big.pressed, "true");
+          assert.equal(big.ov, "hidden", "the page behind still scrolls");
+          assert.ok(Math.abs(big.sy - before.y) < 1 && Math.abs(big.list - before.top) < 1, `the page behind moved: ${JSON.stringify([before, big])}`);
+          if (shots) await page.screenshot({ path: `${shots}/${ename}-${width}-${lang}-full.png` });
+          await page.keyboard.press("Escape");
+          const back = await page.evaluate(() => ({ y: scrollY, h: document.getElementById("replay").getBoundingClientRect().height, big: document.getElementById("replay").classList.contains("rp-big"), focus: document.activeElement.className, top: document.getElementById("list").getBoundingClientRect().top }));
+          assert.ok(!back.big && Math.abs(back.h - before.h) < 1 && Math.abs(back.y - before.y) < 1 && Math.abs(back.top - before.top) < 1, `not given back as it was: ${JSON.stringify([before, back])}`);
+          assert.match(back.focus, /rp-full/);
+        }
 
         // another case lands on the row's own id
         await page.goto(base + dir + "contributors#Lijiho96940561", { waitUntil: "load" });
