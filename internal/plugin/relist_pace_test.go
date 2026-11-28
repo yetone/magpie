@@ -95,6 +95,12 @@ export default async ({ client }) => ({
 // waits its turn, which magpie's own change cuts short.
 func TestHostChangesListAtAPace(t *testing.T) {
 	var asks atomic.Int64
+	// set before refreshSandbox, so it is put back after the cleanup's
+	// Settle, once no listing loop reads it: cleanups run last first, and
+	// put back before it, it raced the loop under -race
+	oldStep := relistStep
+	relistStep = time.Hour // a turn that never comes in the test
+	t.Cleanup(func() { relistStep = oldStep })
 	refreshSandbox(t, func(ctx context.Context, epoch uint64) error {
 		asks.Add(1)
 		// the host tells of a sign-in while the plugins are listed
@@ -102,9 +108,6 @@ func TestHostChangesListAtAPace(t *testing.T) {
 		commitProviders([]Provider{{ID: "fakeco", Spec: refreshAbsPath(t, "testdata/fake/index.js"), Name: "FakeCo"}}, &epoch)
 		return nil
 	})
-	oldStep := relistStep
-	relistStep = time.Hour // a turn that never comes in the test
-	t.Cleanup(func() { relistStep = oldStep })
 	waiting := func() bool {
 		provMu.Lock()
 		defer provMu.Unlock()
