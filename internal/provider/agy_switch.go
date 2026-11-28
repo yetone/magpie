@@ -273,6 +273,13 @@ func switchAgyLogin(pp plugin.Provider, user string) error {
 	if f := agyTurnUnderWay(home); f != "" {
 		return errors.New("agy or the Antigravity app is in the middle of a turn; switch once it has finished")
 	}
+	// one running keeps its account and writes it back over the switch
+	lc, lcancel := context.WithTimeout(context.Background(), 20*time.Second)
+	err = agyQuitFirst(lc)
+	lcancel()
+	if err != nil {
+		return err
+	}
 	file := agyFileStore{path: agyTokenFile(home)}
 	cur, err := file.Read()
 	if err != nil {

@@ -1001,6 +1001,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		bg.Go("provider.KeepCodexWindowsWarm", func() { provider.KeepCodexWindowsWarm(ctx) })
 		bg.Go("provider.KeepClaudeWindowsWarm", func() { provider.KeepClaudeWindowsWarm(ctx, warmClaude) })
 		bg.Go("provider.KeepAgyWindowsWarm", func() { provider.KeepAgyWindowsWarm(ctx) })
+		// and signs agy in to its next account when the one it is on runs
+		// low, when the user turned that on (#1908)
+		bg.Go("provider.KeepAgyOnAnAccountWithRoom", func() { provider.KeepAgyOnAnAccountWithRoom(ctx) })
 		// and keeps Antigravity's fast-tools plugin starting a magpie that
 		// is there, once it is on
 		bg.Go("keepFastTools", keepFastTools)

@@ -26,13 +26,14 @@ import (
 // `magpie accounts project <gemini|antigravity> <email> <project>`,
 // `magpie accounts alias <agent> <email> [<name>|--clear]`
 // `magpie accounts switch-only <codex|claude|agy-cli> [on|off]`
+// `magpie accounts auto-switch agy-cli [on|off]`
 // — the subscriptions magpie remembers, how much of each one's allowance is
 // used, and switching the agent between them.
 func accountsCmd(args []string) error {
 	if len(args) > 1 && args[1] == "discovery" {
 		return accountsDiscoveryCmd(args[2:])
 	}
-	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts import <codex|claude|antigravity|factory|<plugin>> <file>... [--yes] | magpie accounts import codex <file>... --access-only [--yes] | magpie accounts access-only codex <email> [on|off] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts switch <claude|codex> next | magpie accounts switch|forget copilot <login>[@<name>.ghe.com] [--host <name>.ghe.com] | magpie accounts project <gemini|antigravity> <email> <gcp-project-id> | magpie accounts alias <agent|<plugin>> <email> [<name>|--clear] | magpie accounts switch-only <codex|claude|agy-cli> [on|off]"
+	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts import <codex|claude|antigravity|factory|<plugin>> <file>... [--yes] | magpie accounts import codex <file>... --access-only [--yes] | magpie accounts access-only codex <email> [on|off] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts switch <claude|codex> next | magpie accounts switch|forget copilot <login>[@<name>.ghe.com] [--host <name>.ghe.com] | magpie accounts project <gemini|antigravity> <email> <gcp-project-id> | magpie accounts alias <agent|<plugin>> <email> [<name>|--clear] | magpie accounts switch-only <codex|claude|agy-cli> [on|off] | magpie accounts auto-switch agy-cli [on|off]"
 	agentID := func(s string) (string, error) {
 		switch strings.ToLower(s) {
 		case "claude", "cc":
@@ -117,6 +118,9 @@ func accountsCmd(args []string) error {
 	}
 	if len(args) > 1 && args[1] == "switch-only" {
 		return switchOnlyCmd(args[2:])
+	}
+	if len(args) > 1 && args[1] == "auto-switch" {
+		return autoSwitchCmd(args[2:])
 	}
 	if len(args) > 1 && args[1] == "import" {
 		return importAccounts(args[2:])
@@ -1193,7 +1197,7 @@ func switchOnlyCmd(args []string) error {
 	agent.SyncCatalog()
 	switch {
 	case id == "agy-cli" && on:
-		fmt.Println(green.Render("✓"), "picking an Antigravity CLI account (magpie accounts switch agy-cli <email>) now signs agy and the Antigravity app in to it; magpie serves no requests on these accounts. An Antigravity app already open stays on its account until it is restarted.")
+		fmt.Println(green.Render("✓"), "picking an Antigravity CLI account (magpie accounts switch agy-cli <email>) now signs agy and the Antigravity app in to it, once both have quit; magpie serves no requests on these accounts. To have magpie switch when one runs low: magpie accounts auto-switch agy-cli on")
 	case id == "agy-cli":
 		fmt.Println(green.Render("✓"), "magpie serves requests on the Antigravity CLI accounts that are on again; agy stays on the account it is signed in to")
 	case id == "codex" && on:
@@ -1204,6 +1208,47 @@ func switchOnlyCmd(args []string) error {
 		fmt.Println(green.Render("✓"), "magpie only switches Claude Code's sign-in to an account with room; it serves no requests on the Claude accounts. A Claude Code session already open stays on its account until it is started again.")
 	default:
 		fmt.Println(green.Render("✓"), "magpie serves requests on the Claude accounts that are on again")
+	}
+	return nil
+}
+
+// autoSwitchCmd is `magpie accounts auto-switch agy-cli [on|off]`: with
+// switch-only on, magpie signs agy in to the next Antigravity CLI account
+// with room by itself when the one it is on runs low (#1908). Off, the
+// default, agy's account changes only when the user picks one. With no on
+// or off it says which it is.
+func autoSwitchCmd(args []string) error {
+	const usage = "usage: magpie accounts auto-switch agy-cli [on|off]"
+	if len(args) < 1 || len(args) > 2 || strings.ToLower(args[0]) != "agy-cli" {
+		return fmt.Errorf("%s", usage)
+	}
+	if len(args) == 1 {
+		p, err := provider.Find("agy-cli")
+		switch {
+		case err != nil:
+			return err
+		case p.AutoSwitch && p.SwitchOnly:
+			fmt.Println("on · when the account agy is on runs low, magpie signs agy in to the next account with room, once agy and the Antigravity app have quit")
+		default:
+			fmt.Println("off · agy's account changes only when you pick one (magpie accounts switch agy-cli <email>)")
+		}
+		return nil
+	}
+	var on bool
+	switch strings.ToLower(args[1]) {
+	case "on":
+		on = true
+	case "off":
+	default:
+		return fmt.Errorf("%s", usage)
+	}
+	if err := provider.SetAutoSwitch("agy-cli", on); err != nil {
+		return err
+	}
+	if on {
+		fmt.Println(green.Render("✓"), "when the account agy is on runs low, magpie signs agy in to the next Antigravity CLI account with room; while agy or the Antigravity app runs, it waits until they have quit")
+	} else {
+		fmt.Println(green.Render("✓"), "agy's account changes only when you pick one (magpie accounts switch agy-cli <email>)")
 	}
 	return nil
 }

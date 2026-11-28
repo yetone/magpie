@@ -228,6 +228,31 @@ func SetSwitchOnly(id string, on bool) error {
 		return fmt.Errorf("magpie doesn't route %s's own requests for account failover", p.Name)
 	}
 	p.SwitchOnly = on
+	if !on {
+		// ticked again, it starts off: switching by itself is asked for
+		// each time (#1908)
+		p.AutoSwitch = false
+	}
+	return Save(*p)
+}
+
+// SetAutoSwitch has magpie sign agy in to the next Antigravity CLI account
+// with room by itself when the one it is on runs low, or leave agy's
+// account to the user's pick, the default (Provider.AutoSwitch, #1908).
+// It acts under Only switch agy's sign-in alone, so it is turned on only
+// there.
+func SetAutoSwitch(id string, on bool) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	if p.ID != agyCLIID || !p.IsPlugin() {
+		return fmt.Errorf("magpie switches no sign-in of %s's by itself this way", p.Name)
+	}
+	if on && !p.SwitchOnly {
+		return fmt.Errorf("tick \"Only switch agy's sign-in\" under %s first: magpie switches agy's own account only then", p.Name)
+	}
+	p.AutoSwitch = on
 	return Save(*p)
 }
 

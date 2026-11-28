@@ -7,7 +7,9 @@
 // switch it as Claude Code's row does: login/switch for agy-cli, the line
 // saying it switches accounts only. Unticked, they have no switch: a pick
 // there would move magpie's order alone. In every language, at a narrow
-// width too, in Chromium and WebKit; no click moves the page.
+// width too, in Chromium and WebKit; no click moves the page. Ticked,
+// Switch agy's account automatically shows under it, off by default, and
+// switching it on posts provider/autoswitch; unticked, it isn't there.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -24,7 +26,7 @@ const agents = () => [
 function providersOf(w) {
   const agy = {
     id: "agy-cli", name: "Antigravity CLI", icon: "antigravity-color", chat: "", responses: "", anthropic: "", catalog: "", routing: "smart",
-    models: [{ id: "gemini-3-pro", name: "Gemini 3 Pro", on: true }], agents: [], fallback: [], headers: {}, keyList: [], switchOnly: w.switchOnly || undefined,
+    models: [{ id: "gemini-3-pro", name: "Gemini 3 Pro", on: true }], agents: [], fallback: [], headers: {}, keyList: [], switchOnly: w.switchOnly || undefined, autoSwitch: w.autoSwitch || undefined,
     account: {
       agent: "agy-cli", agentName: "Antigravity CLI", user: w.active,
       logins: ["work@example.com", "home@example.com"].map((user) => ({ user, active: user === w.active, on: true })),
@@ -45,11 +47,12 @@ function server(lang, w, posts) {
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname === "/api/agents/cli") return json({ agents: {}, pending: false });
     if (url.pathname === "/api/providers") return json(providersOf(w));
-    if (req.method() === "POST" && ["/api/login/switch", "/api/provider/switchonly"].includes(url.pathname)) {
+    if (req.method() === "POST" && ["/api/login/switch", "/api/provider/switchonly", "/api/provider/autoswitch"].includes(url.pathname)) {
       const body = req.postDataJSON();
       posts.push([url.pathname, body]);
       if (url.pathname === "/api/login/switch") w.active = body.user;
       if (url.pathname === "/api/provider/switchonly") w.switchOnly = body.switchOnly;
+      if (url.pathname === "/api/provider/autoswitch") w.autoSwitch = body.autoSwitch;
       return json(providersOf(w));
     }
     if (url.pathname.startsWith("/api/")) return json({});
@@ -66,6 +69,8 @@ const K = {
   onlyLine: "Not connected · switching accounts only",
   manage: "Manage accounts…",
   served: "magpie serves no requests on these accounts",
+  auto: "Switch {agent}'s account automatically",
+  autoTip: "When agy's account runs low, magpie signs agy in to the next one with room, once agy and the Antigravity app have quit.",
 };
 const row = (id) => `.row.agent[data-id="${id}"]`;
 
@@ -103,6 +108,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await only.textContent()).trim(), await tr(K.only, { agent: "agy" }));
         assert.equal(await only.getAttribute("title"), await tr(K.tip));
         assert.equal(await only.locator("input").isChecked(), false);
+        assert.equal(await page.locator(".editor .accts .auto-switch").count(), 0, "no automatic switch while Only switch is off");
         await only.scrollIntoViewIfNeeded();
         const box = await only.boundingBox();
         assert.ok(box.x >= 0 && box.x + box.width <= width, `the tick fits across ${width}`);
@@ -110,6 +116,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await only.locator("input").click();
         await page.waitForFunction(() => document.querySelector(".editor .accts .switch-only input")?.checked === true);
         assert.deepEqual(posts, [["/api/provider/switchonly", { id: "agy-cli", switchOnly: true }]]);
+        assert.deepEqual(await scrolled(), before, "the page doesn't move");
+        // ticked: Switch automatically under it, off
+        const auto = page.locator(".editor .accts .auto-switch .as-head");
+        await auto.waitFor();
+        assert.equal((await auto.locator(".as-name").textContent()).trim(), await tr(K.auto, { agent: "agy" }));
+        assert.equal(await auto.getAttribute("title"), await tr(K.autoTip));
+        const sw = auto.locator("button.lib-switch");
+        assert.equal(await sw.getAttribute("aria-checked"), "false");
+        const ab = await auto.boundingBox();
+        assert.ok(ab.x >= 0 && ab.x + ab.width <= width, `the switch fits across ${width}`);
+        await sw.click();
+        await page.waitForFunction(() => document.querySelector(".editor .accts .auto-switch button.lib-switch")?.getAttribute("aria-checked") === "true");
+        assert.deepEqual(posts[1], ["/api/provider/autoswitch", { id: "agy-cli", autoSwitch: true }]);
         assert.deepEqual(await scrolled(), before, "the page doesn't move");
         assert.deepEqual(errors, []);
       });

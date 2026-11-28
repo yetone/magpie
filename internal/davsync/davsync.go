@@ -1074,7 +1074,7 @@ func syncedProviders(ps []provider.Provider) []provider.Provider {
 	ps = slices.Clone(ps)
 	for i := range ps {
 		ps[i].KeepLogin, ps[i].KeepLoginAs, ps[i].SwitchOnly, ps[i].RestartApp = false, "", false, false
-		ps[i].KeepSelf = false
+		ps[i].KeepSelf, ps[i].AutoSwitch = false, false
 	}
 	return ps
 }

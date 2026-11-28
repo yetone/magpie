@@ -19,7 +19,7 @@ var (
 		"Chat", "Responses", "Anthropic", "Gemini", "GeminiFilled", "Decide", "BaseAPI", "ModelsURL", "Addresses",
 		"AuthHeader", "ClientCert", "ClientKey", "ServerCA", "ServerPin", "ZhipuTeam", "Vertex",
 	}
-	hereFields = []string{"KeepLogin", "KeepLoginAs", "SwitchOnly", "RestartApp", "KeepSelf", "ThisDevice", "Account"}
+	hereFields = []string{"KeepLogin", "KeepLoginAs", "SwitchOnly", "AutoSwitch", "RestartApp", "KeepSelf", "ThisDevice", "Account"}
 )
 
 // Every field of Provider is either a setting, kept on each computer when

@@ -97,7 +97,7 @@ func RestoreGroups(gs []Group) error {
 // from another computer: one not among them goes, one that came without
 // keys keeps the keys it has here, and an access key or balance token it
 // came without is kept too (KeepSecrets). Which account an agent is kept
-// signed in to (KeepLogin, KeepLoginAs, SwitchOnly), whether its app is
+// signed in to (KeepLogin, KeepLoginAs, SwitchOnly, AutoSwitch), whether its app is
 // restarted to follow (RestartApp), and whether a Remote magpie that is
 // this magpie is used anyway (KeepSelf), is this computer's own:
 // one person signs in to a personal account at home and a work account at
@@ -137,13 +137,15 @@ func mirror(ps []Provider, gs []Group, settingsHere bool) error {
 		if h, ok := here[p.ID]; ok {
 			p = KeepSecrets(p, h, p.Key == "" && len(p.Keys) == 0)
 			p.KeepLogin, p.KeepLoginAs, p.SwitchOnly, p.RestartApp = h.KeepLogin, h.KeepLoginAs, h.SwitchOnly, h.RestartApp
-			p.KeepSelf = h.KeepSelf
+			p.KeepSelf, p.AutoSwitch = h.KeepSelf, h.AutoSwitch
 			if settingsHere {
 				p = WithSettingsOf(p, h)
 			}
 		} else {
 			p.KeepLoginAs = "" // an account signed in on the other computer
 			p.KeepSelf = false // kept on the other computer, of a magpie that isn't this one
+			// agy's sign-in here is switched by itself only on a word given here
+			p.AutoSwitch = false
 		}
 		out = append(out, p)
 	}

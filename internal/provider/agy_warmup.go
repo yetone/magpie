@@ -194,6 +194,9 @@ func (a *agyWarm) send(ctx context.Context, key string) error {
 // through the plugin, as the provider editor's Test of that account sends
 // it.
 func warmAgyModel(ctx context.Context, user, model string) error {
+	if agySwitchesKeyring() {
+		return errAgyKept
+	}
 	p, err := Find(PluginID(agyCLIID))
 	if err != nil {
 		return err
@@ -239,7 +242,12 @@ func agyWarmer(a *agyWarm) codexWarmer {
 // There is no time of day for them: Google's 5-hour windows aren't kept to
 // one, as Codex's and Claude's daily warm-ups are.
 func KeepAgyWindowsWarm(ctx context.Context) {
-	keepWarm(ctx, agyCLIID, agyWarmer(newAgyWarm()), func() (string, []string) { return settings.Load().AgyWarmup, nil })
+	keepWarm(ctx, agyCLIID, agyWarmer(newAgyWarm()), func() (string, []string) {
+		if agySwitchesKeyring() {
+			return "", nil // no request goes through magpie on these accounts (#1908)
+		}
+		return settings.Load().AgyWarmup, nil
+	})
 }
 
 // warmAgyNow is Warm up now for the agy-cli account user: one request to
@@ -281,6 +289,11 @@ func warmAgyNow(ctx context.Context, user string, usage map[string]SubscriptionQ
 	}
 	return nil
 }
+
+// errAgyKept is a warm-up of an agy-cli account while magpie only
+// switches agy's sign-in: the warm-up is a request through magpie, which
+// these accounts serve none of (#1908).
+var errAgyKept = fmt.Errorf("magpie only switches agy's sign-in, so it sends no request on these accounts; untick \"Only switch agy's sign-in\" to warm them up")
 
 // errAgyRunning is Warm up now finding every pool's windows running.
 var errAgyRunning = fmt.Errorf("every pool's windows are running already")

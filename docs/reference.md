@@ -2592,11 +2592,21 @@ Manager on Windows, the Secret Service or agy's token file on Linux).
 The Antigravity app (2.x) reads the same sign-in, so it moves with agy.
 The rows of agy and the Antigravity app on Agents then show the account
 and switch it, as Claude Code's does. magpie renews the account with
-Google first, keeps a copy of what agy had in `agy-keyring-backup.json`
-in magpie's folder, and doesn't switch while agy or the app is in the
-middle of a turn. A running Antigravity app reads the sign-in when it
-starts: its row offers a Restart. agy started with a Gemini API key or
-Vertex AI in its environment isn't switched.
+Google first and keeps a copy of what agy had in `agy-keyring-backup.json`
+in magpie's folder. Quit agy and the Antigravity app first: one still
+running keeps the account it started on and writes it back over the
+switch, so magpie refuses, naming what is running, and changes nothing.
+agy started with a Gemini API key or Vertex AI in its environment isn't
+switched. The warm-up sends nothing on these accounts.
+
+Switching is by hand unless you turn on *Switch agy's account
+automatically*, shown under the tick once it is on (or `magpie accounts
+auto-switch agy-cli on`). Then, when the account agy is on has used its
+allowance, the whole account or one of its pools of models (Gemini,
+Claude & GPT), magpie signs agy in to the next account that is on and
+has room there, once agy and the app have quit; till then it waits and
+looks again every ten seconds. Unticking
+*Only switch agy's sign-in* turns it off too.
 
 **Switch accounts only.** To use magpie only to switch Claude Code (or
 Codex) between your accounts, leave it not connected on Agents and sign

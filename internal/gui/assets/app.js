@@ -14092,21 +14092,13 @@ function renderAccounts(a, p) {
     }
     list.append(box);
   }
-  const cx = a.agent === "codex", agy = a.agent === "agy-cli", ag = { agent: agy ? "agy" : a.agentName };
-  if (p && (cx && several || a.agent === "claude" || agy)) {
-    const [only, cb] = tick(t("Only switch {agent}'s sign-in", ag), p.switchOnly);
-    const [tip, on, off] = cx ? [t("When an account is used up, magpie signs {agent} in to the next one, and requests go straight to OpenAI. Open {agent} sessions keep their account until reopened.", ag), t("magpie only switches {agent}'s sign-in; its requests go straight to OpenAI", ag), t("A connected {agent} fails over to your other accounts through magpie again", ag)]
-      // agy's sign-in is the one the Antigravity app reads too (#1908)
-      : [agy ? t("Using an account signs agy and the Antigravity app in to it. Requests on these accounts don't go through magpie.") : t("When an account is used up, magpie signs {agent} in to the next one. Requests on these accounts don't go through magpie.", ag), t("magpie serves no requests on these accounts"), t("magpie serves requests on these accounts again")];
-    only.title = tip;
-    cb.onchange = () => accountAction("provider/switchonly", { id: p.id, switchOnly: cb.checked }, cb.checked ? on : off);
-    list.append(el("div", "switch-only", only));
-  }
-  if (p && cx && (several || p.restartApp)) {
-    const [re, cb] = tick(t("Restart the {agent} app when magpie switches its account back", ag), !!p.restartApp);
-    re.title = t("Off, the {agent} app stays on its account until you restart it. A used-up account restarts it anyway.", ag);
-    cb.onchange = () => accountAction("provider/restartapp", { id: p.id, restartApp: cb.checked }, t(cb.checked ? "magpie restarts the {agent} app when it switches accounts back" : "magpie leaves the {agent} app running when it switches accounts back", ag));
-    list.append(el("div", "restart-app", re));
+  // Only switch {agent}'s sign-in, agy's Switch automatically (#1908) and
+  // Restart the Codex app, in switchticks.js: drawn here alone
+  const cx = a.agent === "codex";
+  if (p && (cx && several || a.agent === "claude" || a.agent === "agy-cli" || cx && p.restartApp)) {
+    const at = el("div");
+    if (window.switchTicks) list.append(...switchTicks(a, p, several));
+    else list.append(at), import("./switchticks.js").then(() => at.isConnected && at.replaceWith(...switchTicks(a, p, several)), () => {});
   }
   // how a pool ends at its caps (plugins#349)
   const capped = (l) => accountCapOf(p, l.user) || windowCapsOf(p, l.user);
