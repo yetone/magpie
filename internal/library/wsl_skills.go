@@ -80,7 +80,7 @@ func (l *Library) storeSkill(t *Target, name string) (changed bool, err error) {
 		if !fi.IsDir() || !ours(p, name) {
 			return false, errors.New(p + " is in the way of magpie's copy of " + name + " in WSL")
 		}
-		dropOld(p, name)
+		l.dropOld(p, name)
 		h := l.libHash(name)
 		if h == "" {
 			return false, nil
@@ -178,7 +178,7 @@ func (l *Library) sweepWSLStores(targets []*Target, res *Result) {
 			if strings.HasPrefix(name, ".") || s.keep[name] || !ours(p, name) || linked(p) {
 				continue
 			}
-			dropOld(p, name)
+			l.dropOld(p, name)
 			h, _ := markedHash(p)
 			if h != "" && hashDir(p) == h {
 				err = os.RemoveAll(p)

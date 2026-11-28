@@ -92,6 +92,7 @@ func (r *Result) fail(agent, what string, err error) {
 // sync writes the library into every agent on this machine.
 func (l *Library) sync() *Result {
 	res := &Result{Changed: []string{}, Problems: []Problem{}}
+	l.olds = nil // each folder is read for old copies again (skills_old.go)
 	b := l.kept
 	if b == nil {
 		b = newBackups()

@@ -130,6 +130,9 @@ type Library struct {
 	// stored are the skills this sync made sure of in a WSL distro's
 	// store, by path (storeSkill), with what went wrong
 	stored map[string]error
+	// olds are the old copies of skills found in each folder this
+	// change looked in, by skill (skills_old.go)
+	olds map[string]map[string][]string
 }
 
 // Instructions are one shared text, and for each agent whether it gets it

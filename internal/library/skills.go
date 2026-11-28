@@ -423,18 +423,12 @@ func oldPath(p, name string) string {
 }
 
 // dropOld removes, best effort, the old copies of a skill earlier swaps
-// moved aside beside p but couldn't remove.
+// moved aside beside p but couldn't remove. It reads the whole folder:
+// a sync goes through l.dropOld, which reads it once.
 func dropOld(p, name string) {
-	es, err := os.ReadDir(filepath.Dir(p))
-	if err != nil {
-		return
-	}
-	pre := oldPrefix(name)
-	for _, e := range es {
-		n := e.Name()
-		if n == pre || (strings.HasPrefix(n, pre+"-") && isDigits(n[len(pre)+1:])) {
-			os.RemoveAll(filepath.Join(filepath.Dir(p), n))
-		}
+	dir := filepath.Dir(p)
+	for _, n := range oldCopies(dir)[name] {
+		os.RemoveAll(filepath.Join(dir, n))
 	}
 }
 
@@ -686,6 +680,11 @@ func readSharedOwn() sharedOwn {
 // folder finds by the library skill's name (or the name its SKILL.md
 // gives), and whether it holds the library's very files. "" when none.
 func (o sharedOwn) rival(name string) (p string, same bool) {
+	// none of the user's own there: nothing to read of the library's
+	// skill, which a sync did for each skill and agent (gandli on X)
+	if len(o) == 0 {
+		return "", false
+	}
 	lib := skillDir(name)
 	if _, err := os.Stat(lib); err != nil {
 		return "", false
@@ -764,6 +763,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	// whether the library's own skill s reaches the agent through
 	// ~/.agents/skills: kept there, put there by the setting, or magpie's
 	// link there for the agent whose folder it is
+	keptShared := map[string]bool{}
 	fromShared := func(s *Skill) bool {
 		if s == nil || !t.readsSharedDir() || isShared {
 			return false
@@ -774,8 +774,15 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			return false
 		}
 		// the library's skill is kept in the shared folder itself (brought
-		// in from there): every agent reading it has it, ticked or not (#595)
-		if sharedHas(s.Name) || l.inSharedHere(s) {
+		// in from there): every agent reading it has it, ticked or not
+		// (#595). Looked up once a skill here: this is asked two or
+		// three times for each (gandli on X)
+		kept, ok := keptShared[s.Name]
+		if !ok {
+			kept = sharedHas(s.Name) || l.inSharedHere(s)
+			keptShared[s.Name] = kept
+		}
+		if kept {
 			return true
 		}
 		p := filepath.Join(sharedSkillsDir(), s.Name)
@@ -851,7 +858,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			mine = append(mine, name)
 			continue
 		}
-		dropOld(p, name)
+		l.dropOld(p, name)
 		res.changed(id)
 	}
 	for _, s := range l.Skills {
@@ -923,7 +930,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			mine = append(mine, s.Name)
 			// an old copy a previous swap couldn't remove is tried again
 			if ours(p, s.Name) {
-				dropOld(p, s.Name)
+				l.dropOld(p, s.Name)
 			}
 			// magpie's copy in an agent given links now is a link again
 			// (#896), unless no link can be made here (Windows without the
@@ -1032,7 +1039,7 @@ func (l *Library) sweepShared(all []*Target, res *Result) {
 			res.fail("agents", "skill:"+name, err)
 			continue
 		}
-		dropOld(p, name)
+		l.dropOld(p, name)
 	}
 }
 
