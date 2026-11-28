@@ -195,6 +195,7 @@ magpie library sync     # エージェントに書き直す</pre>
       <tr><td>Claude Code</td><td><code>~/.claude.json</code></td></tr>
       <tr><td>Codex</td><td><code>~/.codex/config.toml</code></td></tr>
       <tr><td>Gemini CLI</td><td><code>~/.gemini/settings.json</code></td></tr>
+      <tr><td>Qwen Code</td><td><code>~/.qwen/settings.json</code></td></tr>
       <tr><td>Antigravity</td><td><code>~/.gemini/config/mcp_config.json</code></td></tr>
       <tr><td>OpenCode</td><td><code>opencode.json</code></td></tr>
       <tr><td>Cursor</td><td><code>~/.cursor/mcp.json</code></td></tr>
@@ -204,7 +205,7 @@ magpie library sync     # エージェントに書き直す</pre>
     <ul>
       <li><b>変数。</b>ヘッダーや環境変数の値にある <code>${NAME}</code> は、各エージェントの書き方で書き込まれます。その書き方を持たないエージェントにはそのサーバーを渡さず、ページに理由が出ます。</li>
       <li><b>SSE。</b>Codex、Goose、dsh、Grok、Command Code、Zed は SSE のサーバーを使えません。Claude Desktop はリモートのサーバーを一切受け付けません。</li>
-      <li><b>ツールごとのオフ。</b>Codex、Gemini CLI、Crush、Hermes Agent、Claude Code、OpenCode では、ツールを 1 つずつオフにでき、それぞれの設定に書かれます。ほかのエージェントにはサーバー全体が渡ります。</li>
+      <li><b>ツールごとのオフ。</b>Codex、Gemini CLI、Qwen Code、Crush、Hermes Agent、Claude Code、OpenCode では、ツールを 1 つずつオフにでき、それぞれの設定に書かれます。ほかのエージェントにはサーバー全体が渡ります。</li>
       <li><b>サインイン。</b>OAuth が必要なサーバーは magpie で一度だけサインインします。エージェントは magpie のゲートウェイの <code>/mcp/&lt;name&gt;</code> 経由で使います。</li>
       <li><b>このコンピュータだけ。</b>ここに置いておくサーバーは <span class="ui">ほかのコンピュータと同期</span> をオフにします（<code>magpie library mcp local &lt;name&gt; on</code>）。</li>
       <li><b>ここでは別のコマンド。</b>同期したサーバーのプログラムがこのコンピュータでは別の場所にある（Mac と WSL など）ときは、コマンドの下の <span class="ui">このコンピュータでは別のコマンドを使う</span> をクリックします。名前、エージェント、メモはそのまま同期され、ほかのコンピュータは自分のコマンドを実行し続けます（<code>magpie library mcp here &lt;name&gt; &lt;コマンド…&gt;</code>）。</li>
@@ -218,6 +219,7 @@ magpie library sync     # エージェントに書き直す</pre>
       <tr><td>Claude Code</td><td><code>~/.claude/skills</code></td></tr>
       <tr><td>Codex</td><td><code>~/.codex/skills</code></td></tr>
       <tr><td>Gemini CLI</td><td><code>~/.gemini/skills</code></td></tr>
+      <tr><td>Qwen Code</td><td><code>~/.qwen/skills</code></td></tr>
       <tr><td>OpenCode</td><td>設定フォルダの <code>skills</code></td></tr>
       <tr><td>Cursor</td><td><code>~/.cursor/skills</code></td></tr>
       <tr><td>Copilot CLI</td><td><code>~/.copilot/skills</code></td></tr>

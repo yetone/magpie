@@ -195,6 +195,7 @@ magpie library sync     # 重新写进各个 Agent</pre>
       <tr><td>Claude Code</td><td><code>~/.claude.json</code></td></tr>
       <tr><td>Codex</td><td><code>~/.codex/config.toml</code></td></tr>
       <tr><td>Gemini CLI</td><td><code>~/.gemini/settings.json</code></td></tr>
+      <tr><td>Qwen Code</td><td><code>~/.qwen/settings.json</code></td></tr>
       <tr><td>Antigravity</td><td><code>~/.gemini/config/mcp_config.json</code></td></tr>
       <tr><td>OpenCode</td><td><code>opencode.json</code></td></tr>
       <tr><td>Cursor</td><td><code>~/.cursor/mcp.json</code></td></tr>
@@ -204,7 +205,7 @@ magpie library sync     # 重新写进各个 Agent</pre>
     <ul>
       <li><b>变量。</b>请求头或环境变量里的 <code>${NAME}</code> 会按每个 Agent 自己的写法写入。不支持这种写法的 Agent 不会拿到这个服务器，页面会说明原因。</li>
       <li><b>SSE。</b>Codex、Goose、dsh、Grok、Command Code 和 Zed 用不了 SSE 服务器。Claude Desktop 完全不接受远程服务器。</li>
-      <li><b>单独关掉工具。</b>Codex、Gemini CLI、Crush、Hermes Agent、Claude Code 和 OpenCode 可以逐个关掉工具，各自写进自己的设置。其他 Agent 拿到的是整个服务器。</li>
+      <li><b>单独关掉工具。</b>Codex、Gemini CLI、Qwen Code、Crush、Hermes Agent、Claude Code 和 OpenCode 可以逐个关掉工具，各自写进自己的设置。其他 Agent 拿到的是整个服务器。</li>
       <li><b>登录。</b>需要 OAuth 的服务器只在 magpie 里登录一次，之后 Agent 通过 magpie 网关的 <code>/mcp/&lt;name&gt;</code> 访问它。</li>
       <li><b>只在这台电脑。</b>不想同步到别处的服务器，关掉 <span class="ui">同步到其他电脑</span>（<code>magpie library mcp local &lt;name&gt; on</code>）。</li>
       <li><b>这台电脑用另一条命令。</b>同步的服务器在这台电脑上的程序路径不同（比如 Mac 和 WSL），点命令下方的 <span class="ui">在这台电脑上用另一条命令</span>。名称、Agent 和备注照常同步，其他电脑仍运行它们自己的命令（<code>magpie library mcp here &lt;name&gt; &lt;命令…&gt;</code>）。</li>
@@ -218,6 +219,7 @@ magpie library sync     # 重新写进各个 Agent</pre>
       <tr><td>Claude Code</td><td><code>~/.claude/skills</code></td></tr>
       <tr><td>Codex</td><td><code>~/.codex/skills</code></td></tr>
       <tr><td>Gemini CLI</td><td><code>~/.gemini/skills</code></td></tr>
+      <tr><td>Qwen Code</td><td><code>~/.qwen/skills</code></td></tr>
       <tr><td>OpenCode</td><td>配置目录里的 <code>skills</code></td></tr>
       <tr><td>Cursor</td><td><code>~/.cursor/skills</code></td></tr>
       <tr><td>Copilot CLI</td><td><code>~/.copilot/skills</code></td></tr>

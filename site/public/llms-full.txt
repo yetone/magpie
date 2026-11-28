@@ -10457,6 +10457,7 @@ An MCP server is either a command (a program the agent starts, such as `npx …`
 | Claude Code | `~/.claude.json` |
 | Codex | `~/.codex/config.toml` |
 | Gemini CLI | `~/.gemini/settings.json` |
+| Qwen Code | `~/.qwen/settings.json` |
 | Antigravity | `~/.gemini/config/mcp_config.json` |
 | OpenCode | `opencode.json` |
 | Cursor | `~/.cursor/mcp.json` |
@@ -10465,7 +10466,7 @@ An MCP server is either a command (a program the agent starts, such as `npx …`
 
 - **Variables..** `${NAME}` in a header or an env value is written in each agent’s own syntax. An agent that has no such syntax is not given that server, and the page says why.
 - **SSE..** Codex, Goose, dsh, Grok, Command Code and Zed can’t use an SSE server. Claude Desktop takes no remote servers at all.
-- **Single tools off..** You can turn off tools one by one for Codex, Gemini CLI, Crush, Hermes Agent, Claude Code and OpenCode, each in its own setting. Every other agent gets the whole server.
+- **Single tools off..** You can turn off tools one by one for Codex, Gemini CLI, Qwen Code, Crush, Hermes Agent, Claude Code and OpenCode, each in its own setting. Every other agent gets the whole server.
 - **Sign-in..** A server that needs OAuth is signed in to once, in magpie. Agents then reach it through magpie’s gateway at `/mcp/<name>`.
 - **This computer only..** Turn off Sync to your other computers for a server that should stay here (`magpie library mcp local <name> on`).
 - **Another command here..** For a synced server whose program sits elsewhere on this computer (a Mac and WSL), click Use another command on this computer under its command. Its name, agents and note still sync; your other computers keep running theirs (`magpie library mcp here <name> <command…>`).
@@ -10481,6 +10482,7 @@ A skill is a folder with a `SKILL.md` in it. The agent reads each skill’s name
 | Claude Code | `~/.claude/skills` |
 | Codex | `~/.codex/skills` |
 | Gemini CLI | `~/.gemini/skills` |
+| Qwen Code | `~/.qwen/skills` |
 | OpenCode | `skills` in its config folder |
 | Cursor | `~/.cursor/skills` |
 | Copilot CLI | `~/.copilot/skills` |

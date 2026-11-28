@@ -666,8 +666,17 @@ func targetOf(a *agent.Agent) *Target {
 		// writes itself (getGlobalQwenDir in packages/core/src/config/
 		// storage.ts, getMemoryFilePaths in memory/memoryDiscovery.ts,
 		// getCurrentMemoryFilename in utils/memory-constants.ts,
-		// QwenLM/qwen-code c5098a27)
+		// QwenLM/qwen-code c5098a27). Its MCP servers are mcpServers in
+		// the same folder's settings.json (fmtQwen), and its skills are
+		// skills/ there in every version (getSkillsBaseDirs in packages/
+		// core/src/skills/skill-manager.ts, 0011d3aa; createUserResourcePaths
+		// in packages/resource/src/resource/paths/resourcePaths.ts,
+		// v1.0.0-preview.2). 0.29 reads ~/.agents/skills too, 1.0 only once
+		// a setting turns it on, so it isn't one of readsShared. Andykpa's
+		// qwen-mcp plugin (magpie-community/plugins#1686) found both missing
 		t.Instructions = filepath.Join(a.Dir, contextFile(a.Path, "QWEN.md"))
+		t.MCP = &mcpFile{Path: a.Path, Format: fmtQwen}
+		t.Skills = filepath.Join(a.Dir, "skills")
 	case "reasonix":
 		// Reasonix reads every one there is of REASONIX.md, AGENTS.md and
 		// CLAUDE.md in its state folder; REASONIX.md is its own

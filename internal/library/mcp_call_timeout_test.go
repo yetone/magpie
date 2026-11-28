@@ -82,10 +82,11 @@ func TestCallTimeoutKeys(t *testing.T) {
 // the user-wide file of each agent given the server.
 func TestCallTimeoutFollowsLibrary(t *testing.T) {
 	h := sandbox(t)
-	srv := Server{Name: "render", Transport: "stdio", Command: "npx", Args: []string{"-y", "render-mcp"}, Agents: []string{"claude", "codex", "gemini"}}
+	write(t, filepath.Join(h, ".qwen", "settings.json"), "{}")
+	srv := Server{Name: "render", Transport: "stdio", Command: "npx", Args: []string{"-y", "render-mcp"}, Agents: []string{"claude", "codex", "gemini", "qwen"}}
 	ok(t)(SaveServer("", srv))
-	keys := map[string]string{"claude": "timeout", "codex": "tool_timeout_sec", "gemini": "timeout"}
-	per := map[string]float64{"claude": 1000, "codex": 1, "gemini": 1000}
+	keys := map[string]string{"claude": "timeout", "codex": "tool_timeout_sec", "gemini": "timeout", "qwen": "timeout"}
+	per := map[string]float64{"claude": 1000, "codex": 1, "gemini": 1000, "qwen": 1000}
 	for id, k := range keys {
 		if e := entryOf(t, id, "render"); e == nil || e[k] != nil {
 			t.Fatalf("%s: no call timeout set, yet %v", id, e)

@@ -78,6 +78,23 @@ func TestAgentMCPFiles(t *testing.T) {
 			sse:  entry{"type": "sse", "url": "https://example.com/sse"},
 		},
 		{
+			// Qwen Code's settings.json, magpie's model in it too: SSE named
+			// by type, which 0.29 and 1.0 both read as SSE; HTTP as httpUrl,
+			// which both read as HTTP (plugins#1686)
+			id: "qwen", file: ".qwen/settings.json",
+			user: `{"model": {"name": "qwen3-coder-plus"}, "mcpServers": {"mine": {"command": "uvx", "args": ["mine"], "trust": true, "timeout": 30000}}}`,
+			fs:   entry{"command": "npx", "args": []any{"-y", "@mcp/fs"}, "env": entry{"K": "V"}},
+			web:  entry{"httpUrl": "https://example.com/mcp", "headers": entry{"Authorization": "Bearer x"}},
+			sse:  entry{"type": "sse", "url": "https://example.com/sse"},
+		},
+		{
+			id: "qwen", file: "qh/settings.json", env: map[string]string{"QWEN_HOME": "qh"},
+			user: `{"mcpServers": {"mine": {"command": "uvx", "args": ["mine"]}}}`,
+			fs:   entry{"command": "npx", "args": []any{"-y", "@mcp/fs"}, "env": entry{"K": "V"}},
+			web:  entry{"httpUrl": "https://example.com/mcp", "headers": entry{"Authorization": "Bearer x"}},
+			sse:  entry{"type": "sse", "url": "https://example.com/sse"},
+		},
+		{
 			id: "qoder-cn", file: ".qoder-cn/settings.json",
 			user: `{"mcpServers": {"mine": {"command": "uvx", "args": ["mine"]}}}`,
 			fs:   entry{"command": "npx", "args": []any{"-y", "@mcp/fs"}, "env": entry{"K": "V"}},
@@ -284,7 +301,7 @@ func TestAgentMCPFiles(t *testing.T) {
 			if len(got) != 1 || got["mine"] == nil {
 				t.Errorf("after removing:\n%s", read(t, p))
 			}
-			for _, keep := range []string{`"$schema"`, "timeout", "disabled", "enabled", "# mine", `default = "grok-4"`, `default = "deepseek"`, `model = "grok/grok-4.7"`, "A = "} {
+			for _, keep := range []string{`"$schema"`, "timeout", "disabled", "enabled", "trust", `"qwen3-coder-plus"`, "# mine", `default = "grok-4"`, `default = "deepseek"`, `model = "grok/grok-4.7"`, "A = "} {
 				if strings.Contains(c.user, keep) && !strings.Contains(read(t, p), keep) {
 					t.Errorf("lost %s:\n%s", keep, read(t, p))
 				}

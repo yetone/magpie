@@ -106,6 +106,11 @@ func (f *mcpFile) refsOf() envSyntax {
 		// resolveEnvVarsInObject; envVarResolver.ts resolveEnvVarsInString;
 		// read in the 0.62.0 bundle)
 		return envSyntax{refDollar, refDollar}
+	case fmtQwen:
+		// Qwen Code, a fork of Gemini CLI, does the same as it loads its
+		// settings.json (loadSettings -> resolveEnvVarsInObject in
+		// packages/cli/src/config/settings.ts, QwenLM/qwen-code 0011d3aa)
+		return envSyntax{refDollar, refDollar}
 	case fmtCrush:
 		// Crush resolves $NAME and ${NAME} in an MCP server's headers and
 		// env as it connects (charmbracelet/crush v0.39.3

@@ -24,7 +24,7 @@ func TestAgentsSkillsFolders(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range []string{".kimi/config.toml", ".commandcode/settings.json", ".factory/settings.json", ".cline/data/globalState.json",
-		filepath.Join(hermes, "config.yaml"), ".grok/config.toml", ".qoder/settings.json", ".workbuddy/models.json", ".fx/settings.json", ".config/devin/config.json"} {
+		filepath.Join(hermes, "config.yaml"), ".grok/config.toml", ".qoder/settings.json", ".workbuddy/models.json", ".fx/settings.json", ".config/devin/config.json", ".qwen/settings.json"} {
 		write(t, filepath.Join(h, f), "")
 	}
 	// hermes and Cline installed: the CLI beside the folder (the folder
@@ -45,6 +45,7 @@ func TestAgentsSkillsFolders(t *testing.T) {
 		"workbuddy":   ".workbuddy/skills",
 		"fx":          ".fx/skills",
 		"devin":       ".config/devin/skills",
+		"qwen":        ".qwen/skills",
 	}
 	for id, d := range want {
 		tg := targetByID(id)

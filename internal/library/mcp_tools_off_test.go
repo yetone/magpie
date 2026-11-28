@@ -51,16 +51,17 @@ func offIn(t *testing.T, tg *Target, name string) ([]string, map[string]any) {
 
 // nf1qaz2w on Discord: each of a server's tools has a switch, and a tool
 // turned off is written into each agent that has its own list of them in
-// a server's entry — Codex's disabled_tools, Gemini CLI's excludeTools,
-// Crush's disabled_tools, Hermes' tools.exclude — beside the names the
+// a server's entry — Codex's disabled_tools, Gemini CLI's and Qwen Code's
+// excludeTools, Crush's disabled_tools, Hermes' tools.exclude — beside the names the
 // user put there themselves, which stay when the tool is turned on again.
 func TestToolsOffInTheEntry(t *testing.T) {
 	h := sandbox(t)
 	t.Setenv("HERMES_HOME", filepath.Join(h, "hermes-home"))
 	write(t, filepath.Join(h, "hermes-home", "config.yaml"), "model:\n  default: x\n")
 	holdCLI(t, h, "hermes") // the config alone is gone (#2173, #2177)
-	agents := []string{"codex", "crush", "gemini", "hermes"}
-	keys := map[string]string{"codex": "disabled_tools", "crush": "disabled_tools", "gemini": "excludeTools", "hermes": "exclude"}
+	write(t, filepath.Join(h, ".qwen", "settings.json"), `{"model": {"name": "x"}}`)
+	agents := []string{"codex", "crush", "gemini", "hermes", "qwen"}
+	keys := map[string]string{"codex": "disabled_tools", "crush": "disabled_tools", "gemini": "excludeTools", "hermes": "exclude", "qwen": "excludeTools"}
 	ok(t)(SaveServer("", Server{Name: "fs", Transport: "stdio", Command: "npx", Args: []string{"-y", "@mcp/fs"}, Agents: agents}))
 	for _, id := range agents {
 		tg := targetByID(id)

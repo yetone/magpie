@@ -404,6 +404,15 @@ const (
 	// streamable HTTP and no way to name SSE (TRAE CN 2.3.105403's
 	// workbench)
 	fmtTrae
+	// fmtQwen is Qwen Code's settings.json mcpServers, Gemini CLI's shape
+	// with SSE named: httpUrl is streamable HTTP in every version, while a
+	// bare url is SSE to 0.28 and 0.29 (createTransport in
+	// packages/core/src/tools/mcp-client.ts, v0.28.7, npm's latest, and
+	// main 0011d3aa) and HTTP to 1.0, which takes SSE only with type "sse"
+	// (createUrlTransport in packages/core/src/mcp/connector/transport/
+	// url.ts, v1.0.0-preview.2; 0.28 and 0.29 ignore type). So SSE is url
+	// with type "sse", which every version reads as SSE
+	fmtQwen
 )
 
 // mcpFile is the file an agent keeps its user-wide MCP servers in.
@@ -772,6 +781,9 @@ var callKeys = map[mcpFormat]callKey{
 	// Gemini CLI's mcpServers: timeout, in milliseconds, for a call and
 	// the start alike (MCP_DEFAULT_TIMEOUT_MSEC, ten minutes, unless set)
 	fmtGemini: {key: "timeout", per: 1000},
+	// Qwen Code's is Gemini CLI's (MCPServerConfig.timeout, milliseconds,
+	// in packages/core/src/config/mcp-server-config.ts)
+	fmtQwen: {key: "timeout", per: 1000},
 	// OpenCode's mcp: timeout, in milliseconds, for a call, the start
 	// and the tool list (packages/opencode/src/mcp; v2 reads the number
 	// as all three too, config/migrate.ts migrateMcpTimeout)
@@ -938,12 +950,15 @@ func (f *mcpFile) encode(s *Server) ordered {
 			add("args", list(s.Args))
 			add("env", strs(s.Env))
 		}
-	case fmtGemini:
+	case fmtGemini, fmtQwen:
 		switch s.Transport {
 		case "http":
 			add("httpUrl", s.URL)
 			optional("headers", s.Headers)
 		case "sse":
+			if f.Format == fmtQwen {
+				add("type", "sse")
+			}
 			add("url", s.URL)
 			optional("headers", s.Headers)
 		default:
@@ -1346,7 +1361,8 @@ func (f *mcpFile) decode(name string, m map[string]any) (*Server, bool) {
 				ref(&s.Env, n, "${"+n+"}")
 			}
 		}
-	case fmtGemini:
+	case fmtGemini, fmtQwen:
+		// a url Qwen Code's type doesn't name is SSE, as 0.28 and 0.29 read it
 		if u := str(m, "httpUrl"); u != "" {
 			remote("http", u, m["headers"])
 		} else if u := str(m, "url"); u != "" {
@@ -1739,6 +1755,7 @@ var owned = map[mcpFormat][]string{
 	fmtClaude:   {"type", "url", "headers", "command", "args", "env"},
 	fmtCrush:    {"type", "url", "headers", "command", "args", "env"},
 	fmtGemini:   {"type", "httpUrl", "url", "headers", "command", "args", "env"},
+	fmtQwen:     {"type", "httpUrl", "url", "headers", "command", "args", "env"},
 	fmtOpenCode: {"type", "url", "headers", "command", "environment", "enabled"},
 	fmtCursor:   {"type", "url", "headers", "command", "args", "env"},
 	fmtCopilot:  {"type", "url", "headers", "command", "args", "env"},

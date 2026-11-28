@@ -36,7 +36,10 @@ import (
 // (docs.factory.com/cli/configuration/mcp). Qoder and CodeBuddy, like
 // Claude Code, ask the user to approve a project's server before using
 // it. TRAE CN reads .trae/mcp.json once its Enable Project MCP setting is
-// on (its workbench, 2.3.105403). Antigravity — the app and agy alike —
+// on (its workbench, 2.3.105403). Qwen Code reads .qwen/settings.json's
+// mcpServers as its workspace settings, in the shape of its user-wide
+// file (loadSettings in packages/cli/src/config/settings.ts, QwenLM/
+// qwen-code 0011d3aa). Antigravity — the app and agy alike —
 // reads .agents/mcp_config.json, its workspace customization root's
 // mcp_config.json, in the shape of its user-wide ~/.gemini/config one
 // (agy 1.5.15's embedded docs: "Customization Roots" lists ".agents"
@@ -64,6 +67,7 @@ var projectMCPFiles = map[string]struct {
 	"codebuddy": {".mcp.json", fmtClaude},
 	"droid":     {".factory/mcp.json", fmtClaude},
 	"trae-cn":   {".trae/mcp.json", fmtTrae},
+	"qwen":      {".qwen/settings.json", fmtQwen},
 	// one file for both, as their user-wide one is
 	"agy":         {".agents/mcp_config.json", fmtAntigravity},
 	"antigravity": {".agents/mcp_config.json", fmtAntigravity},

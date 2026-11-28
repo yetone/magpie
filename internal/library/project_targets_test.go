@@ -107,6 +107,59 @@ func TestProjectServersQoderCodeBuddyDroid(t *testing.T) {
 	}
 }
 
+// Qwen Code's project servers are .qwen/settings.json's mcpServers, in
+// the shape of its user-wide file (HTTP as httpUrl, SSE as url with type
+// sse), and its project skills .qwen/skills (plugins#1686). The rest of
+// that settings.json is the user's, and stays.
+func TestProjectQwen(t *testing.T) {
+	h, proj := mcpProject(t)
+	src := filepath.Join(h, "src")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, nil))
+	qs := filepath.Join(proj, ".qwen", "settings.json")
+	write(t, qs, `{
+  // the team's
+  "tools": {"exclude": ["run_shell_command"]},
+  "mcpServers": {"linear": {"httpUrl": "https://mcp.linear.app/mcp"}}
+}
+`)
+	ok(t)(SaveServer("", Server{Name: "events", Transport: "sse", URL: "https://x.example/sse"}))
+	for _, name := range []string{"fs", "docs", "events"} {
+		ok(t)(ProjectServer(proj, name, []string{"qwen"}))
+	}
+	if !strings.Contains(read(t, qs), "// the team's") || !strings.Contains(read(t, qs), "run_shell_command") {
+		t.Errorf("the user's settings lost:\n%s", read(t, qs))
+	}
+	s := servers(t, qs, "mcpServers")
+	if fs, _ := s["fs"].(map[string]any); fs["command"] != "npx" || fs["type"] != nil {
+		t.Errorf("fs: %v", fs)
+	}
+	if d, _ := s["docs"].(map[string]any); d["httpUrl"] != "https://docs.example/mcp" || d["url"] != nil || d["type"] != nil {
+		t.Errorf("docs: %v", d)
+	}
+	if e, _ := s["events"].(map[string]any); e["type"] != "sse" || e["url"] != "https://x.example/sse" {
+		t.Errorf("events: %v", e)
+	}
+	if _, err := os.Stat(filepath.Join(h, ".qwen", "settings.json")); err == nil {
+		t.Error("Qwen Code's user-wide settings were written")
+	}
+	ok(t)(ProjectSkill(proj, "pdf", []string{"qwen"}))
+	if p := filepath.Join(proj, ".qwen/skills/pdf"); !isLink(t, p) || !ours(p, "pdf") {
+		t.Error(".qwen/skills/pdf isn't a link to the library's")
+	}
+
+	ok(t)(RemoveProject(proj, false))
+	if s := servers(t, qs, "mcpServers"); len(s) != 1 || s["linear"] == nil {
+		t.Errorf("after: %s", read(t, qs))
+	}
+	if _, err := os.Lstat(filepath.Join(proj, ".qwen/skills/pdf")); err == nil {
+		t.Error(".qwen/skills/pdf left")
+	}
+	if ProjectMCPFile("qwen") != ".qwen/settings.json" || ProjectSkillsDir("qwen") != ".qwen/skills" {
+		t.Error("ProjectMCPFile, ProjectSkillsDir")
+	}
+}
+
 // CodeBuddy reads only the first there is of .mcp.json and mcp.json: a
 // project with mcp.json alone has its servers put there, so a new
 // .mcp.json doesn't hide the user's from it.
