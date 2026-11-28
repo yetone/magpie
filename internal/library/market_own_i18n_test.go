@@ -10,9 +10,10 @@ import (
 )
 
 // The market's text for magpie's own servers is the GUI's in every
-// language (the page says a featured one's through t()): Magpie
+// language (the page says a featured one's through t()). Magpie
 // Artifacts' says what it writes into Claude Code's settings.json, and a
-// reader of another language read that in English only (rosu_h on X).
+// reader of another language read it in English only (rosu_h on X);
+// Memory's and Sessions' were English too.
 func TestOwnServersSaidInEveryLanguage(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "gui", "assets", "i18n.js"))
 	if err != nil {
@@ -40,11 +41,19 @@ func TestOwnServersSaidInEveryLanguage(t *testing.T) {
 			t.Fatalf("i18n.js has no %s table", l)
 		}
 	}
-	for _, m := range []MarketServer{artifactsServer(), browserServer()} {
+	n := 0
+	for _, m := range featured {
+		if m.Publisher != "Magpie" {
+			continue
+		}
+		n++
 		for _, l := range langs {
 			if !tables[l][m.Description] {
 				t.Errorf("%s's text isn't in %s:\n%s", m.Name, l, m.Description)
 			}
 		}
+	}
+	if n == 0 {
+		t.Fatal("no server of magpie's own in the market")
 	}
 }
