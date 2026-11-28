@@ -543,8 +543,13 @@ func Delete(agent, id string) (Trashed, error) {
 	}
 	// agy holds a conversation's presence lock while it has it open, idle
 	// for longer than a minute too
-	if agent == "agy" && agyHeld(filepath.Join(agyDataDir(fs), "presence", id+".lock")) {
-		return Trashed{}, ErrActive
+	if agent == "agy" {
+		// and its subagents' conversations theirs (agyFold)
+		for _, c := range append([]string{id}, agySubIDs(fs)...) {
+			if agyHeld(filepath.Join(agyDataDir(fs), "presence", c+".lock")) {
+				return Trashed{}, ErrActive
+			}
+		}
 	}
 	// Grok Build's search index keeps a copy of the text of every session
 	// going, a subagent's under its own id: those rows go before a file
@@ -647,17 +652,20 @@ func sessionPaths(agent, id string, fs []file) []string {
 	if agent == "agy" {
 		// what agy's own delete (its /resume picker) removes: the
 		// conversation's brain folder, its trajectory database with the
-		// journal files SQLite keeps beside it, and its annotations
+		// journal files SQLite keeps beside it, and its annotations; and
+		// the same of each subagent's conversation filed under it
 		dir := agyDataDir(fs)
 		if dir == "" {
 			return nil
 		}
-		add(filepath.Join(dir, "brain", id))
-		db := filepath.Join(dir, "conversations", id+".db")
-		for _, p := range []string{db, db + "-wal", db + "-shm", db + "-journal"} {
-			add(p)
+		for _, c := range append([]string{id}, agySubIDs(fs)...) {
+			add(filepath.Join(dir, "brain", c))
+			db := filepath.Join(dir, "conversations", c+".db")
+			for _, p := range []string{db, db + "-wal", db + "-shm", db + "-journal"} {
+				add(p)
+			}
+			add(filepath.Join(dir, "annotations", c+".pbtxt"))
 		}
-		add(filepath.Join(dir, "annotations", id+".pbtxt"))
 		return out
 	}
 	if agent == "grok" {

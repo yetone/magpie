@@ -60,6 +60,10 @@ type agySummary struct {
 	// Last is last_modified_time: the time of a conversation that has
 	// no transcript to read it from
 	Last time.Time
+	// Parent is the conversation that started this one as its subagent
+	// (agyFold), "" for one the user started; Kind is its agent_name
+	Parent string `json:",omitempty"`
+	Kind   string `json:",omitempty"`
 }
 
 // agySummaries is each conversation_summaries.db's rows by its path (agy's
@@ -118,15 +122,22 @@ func readAgySummaries(path, goos string) (map[string]agySummary, bool) {
 	return agyRowsOn(db, goos)
 }
 
-// agyRows reads the rows; a database made before preview was a column is
-// read without it.
+// agyRows reads the rows; a database made before preview, or before
+// parent_conversation_id and agent_name, were columns is read without them.
 func agyRows(db *sql.DB) (map[string]agySummary, bool) { return agyRowsOn(db, runtime.GOOS) }
 
 // agyRowsOn is agyRows with the folders read as goos names them.
 func agyRowsOn(db *sql.DB, goos string) (map[string]agySummary, bool) {
-	rows, err := db.Query("SELECT conversation_id, title, preview, workspace_uris, last_modified_time FROM conversation_summaries")
-	if err != nil {
-		rows, err = db.Query("SELECT conversation_id, title, '', workspace_uris, last_modified_time FROM conversation_summaries")
+	var rows *sql.Rows
+	var err error
+	for _, cols := range []string{
+		"title, preview, workspace_uris, last_modified_time, parent_conversation_id, agent_name",
+		"title, preview, workspace_uris, last_modified_time, '', ''",
+		"title, '', workspace_uris, last_modified_time, '', ''",
+	} {
+		if rows, err = db.Query("SELECT conversation_id, " + cols + " FROM conversation_summaries"); err == nil {
+			break
+		}
 	}
 	if err != nil {
 		return nil, false
@@ -135,14 +146,14 @@ func agyRowsOn(db *sql.DB, goos string) (map[string]agySummary, bool) {
 	out := map[string]agySummary{}
 	for rows.Next() {
 		var id string
-		var t, p, ws sql.NullString
+		var t, p, ws, parent, kind sql.NullString
 		var last any
-		if rows.Scan(&id, &t, &p, &ws, &last) != nil || id == "" {
+		if rows.Scan(&id, &t, &p, &ws, &last, &parent, &kind) != nil || id == "" {
 			continue
 		}
 		var uris []string
 		json.Unmarshal([]byte(ws.String), &uris)
-		s := agySummary{Title: t.String, Preview: p.String, Last: agyTime(last)}
+		s := agySummary{Title: t.String, Preview: p.String, Last: agyTime(last), Parent: parent.String, Kind: kind.String}
 		for _, u := range uris {
 			if s.Cwd = agyFolder(u, goos); s.Cwd != "" {
 				break
@@ -220,7 +231,70 @@ func agyTranscripts(dir string) []file {
 // agyFiles are agy's conversations on this computer, each with its row of
 // conversation_summaries.db: rev is that row, so a title agy writes after
 // the transcript reads the conversation again, and only that one.
-func agyFiles() []file { return agyFilesIn(AgyDir(), runtime.GOOS) }
+func agyFiles() []file { return agyFold(agyFilesIn(AgyDir(), runtime.GOOS)) }
+
+// agyFold files each subagent's conversation under the conversation at
+// the top of it (JohnRee97129809 on X: every subagent agy ran was listed
+// as a conversation of its own, and the user's own were lost among
+// them). agy keeps a subagent's conversation as it keeps any other, its
+// own brain/<id>/ and conversations/<id>.db, and its row of
+// conversation_summaries.db names the conversation that started it,
+// parent_conversation_id (its nesting_depth how deep); agy's own list
+// leaves it out. It goes under the key of the one at the top (a
+// subagent's subagent too), as a subagent's file (main false), its own
+// id in sid and the one that started it in parent: the session's
+// subagents (subagentsOf). One whose parent isn't listed stays a
+// conversation of its own. Its rev is marked, so a conversation read
+// as one of its own is read again as a subagent's, which counts no
+// prompts (parseAgy). Each WSL distro's are its own. The call sources
+// keep each conversation's own id (agyCallFiles).
+func agyFold(fs []file) []file {
+	parents := map[string]map[string]string{} // distro → listed id → its parent
+	for _, f := range fs {
+		if f.agent != "agy" {
+			continue
+		}
+		in := parents[f.m().wsl]
+		if in == nil {
+			in = map[string]string{}
+			parents[f.m().wsl] = in
+		}
+		p := ""
+		if a := f.m().agy; a != nil && safeID.MatchString(a.Parent) {
+			p = a.Parent
+		}
+		in[strings.TrimPrefix(f.key, "agy:")] = p
+	}
+	for i := range fs {
+		f := &fs[i]
+		if f.agent != "agy" {
+			continue
+		}
+		in := parents[f.m().wsl]
+		id := strings.TrimPrefix(f.key, "agy:")
+		// up to the first whose parent isn't listed; a chain that comes
+		// round (or runs past any agy nests) folds nothing
+		root, n := id, 0
+		for ; n < 64; n++ {
+			up := in[root]
+			if _, listed := in[up]; up == "" || !listed {
+				break
+			}
+			if up == id {
+				n = 64
+				break
+			}
+			root = up
+		}
+		if root == id || n == 64 {
+			continue
+		}
+		f.key, f.main = "agy:"+root, false
+		m := f.w()
+		m.sid, m.parent, m.rev = id, in[id], m.rev+"\x00sub"
+	}
+	return fs
+}
 
 // agyFilesIn is agyFiles of the agy data folder dir, whose rows name
 // folders as goos does. A conversation with a
@@ -297,11 +371,14 @@ type agyLine struct {
 
 // agyCarry is what a read of a transcript carries on with: where it read
 // to, the highest step counted, and the model steps' tokens by their index,
-// so a step written again (as the call reader allows) counts once.
+// so a step written again (as the call reader allows) counts once. Sub is
+// a read of a subagent's conversation (agyFold): its prompts are its
+// parent's asking, and its time runs beside its parent's.
 type agyCarry struct {
 	Tail  *tail              `json:"tail,omitempty"`
 	Last  int                `json:"last"`
 	Steps map[int]agyCounted `json:"steps,omitempty"`
+	Sub   bool               `json:"sub,omitempty"`
 }
 
 type agyCounted struct {
@@ -335,15 +412,15 @@ func parseAgy(f file, old *state) *state {
 			// it as until it has a title
 			s.Title = title(f.m().agy.Preview)
 			if !f.m().agy.Last.IsZero() {
-				s.saw(f.m().agy.Last, true)
+				s.saw(f.m().agy.Last, f.main)
 			}
 		}
 		return s
 	}
 	var s *state
-	c := agyCarry{Last: -1}
+	c := agyCarry{Last: -1, Sub: !f.main}
 	var off int64
-	if old != nil && old.more().Agy != nil && old.more().Agy.Tail.holds(f.path) {
+	if old != nil && old.more().Agy != nil && old.more().Agy.Tail.holds(f.path) && old.more().Agy.Sub == !f.main {
 		s, c, off = old.clone(), *old.more().Agy, old.more().Agy.Tail.Off
 		steps := make(map[int]agyCounted, len(c.Steps))
 		for k, v := range c.Steps {
@@ -424,10 +501,12 @@ func agyCount(s *state, c *agyCarry, b []byte, model func(int) string) {
 		return // written again: counted when it was first
 	}
 	c.Last = i
-	s.saw(at, true)
+	s.saw(at, !c.Sub)
 	switch {
 	case l.Source == "USER_EXPLICIT" && l.Type == "USER_INPUT":
-		s.day(dateOf(at)).Prompts++
+		if !c.Sub {
+			s.day(dateOf(at)).Prompts++
+		}
 		if s.Title == "" {
 			s.Title = title(agyRequest(l.Content))
 		}
@@ -436,7 +515,7 @@ func agyCount(s *state, c *agyCarry, b []byte, model func(int) string) {
 		}
 	case l.Source == "MODEL" && l.Type == "PLANNER_RESPONSE":
 		agyTools(s, at, l)
-		if len(l.ToolCalls) == 0 && l.Content != "" {
+		if len(l.ToolCalls) == 0 && l.Content != "" && !c.Sub {
 			s.day(dateOf(at)).Replies++
 		}
 	}

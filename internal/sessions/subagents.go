@@ -17,8 +17,9 @@ import (
 // Subagent is a conversation a session's agent started inside it, which its
 // agent keeps beside the session's own and counts in it (#2261): a Claude
 // Code (or Qoder) subagent's agent-<id>.jsonl, an OpenCode child session, a
-// Kimi Code agents/agent-<n>/wire.jsonl. Codex's subagents are sessions of
-// their own, which name theirs in ParentSession instead.
+// Kimi Code agents/agent-<n>/wire.jsonl, an agy conversation it started.
+// Codex's subagents are sessions of their own, which name theirs in
+// ParentSession instead.
 type Subagent struct {
 	ID    string `json:"id"`
 	Title string `json:"title,omitempty"`
@@ -99,6 +100,16 @@ func subagentsOf(s Session, fs []file) []Subagent {
 			if sa.Title = title(sp.Description); sa.Title == "" {
 				sa.Title = kimiWireOf(f.path).Prompt
 			}
+		case "agy":
+			// a conversation agy started as a subagent (agyFold)
+			sa.ID = f.m().sid
+			if f.m().parent != s.ID {
+				sa.Parent = f.m().parent
+			}
+			if a := f.m().agy; a != nil {
+				sa.Kind = a.Kind
+			}
+			sa.Title = cmp.Or(st.more().Named, st.Title)
 		default:
 			continue
 		}
