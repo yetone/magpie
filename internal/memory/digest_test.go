@@ -120,6 +120,31 @@ func TestDigestDefersToTheProjectsFiles(t *testing.T) {
 	}
 }
 
+// The header has an agent search memory as it starts a task, not only
+// before asking the user again, and says the tool may be behind its tool
+// search: Codex and Antigravity, which list a server's tools only when
+// searched for, never searched (af3g453f on X: no search in a week).
+func TestDigestSaysToSearchAtTheStart(t *testing.T) {
+	fresh(t)
+	save(t, "Answer in Chinese", Preference, Global)
+	if _, err := Publish(); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := Digest("codex")
+	head := strings.SplitN(d, "\n\n", 3)[1]
+	for _, want := range []string{
+		"more is remembered than it holds",
+		"listed only through your tool search",
+		"search it when you start a task",
+		"before asking the user something they may have said before",
+		"memory_save",
+	} {
+		if !strings.Contains(head, want) {
+			t.Errorf("the header lacks %q:\n%s", want, head)
+		}
+	}
+}
+
 // A memory the user writes in several lines keeps them: on save, on an
 // edit, in its file, and in the digest, where the lines after the first
 // are indented under its item (_meouwu on X: the line breaks were gone).

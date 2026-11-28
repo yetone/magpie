@@ -58,7 +58,7 @@ A memory is one short text (`MaxText` runes) with:
 | `kind` | profile, preference, rule, reference, fact, procedure, episode | how long it stays true and where it goes in the digest. A field of its own, not a tag. |
 | `tags` | free words (`CleanTags`) | the user's own grouping. |
 | `origin` | user, agent, imported, inferred | who wrote it. An agent's save never changes text the user wrote (`TestUsersMemoryNotChangedByAnAgentsSave`). |
-| `status` | active, candidate, archived, superseded | only active ones are searched by default and digested. Candidates wait under "To review". |
+| `status` | active, candidate, archived, superseded | only active ones are searched by default and digested. Candidates wait under "To review", whose list says agents don't use them until kept (`.lib-memreview`). |
 | `pinned` | bool | first in lists and digests. |
 
 Times (`created`, `updated`) are RFC3339 in the zone the memory was saved
@@ -174,6 +174,12 @@ vendor: it names neither magpie nor any vendor. Its header puts the project's ow
 them the agent follows the files and says which memory is out of date, and
 a project's rule or fact belongs in its files, memory keeping what holds
 across projects (flying_crp on X, `TestDigestDefersToTheProjectsFiles`).
+It says the digest is a summary, with more remembered than it holds, and
+has the agent search with `memory_search` when it starts a task and before
+asking again, the tool perhaps listed only through its tool search: Codex,
+Antigravity and agy list a server's tools only when searched for, and
+their agents never searched (af3g453f on X, `TestDigestSaysToSearchAtTheStart`).
+`memory_search` is also marked always loaded ([MCP router](mcp-router.md)).
 
 The digest changes only when published, so an agent's instructions — and
 the prompt cache built on them — change mid-session only then

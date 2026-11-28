@@ -1430,6 +1430,9 @@ magpie.plugin("library", (ctx) => {
     body.append(bar);
 
     if (memStatus === "active" && !words.length && !memScope && !memPicking && (mem.suggestions || []).length) body.append(memSuggestions());
+    // what is learned waits here unseen by agents, which read and search
+    // only what is kept (af3g453f on X took 378 of these for memories in use)
+    if (memStatus === "candidate" && shown.length) body.append(el("p", "lib-intro lib-memreview", t("Agents don't use these until you keep them.")));
     const list = el("div", "list lib-list lib-mems" + (memPicking ? " picking" : ""));
     if (memOpen === "new") list.append(memDetail(null));
     for (const m of shown) list.append(...memRow(m));

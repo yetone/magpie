@@ -259,7 +259,7 @@ const memoryServerName = "magpie-memory"
 // to every agent that can take it.
 func memoryServer() MarketServer {
 	return localServer(memoryServerName, "Magpie Memory", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
-		"Memory shared by every agent: your preferences, rules and what each project needs, kept in Magpie. Agents search it before asking again, and save what you ask them to remember.", magpieCommand, []string{"mcp", "memory"})
+		"Memory shared by every agent: your preferences, rules and what each project needs, kept in Magpie. Agents search it when they start a task and before asking again, and save what you ask them to remember.", magpieCommand, []string{"mcp", "memory"})
 }
 
 // sessionsServerName is the name Magpie Sessions' server is written

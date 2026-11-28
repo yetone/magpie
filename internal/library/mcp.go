@@ -294,11 +294,29 @@ func piDirect(s *Server) []string {
 	if s.Name == HubEntry {
 		return s.direct
 	}
-	if serverKey(s) == artifactsKey {
+	return ownDirect(s)
+}
+
+// ownDirect are the tools of magpie's own server s that are declared
+// whole, never behind an agent's tool search: Artifacts' (artifactsDirect)
+// and memory_search, which agents with their tools deferred never called
+// (af3g453f on X: 304 memories in a week, no search).
+func ownDirect(s *Server) []string {
+	switch serverKey(s) {
+	case artifactsKey:
 		return artifactsDirect
+	case memoryKey:
+		return memoryDirect
 	}
 	return nil
 }
+
+// memoryKey is Magpie Memory's server as serverKey gives it, and
+// memoryDirect its tools Pi declares to its model whole (the gateway's
+// memorySearchTool, whose _meta marks it always loaded).
+const memoryKey = "magpie mcp memory"
+
+var memoryDirect = []string{"memory_search"}
 
 // piDirectBefore is whether old's toolExposure is one magpie wrote
 // before piDirect(s) grew: some of its tools, each "direct", and nothing

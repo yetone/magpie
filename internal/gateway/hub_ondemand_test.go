@@ -466,3 +466,51 @@ func TestHubOnDemandKeepsAlwaysLoaded(t *testing.T) {
 		t.Fatalf("without the mark, listed %v", got)
 	}
 }
+
+// memory_search is declared whole to an agent that defers MCP tools
+// behind a search of its own, and beside find_tools and call_tool on
+// demand: agents shown the memory server by name only never searched it
+// (af3g453f on X: 304 memories in a week, no search). Saving and the
+// rest stay behind the search.
+func TestHubMemorySearchAlwaysLoaded(t *testing.T) {
+	fresh(t)
+	tools := manyHubTools(hubOnDemandOver + 2)
+	for _, x := range memoryMCPTools() {
+		m := x.(map[string]any)
+		spec := map[string]json.RawMessage{}
+		for k, v := range m {
+			spec[k], _ = json.Marshal(v)
+		}
+		tools = append(tools, HubTool{Server: memoryServerName, Tool: m["name"].(string), Spec: spec})
+	}
+	withHub(t, &fakeHub{on: true, tools: map[string][]HubTool{"opencode": tools, "agy": tools}})
+	h := lanGuard(New().Handler())
+	want := HubToolName(memoryServerName, memorySearchTool)
+	if got := listedNames(t, readMCP(t, hubPost(h, "opencode", here, toolsList))); !slices.Equal(got, []string{hubFindTool, hubCallTool, want, hubCodeTool}) {
+		t.Fatalf("on demand, listed %v", got)
+	}
+	var list struct {
+		Result struct {
+			Tools []map[string]json.RawMessage `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(hubPost(h, "agy", here, toolsList).Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	marked := map[string]bool{}
+	for _, x := range list.Result.Tools {
+		var name string
+		json.Unmarshal(x["name"], &name)
+		if strings.HasPrefix(name, memoryServerName+"__") {
+			marked[name] = strings.Contains(string(x["_meta"]), `"anthropic/alwaysLoad":true`) && strings.Contains(string(x["_meta"]), `"antigravity/alwaysLoad":true`)
+		}
+	}
+	if !marked[want] {
+		t.Fatalf("agy's memory_search isn't marked always loaded: %v", marked)
+	}
+	for n, m := range marked {
+		if m && n != want {
+			t.Errorf("%s is marked always loaded too", n)
+		}
+	}
+}

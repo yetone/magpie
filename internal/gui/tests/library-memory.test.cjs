@@ -294,15 +294,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 1);
           const guessed = page.locator(`${view} .lib-mems .lib-mem`).first();
           assert.match(await guessed.textContent(), /Codex/);
+          // and the list says agents don't use these until kept, in the
+          // reader's language (af3g453f on X took them for memories in use)
+          const note = page.locator(`${view} .lib-memreview`);
+          assert.equal(await note.count(), 1);
+          if (lang === "en") assert.equal(await note.textContent(), "Agents don't use these until you keep them.");
+          else assert.doesNotMatch(await note.textContent(), /Agents don't/);
           await guessed.click();
           await page.locator(`${view} .lib-memdetail .lib-acts button`).nth(1).click();
           await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 0);
+          assert.equal(await note.count(), 0, "the note stays over an empty list");
           s = sent.findLast((x) => x.path === "/api/memory");
           assert.deepEqual(s.body, { id: "m3", status: "active" });
 
           // deleted, on a second click
           await page.locator(`${view} .lib-memstatus .opt`).first().click();
           await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 4);
+          assert.equal(await page.locator(`${view} .lib-memreview`).count(), 0, "In use has the To review note");
           await page.locator(`${view} .lib-mems .lib-mem`, { hasText: "Never push" }).click();
           const del = page.locator(`${view} .lib-memdetail .danger`);
           await del.click();

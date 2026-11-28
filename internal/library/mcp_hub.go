@@ -124,10 +124,8 @@ func (l *Library) hubServerFor(t *Target) *Server {
 	if t.MCP != nil && t.MCP.Format == fmtPiNative {
 		s.about = gateway.HubLine(hubAbouts(ss))
 		for _, a := range ss {
-			if serverKey(a) == artifactsKey {
-				for _, n := range artifactsDirect {
-					s.direct = append(s.direct, gateway.HubToolName(a.Name, n))
-				}
+			for _, n := range ownDirect(a) {
+				s.direct = append(s.direct, gateway.HubToolName(a.Name, n))
 			}
 		}
 	}

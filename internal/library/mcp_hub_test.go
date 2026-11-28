@@ -742,6 +742,40 @@ func TestHubPiDeclaresArtifactsPublish(t *testing.T) {
 	}
 }
 
+// Pi declares memory_search whole as well (ownDirect), and an entry
+// magpie wrote with Artifacts' tools alone grows it on the next sync
+// (af3g453f on X: agents shown memory by one line never searched it).
+func TestHubPiDeclaresMemorySearch(t *testing.T) {
+	h := hubSandbox(t)
+	setPiVersion(t, "1.6.0")
+	file := filepath.Join(h, ".pi/agent/mcp.json")
+	write(t, file, `{"mcpServers": {}}`)
+	ok(t)(SetMCPHub(true))
+	art := fakeStdio(t, "ok", nil)
+	art.Name, art.Args, art.Agents = ArtifactsServerName, []string{"mcp", "artifacts"}, []string{"pi"}
+	ok(t)(SaveServer("", *art))
+	mem := fakeStdio(t, "ok", nil)
+	mem.Name, mem.Args, mem.Agents = memoryServerName, []string{"mcp", "memory"}, []string{"pi"}
+	ok(t)(SaveServer("", *mem))
+	exposure := func() any {
+		t.Helper()
+		return piServers(t, file)[HubEntry]["toolExposure"]
+	}
+	want := map[string]any{"magpie-artifacts__publish_artifact": "direct", "magpie-artifacts__artifact_guide": "direct", "magpie-artifacts__artifact_data": "direct", "magpie-memory__memory_search": "direct"}
+	if x := exposure(); !reflect.DeepEqual(x, want) {
+		t.Fatalf("toolExposure %v, want %v:\n%s", x, want, read(t, file))
+	}
+	// Artifacts' three alone, as the release before wrote them, is magpie's
+	write(t, file, regexp.MustCompile(`,?\s*"magpie-memory__memory_search": ?"direct"`).ReplaceAllString(read(t, file), ``))
+	if x := exposure(); reflect.DeepEqual(x, want) {
+		t.Fatalf("the fixture didn't take memory_search out:\n%s", read(t, file))
+	}
+	ok(t)(Sync())
+	if x := exposure(); !reflect.DeepEqual(x, want) {
+		t.Fatalf("after a sync of the older toolExposure: %v:\n%s", x, read(t, file))
+	}
+}
+
 func TestHubGivesMagpieImage(t *testing.T) {
 	h := hubSandbox(t)
 	claude := filepath.Join(h, ".claude.json")

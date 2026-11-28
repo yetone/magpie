@@ -101,6 +101,11 @@ func memoryMCPTools() []any {
 				},
 			},
 			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": false},
+			// declared whole, never behind the agent's own tool search
+			// (hubAlwaysLoaded): Codex, Antigravity and agy show a deferred
+			// server's tools by name only, and their agents never searched
+			// memory, its "when starting work" unread (af3g453f on X)
+			"_meta": hubAlwaysLoadMeta(),
 		},
 		map[string]any{
 			"name":  memorySaveTool,
@@ -157,7 +162,7 @@ func (s *Server) memoryMCPCall(r *http.Request, m mcpMessage) (any, map[string]a
 			"protocolVersion": mcpVersion(m),
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": memoryServerName, "title": "Magpie Memory", "version": Version},
-			"instructions":    "Memory shared by every agent the user works with. Search it before asking the user something they may have said before; save what they ask to be remembered, and preferences, rules and corrections they state; forget what they say no longer holds.",
+			"instructions":    "Memory shared by every agent the user works with. Search it when starting a task, and before asking the user something they may have said before; save what they ask to be remembered, and preferences, rules and corrections they state; forget what they say no longer holds.",
 		}, nil
 	case "ping":
 		return map[string]any{}, nil
