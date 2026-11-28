@@ -1155,6 +1155,9 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .qt.grouped tr:not(.qt-group) .qt-id::before { content: ""; width: 10px; flex: none; }
 .qt.grouped .plan { margin-left: 37px; }
 .qt .qt-kid .qt-sub > .plan:first-child { margin-top: 0; }
+/* an account's check-in under its plan, as on its card */
+.qt .wb-checkin { max-width: 300px; margin: 4px 0 0 21px; }
+.qt.grouped .wb-checkin { margin-left: 37px; }
 .subscription-card { padding: 10px 12px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); min-width: 0; }
 /* a card's captions (resets, the period, a curve's dates) read at 4.5:1 or
    better on the card, below its figures (Jiabubu on Discord): light's

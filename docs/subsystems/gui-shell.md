@@ -511,8 +511,14 @@ localStorage `magpie.quotaTableOpen`. Sorting orders providers by that mean
 no row fills is left out (Account when no account is named; the window
 columns and Other only exist when some row has one). It
 scrolls in its own box at a narrow width, the subscription held at the left.
+An account with a daily check-in has its card's check-in line under its
+plan (`checkinRow` from app.js), and the vendor's first row drawn has Auto
+check-in and Check in now, as its first card does; a folded provider's row
+has those two alone (Haoxiang581607 on X: picking the table took the switch
+away).
 See `usage-quota-table.test.cjs`, `usage-table-groups.test.cjs`,
-`usage-table-lengths.test.cjs` and `TestWithWindowPeriods`.
+`usage-table-lengths.test.cjs`, `usage-table-checkin.test.cjs` and
+`TestWithWindowPeriods`.
 
 ### The Sessions page's folders
 

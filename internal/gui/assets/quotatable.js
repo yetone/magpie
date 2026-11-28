@@ -27,6 +27,13 @@
 // is clicked, and what is open is remembered (magpie.quotaTableOpen, by
 // provider), as the cards remember theirs. A column with nothing in any
 // row (Account, when no row names one) is left out.
+//
+// An account with a daily check-in says how today's went under its name,
+// as its card does, and the vendor's first row has Auto check-in (and
+// Check in now while one isn't in): in the table they were gone, so a
+// WorkBuddy user who picked it lost the switch (Haoxiang581607 on X). A
+// folded provider's row has the switch alone, its accounts' days being
+// under it.
 const TABLE_WINDOWS = 4;
 let sorted = null; // { key, down }
 const opened = new Set(kept("quotaTableOpen", []));
@@ -148,6 +155,19 @@ function quotaTable(subs) {
     for (const g of groups) g.rows.sort(by((r) => value(r, sorted.key)));
     groups.sort(by((g) => g.rows.length > 1 && sorted.key !== "sub" && sorted.key !== "acct" ? mean(g, sorted.key) : value(g.rows[0], sorted.key)));
   }
+  // the vendor's switch on its first row drawn, as on the first card
+  const switched = new Set();
+  const checkin = (sub, alone) => {
+    if (!sub?.checkins || typeof checkinRow !== "function") return null;
+    const by = sub.checkinBy || "";
+    const row = checkinRow(sub, !switched.has(by), subs);
+    switched.add(by);
+    if (alone) {
+      row.querySelector(".ci-say")?.remove();
+      if (!row.childElementCount) return null;
+    }
+    return row;
+  };
   const whos = new Map(rows.map((r) => [r, quotaWho(r.sub)]));
   const acct = [...whos.values()].some((x) => x.length);
 
@@ -195,8 +215,10 @@ function quotaTable(subs) {
       s.append(b);
       tr.append(s);
       const n = t("{n} accounts", { n: g.rows.length });
+      const ci = !open && checkin(g.rows.find((r) => r.sub.checkins)?.sub, true);
       if (acct) tr.append(el("td", "qt-acct qt-count", n));
       else s.append(el("span", "plan qt-count", n));
+      if (ci) s.append(ci);
       for (const k of names) {
         const c = el("td", "qt-w"), v = mean(g, k);
         if (v >= 0) {
@@ -232,6 +254,8 @@ function quotaTable(subs) {
         s.append(who);
       }
       if (sub.plan || sub.until) s.append(planSpan(sub));
+      const ci = checkin(sub);
+      if (ci) s.append(ci);
       tr.append(s);
       if (acct) {
         const a = el("td", "qt-acct");
