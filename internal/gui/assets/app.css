@@ -3539,6 +3539,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .wall-pick .wall-thumb { width: 40px; height: 26px; border-radius: 5px; object-fit: cover; box-shadow: inset 0 0 0 1px var(--line), 0 0 0 .5px var(--line); }
 .pop.proto-menu { width: 262px; max-height: min(360px, 70vh); overflow-y: auto; overscroll-behavior: contain; padding: 4px; border: 1px solid var(--line); display: grid; gap: 1px; }
 .proto-menu .pm-head { padding: 6px 8px 5px; font-size: 11px; color: var(--muted); }
+/* the test's account menu: its accounts shown from its head, where one
+   looks for them hidden (niuniu_8964 on X), not on hover alone */
+.model-account-menu .pm-head { display: flex; align-items: center; gap: 6px; }
+.model-account-menu .pm-head > .acct-eye { margin: -2px -4px -2px auto; opacity: 1; }
 .proto-menu .pm-item { display: flex; align-items: flex-start; gap: 7px; width: 100%; padding: 6px 8px 7px; border: 0; border-radius: 7px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: default; outline: none; }
 .proto-menu .pm-item:hover, .proto-menu .pm-item:focus { background: var(--pill); }
 /* a font typed in a browser tab that it can't draw (webfonts.js) */

@@ -11721,7 +11721,12 @@ function renderModels(p) {
           const why = p.testsAs[as] ? t(p.testsAs[as]) : "";
           acts.push({ name, icon: PLAY_ICON, off: !!why, why, tip: t("Asked as {agent} asks, for a relay that serves only {agent}", { agent }), run: () => testOne(id, as) });
         }
-        if (p.testPicks) acts.push({ name: "Test on account…", icon: PLAY_ICON, tip: t("Pick the account or key the test is sent to"), run: () => openProtoMenu(c, p.testPicks.map((k) => ({ v: k.id, literalName: true, ...k })), null, (v) => testOne(id, "", v), "Account to test", "model-account-menu") });
+        if (p.testPicks) acts.push({ name: "Test on account…", icon: PLAY_ICON, tip: t("Pick the account or key the test is sent to"), run: () => {
+          openProtoMenu(c, p.testPicks.map((k) => ({ v: k.id, literalName: true, ...k })), null, (v) => testOne(id, "", v), "Account to test", "model-account-menu");
+          // hidden accounts shown from the menu itself (niuniu_8964 on X):
+          // as each account's own eye shows it, till the window closes
+          protoMenu.box.querySelector(".pm-head").append(hideAccounts.eye(p.testPicks.flatMap((k) => [k.id, k.name]), p.id));
+        } });
       }
       // its id as agents and the gateway name it, to paste where a model is
       // typed (ARNO, Discord: 右击菜单除了测试模型外，还能添加拷贝模型id的功能)
@@ -24955,10 +24960,13 @@ window.noteAccounts = noteAccounts;
     for (const q of quotas || []) if (q.provider === pid && (q.user === u || q.alias === u)) k.push(q.user, q.alias);
     return k.filter(Boolean).map((x) => sk(pid, x));
   };
+  // one eye for a list (a test's account menu, niuniu_8964 on X): open
+  // when every one of them shows
+  const all = (b) => [b._u].flat(), open = (b) => all(b).every((u) => shown.has(sk(b._p, u)));
   const paintEye = (b) => {
-    const on = shown.has(sk(b._p, b._u));
+    const on = open(b), many = Array.isArray(b._u);
     b.setAttribute("aria-pressed", on);
-    b.title = t(on ? "Hide this account" : "Show this account");
+    b.title = t(on ? many ? "Hide these accounts" : "Hide this account" : many ? "Show these accounts" : "Show this account");
     b.querySelector("path").setAttribute("d", on ? EYE : EYE_OFF);
   };
   const redraw = () => {
@@ -24967,18 +24975,19 @@ window.noteAccounts = noteAccounts;
   };
   // Settings' Privacy has the first switch, and the settings follow
   window.hideAccounts = {
+    // u: an account, or a list of them shown and hidden together
     eye: (u, p) => {
       const b = el("button", "acct-eye");
       b._u = u;
       b._p = p;
-      b.setAttribute("aria-label", t("Show this account"));
+      b.setAttribute("aria-label", t(Array.isArray(u) ? "Show these accounts" : "Show this account"));
       b.append(svg("", 13, 2));
       b.firstChild.setAttribute("viewBox", "0 0 24 24");
       paintEye(b);
       b.onclick = (e) => {
         e.stopPropagation();
-        const on = !shown.has(sk(p, u));
-        for (const k of kin(u, p)) on ? shown.add(k) : shown.delete(k);
+        const on = !open(b);
+        for (const x of all(b)) for (const k of kin(x, p)) on ? shown.add(k) : shown.delete(k);
         redraw();
       };
       return b;
