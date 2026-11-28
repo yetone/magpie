@@ -468,7 +468,7 @@ func wordsOnly(v string) bool { return wordsOnlyRe.MatchString(v) }
 // that is a password still (Sunshine, PurpleMonkey) is masked where it is
 // given a secret's name or put where a password goes (credentialAt).
 func codeName(v string) bool {
-	if len(v) < 8 || scatteredDigits(v) {
+	if len(v) < 8 {
 		return false
 	}
 	// JazzCash, PaymentClient; not XkQpLmZnBv, a random run's capitals
@@ -481,12 +481,112 @@ func codeName(v string) bool {
 	if 3*up > len(v) {
 		return false
 	}
+	if numberedName(v) {
+		return true
+	}
+	if scatteredDigits(v) {
+		return false
+	}
 	for _, re := range []*lazyre.RE{pascalRe, camelNameRe, snakeIdentRe, hostNameRe, agentVersionRe, classFieldRe} {
 		if re.MatchString(v) {
 			return true
 		}
 	}
 	return false
+}
+
+// numberedName says v is a program's or a product's name in camel case
+// whose words a number joins: Fail2Ban, OAuth2Proxy, K8sClient, S3Bucket,
+// Win32Api, Base64Encoder, Neo4jDriver, i18nHelper. The local model took
+// Fail2Ban in "服务器上安没安装Fail2Ban这个软件" for a secret, and from
+// then on it went as {{SECRET_…}} wherever the user wrote it, as known
+// (Eiv92wa on X). A number there is one such names have (a digit, or a
+// width or a count as 32, 64, 256 and i18n's 18), with a word after it,
+// and each word written as one: a capital and two lower-case letters at
+// least, an acronym, or a letter after the number (K8s, log4j). What a
+// password is written with is in none of that: a year (Summer2026Prod),
+// digits at its end (Welcome1), digits for letters (P4ssword, Passw0rd),
+// capitals at random (Pw7nK4xQ9rTe).
+func numberedName(v string) bool {
+	upper := func(c byte) bool { return c >= 'A' && c <= 'Z' }
+	lower := func(c byte) bool { return c >= 'a' && c <= 'z' }
+	digit := func(c byte) bool { return c >= '0' && c <= '9' }
+	const (
+		lowerWord = iota + 1
+		capWord
+		acronym
+		number
+		letter // a lower-case letter after a number: the s of K8s
+	)
+	camel, numbers, prev := false, 0, 0
+	for i := 0; i < len(v); {
+		j := i
+		cur := 0
+		switch c := v[i]; {
+		case digit(c):
+			for j < len(v) && digit(v[j]) {
+				j++
+			}
+			if i == 0 || j == len(v) || !nameNumbers[v[i:j]] || prev == letter {
+				return false
+			}
+			numbers++
+			cur = number
+		case lower(c):
+			for j < len(v) && lower(v[j]) {
+				j++
+			}
+			switch {
+			case prev == number && j-i == 1:
+				cur = letter
+			case prev == 0:
+				cur = lowerWord
+			default:
+				// a run in lower case after a number (P4ssword)
+				return false
+			}
+		case upper(c):
+			for j < len(v) && upper(v[j]) {
+				j++
+			}
+			if j == len(v) || !lower(v[j]) {
+				// an acronym: never after a word in lower case (the nK of
+				// Pw7nK4, a random run's), nor long
+				if prev == lowerWord || prev == letter || j-i > 5 {
+					return false
+				}
+				cur = acronym
+				break
+			}
+			if j-1 > i {
+				// OAuth: the acronym is all but the capital its word starts with
+				if prev == lowerWord || prev == letter {
+					return false
+				}
+				i = j - 1
+			}
+			for j < len(v) && lower(v[j]) {
+				j++
+			}
+			if j-i < 3 {
+				return false
+			}
+			camel, cur = true, capWord
+		default:
+			return false
+		}
+		prev, i = cur, j
+	}
+	return camel && numbers >= 1 && numbers <= 2
+}
+
+// nameNumbers are the numbers a name in camel case is written with:
+// one digit, a width or a size (Win32, Base64, Sha256, H264, X509), and
+// the counted letters of i18n, l10n and a11y.
+var nameNumbers = map[string]bool{
+	"1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true, "8": true, "9": true,
+	"10": true, "11": true, "16": true, "18": true, "32": true, "64": true,
+	"128": true, "256": true, "264": true, "265": true, "384": true, "509": true, "512": true,
 }
 
 // scatteredDigits says v has a digit inside a run of letters and digits

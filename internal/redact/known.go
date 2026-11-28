@@ -209,6 +209,14 @@ func knownSpans(s string, o Options) []span {
 				// (drizzle-orm, dniray on Discord, v0.1.1976)
 				continue
 			}
+			if scored && sc < ruleFound && k.kind == "SECRET" && codeName(k.v) && !credentialAt(s, i) {
+				// a name in code the model alone took for a secret, as
+				// modelFits lets go: Fail2Ban, masked once (as a flag's
+				// value, or by a magpie before codeName took it) went as
+				// {{SECRET_…}} wherever the user wrote it after (Eiv92wa
+				// on X)
+				continue
+			}
 			if best != nil && len(k.v) <= len(best.v) || !strings.HasPrefix(s[i:], k.v) || !standsAlone(k.kind, s, i, i+len(k.v)) {
 				continue
 			}
