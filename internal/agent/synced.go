@@ -27,9 +27,13 @@ var (
 	// ~/.claude: CLAUDE.md, agents/, commands/ (the skill router's too),
 	// rules/, rtk's RTK.md, and in settings.json the hooks, permissions
 	// (the router's allow, MCP tools turned off), variables and plugins;
-	// its MCP servers are in ~/.claude.json, outside the folder
+	// its MCP servers are in ~/.claude.json, outside the folder; and the
+	// windows of Claude Desktop's models (autoCompactWindow,
+	// modelSettings) that magpie writes there for Desktop's Code tab
+	// while Desktop is on magpie, which made the folder for a user with no
+	// Claude Code a Claude Code row (KorwinTeo on X)
 	claudeSynced     = []string{"CLAUDE.md", "agents/", "commands/", "rules/", "RTK.md"}
-	claudeSyncedKeys = map[string][]string{"settings.json": {"hooks", "permissions", "env", "enabledPlugins", "extraKnownMarketplaces"}}
+	claudeSyncedKeys = map[string][]string{"settings.json": {"hooks", "permissions", "env", "enabledPlugins", "extraKnownMarketplaces", "autoCompactWindow", "modelSettings"}}
 	// ~/.cursor: mcp.json, hooks.json, agents/
 	cursorSynced = []string{"mcp.json", "hooks.json", "agents/"}
 	// ~/.copilot: copilot-instructions.md, mcp-config.json, agents/,
