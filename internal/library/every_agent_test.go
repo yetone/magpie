@@ -38,6 +38,7 @@ var noLibrary = map[string]string{
 	"raycast":           "not looked at (#5897)",
 	"kirocrew":          "not looked at (#5897)",
 	"t3code":            "not looked at (#5897)",
+	"orca":              "runs Codex and Claude Code, which have their own",
 	"openmausbot":       "not looked at (#5897)",
 	"snow":              "not looked at (#5897)",
 	"aionui":            "not looked at (#5897)",

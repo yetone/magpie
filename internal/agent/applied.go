@@ -951,6 +951,8 @@ func (a *Agent) Disconnect() (err error) {
 	stash(map[string]string{a.ID + disconnectedKey: "1"})
 	// the user's own say over a harness Kiro Crew's connect put on
 	kiroCrewUserLeft(a.ID)
+	// and over one Orca runs on
+	orcaUserLeft(a.ID)
 	before, rec := a.Values(), appliedOf(a.ID)
 	if a.Unwire != nil {
 		if err := a.Unwire(); err != nil {

@@ -202,6 +202,15 @@ var desktopApps = map[string]desktopApp{
 		more: []desktopApp{{id: "com.xd.cindy", names: []string{"Cindy.app"}}}},
 	"aionui":       {id: "com.aionui.app", names: []string{"AionUi.app"}},
 	"cherrystudio": {id: "com.kangfenmao.CherryStudio", names: []string{"Cherry Studio.app"}},
+	// Orca (orca.go; v1.4.281's config/electron-builder.config.cjs: appId
+	// com.stablyai.orca, productName Orca, the orca:// scheme). Its
+	// Windows installer is a one-click per-user NSIS one, so it goes to
+	// %LOCALAPPDATA%\Programs\orca (package.json's name) with
+	// executableName Orca, registered under the UUID v5 of the appId. Its
+	// deb and rpm install /opt/Orca, executableName orca-ide, not orca:
+	// GNOME's screen reader has that name.
+	"orca": {id: "com.stablyai.orca", names: []string{"Orca.app"}, win: filepath.Join("orca", "Orca.exe"), guid: "2b325ec9-0ed1-575f-ad70-e08307aee879",
+		onLinux: &linuxApp{dirs: []string{"/opt/Orca"}, exe: "orca-ide", name: "Orca", scheme: "orca"}},
 }
 
 // removedOS is the system macAppRemoved judges for; a var so a test on

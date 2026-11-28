@@ -405,6 +405,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		raycast(home),
 		kiroCrew(home),
 		t3code(home),
+		orca(home, cfg),
 		openMausBot(home),
 		avibe(home),
 		kun(home),
