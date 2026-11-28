@@ -17,10 +17,10 @@ const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const words = {
-  en: { name: "Prevent sleep", sub: "Keeps this computer awake while magpie runs tasks", on: "On", off: "Off", display: "Screen on too", displaySub: "Keeps this computer and its screen awake while magpie runs tasks" },
-  zh: { name: "防止休眠", sub: "在 magpie 运行任务时，让电脑保持唤醒状态", on: "开启", off: "关闭", display: "屏幕也常亮", displaySub: "在 magpie 运行任务时，让电脑和屏幕保持唤醒状态" },
-  ja: { name: "スリープを防ぐ", sub: "magpie がタスクを実行している間、このコンピューターをスリープさせません", on: "オン", off: "オフ", display: "画面もオン", displaySub: "magpie がタスクを実行している間、このコンピューターと画面をスリープさせません" },
-  de: { name: "Ruhezustand verhindern", sub: "Hält diesen Computer wach, während magpie Aufgaben ausführt", on: "An", off: "Aus", display: "Bildschirm auch an", displaySub: "Hält diesen Computer und den Bildschirm wach, während magpie Aufgaben ausführt" },
+  en: { name: "Prevent sleep", sub: "Keeps this computer awake while magpie runs tasks; closing the lid still puts it to sleep", on: "On", off: "Off", display: "Screen on too", displaySub: "Keeps this computer and its screen awake while magpie runs tasks; closing the lid still puts it to sleep" },
+  zh: { name: "防止休眠", sub: "在 magpie 运行任务时，让电脑保持唤醒状态；合上盖子仍会休眠", on: "开启", off: "关闭", display: "屏幕也常亮", displaySub: "在 magpie 运行任务时，让电脑和屏幕保持唤醒状态；合上盖子仍会休眠" },
+  ja: { name: "スリープを防ぐ", sub: "magpie がタスクを実行している間、このコンピューターをスリープさせません。蓋を閉じるとスリープします", on: "オン", off: "オフ", display: "画面もオン", displaySub: "magpie がタスクを実行している間、このコンピューターと画面をスリープさせません。蓋を閉じるとスリープします" },
+  de: { name: "Ruhezustand verhindern", sub: "Hält diesen Computer wach, während magpie Aufgaben ausführt; beim Zuklappen schläft er trotzdem ein", on: "An", off: "Aus", display: "Bildschirm auch an", displaySub: "Hält diesen Computer und den Bildschirm wach, während magpie Aufgaben ausführt; beim Zuklappen schläft er trotzdem ein" },
 };
 
 function serve(lang, web, posted, st) {

@@ -2,9 +2,9 @@
 // agents work through magpie's gateway (xiao_wang24004 on X: the computer
 // went to sleep in the middle of an agent's task). With settings.KeepAwake
 // on, the magpie serving the gateway holds the system's sleep off while a
-// request is in flight, a Claude Code turn waits on its tool results, or a
-// request ended less than Grace ago — an agent running a build or the tests
-// between one request and the next — and lets go once it is idle. Only the
+// request is in flight, an agent's turn runs a tool its last reply asked
+// for (a build, the tests: up to an hour, aooo_han on X), or a request
+// ended less than Grace ago, and lets go once it is idle. Only the
 // system's sleep of its own is held off: the display still turns off, unless
 // settings.KeepAwakeDisplay asks for it to stay on too (#975, Hu9956: an
 // agent recording the screen to check its work found it locked), and

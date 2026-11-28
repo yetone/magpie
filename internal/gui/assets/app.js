@@ -20434,11 +20434,10 @@ function renderSettings() {
   $("#keepAwakeSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")], ["display", t("Screen on too")]],
     !s.keepAwake ? "off" : s.keepAwakeDisplay ? "display" : "on",
     (v) => savePrefs({ ...keep, keepAwake: v !== "off", keepAwakeDisplay: v === "display" })));
-  // its line says what it does; data-en keeps it on a language change
+  // its line says what it does, index.html's data-on or data-display;
+  // data-en keeps it on a language change
   const awakeSub = $("#keepAwakeRow .sub");
-  awakeSub.dataset.en = s.keepAwake && s.keepAwakeDisplay
-    ? "Keeps this computer and its screen awake while magpie runs tasks"
-    : "Keeps this computer awake while magpie runs tasks";
+  awakeSub.dataset.en = awakeSub.dataset[s.keepAwake && s.keepAwakeDisplay ? "display" : "on"];
   awakeSub.textContent = t(awakeSub.dataset.en);
   // the gateway paused (me2seeks on X): agents disconnected and nothing
   // listening, without quitting magpie (gatewaypause.go)

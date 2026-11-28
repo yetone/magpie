@@ -733,6 +733,8 @@ type trace struct {
 	bodies []keptBody
 	// turns follows agents' turns, to say when one is done (TurnDone)
 	turns turns
+	// toolRuns are the turns running a tool, for Keep awake (busy.go)
+	toolRuns toolRuns
 	// folders: each session's folder, as its requests said it last, for
 	// the requests that don't say it (a title, a topic check)
 	folders map[string]sessionFolder
@@ -971,6 +973,7 @@ func (t *trace) update(r *Route, f func(r *Route)) {
 			t.totals.Errors++
 		}
 		t.turns.end(r, turnFinal(r), time.Now())
+		t.toolRuns.end(r, time.Now())
 		// read: the scan's context is its request's, which keeps the
 		// request on it (inflight's unrouted watch) and so its body; a
 		// socket turn's is the whole conversation, in memory, and 60

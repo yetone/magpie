@@ -410,3 +410,89 @@ func TestAwakeStateShared(t *testing.T) {
 		t.Fatalf("at a public address: %+v", st)
 	}
 }
+
+// Keep awake holds sleep off while an agent runs a tool its last reply
+// asked for, though nothing is in flight and the last request ended past
+// awake.Grace (aooo_han on X: with Prevent sleep on, the Mac slept "after
+// a while", the agent's build still going). A reply that called no tool
+// ends the turn; a subagent's requests are its parent's tool, which they
+// neither end nor start. TestToolRunsEnd holds the rest.
+func TestAwakeStateWhileAToolRuns(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	t.Setenv("LAZYCAT_APP_DOMAIN", "")
+	var tool sync.Mutex
+	calls := false
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		tool.Lock()
+		c := calls
+		tool.Unlock()
+		w.Header().Set("Content-Type", "text/event-stream")
+		if c {
+			io.WriteString(w, `data: {"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"Bash","arguments":"{\"command\":\"make test\"}"}}]}}]}`+"\n\n")
+			io.WriteString(w, `data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`+"\n\n")
+		} else {
+			io.WriteString(w, `data: {"id":"c2","choices":[{"index":0,"delta":{"role":"assistant","content":"done"}}]}`+"\n\n")
+			io.WriteString(w, `data: {"id":"c2","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`+"\n\n")
+		}
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Chat: up.URL + "/v1", Models: []string{"m1"}, Key: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	send := func(path, body, session, sub string, call bool) {
+		t.Helper()
+		tool.Lock()
+		calls = call
+		tool.Unlock()
+		req := httptest.NewRequest("POST", path, strings.NewReader(body))
+		req.Header.Set(SessionHeader, session)
+		if sub != "" {
+			req.Header.Set("x-claude-code-agent-id", sub)
+		}
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body)
+		}
+	}
+	// the last request ended past the grace: only a running tool holds
+	gone := func() { s.lastDone.Store(time.Now().Add(-2 * time.Hour).UnixNano()) }
+	chat := `{"model":"plan/m1","stream":true,"messages":[{"role":"user","content":"run the tests"}]}`
+	messages := `{"model":"plan/m1","stream":true,"max_tokens":100,"messages":[{"role":"user","content":"run the tests"}]}`
+	for _, c := range []struct{ name, path, body string }{
+		{"chat", "/v1/chat/completions", chat},
+		{"anthropic", "/v1/messages", messages},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			session := "s-" + c.name
+			send(c.path, c.body, session, "", true)
+			gone()
+			if st := s.awakeState(); !st.Busy {
+				t.Fatalf("the agent runs the tool its last reply asked for: %+v", st)
+			}
+			// the tool is a subagent, whose last reply ends its run, not
+			// its parent's turn
+			send(c.path, c.body, session, "agent-1", false)
+			gone()
+			if st := s.awakeState(); !st.Busy {
+				t.Fatalf("a subagent's last reply, its parent still waiting: %+v", st)
+			}
+			send(c.path, c.body, session, "", false)
+			gone()
+			if st := s.awakeState(); st.Busy {
+				t.Fatalf("a reply that called no tool ended the turn: %+v", st)
+			}
+			// a subagent's tool call, its parent's turn having ended
+			send(c.path, c.body, session, "agent-1", true)
+			gone()
+			if st := s.awakeState(); st.Busy {
+				t.Fatalf("a subagent's tool call is its parent's turn: %+v", st)
+			}
+		})
+	}
+}

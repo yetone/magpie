@@ -3,6 +3,7 @@ package gateway
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -49,12 +50,70 @@ func (s *Server) Busy() Busy {
 }
 
 // awakeState is what awake.Keep holds sleep off for: the agents' requests
-// in flight and when the last ended, and whether other computers reach
-// the gateway — shared on the network, listening beyond loopback, or at a
-// public address — whose agents' next request can come at any time.
+// in flight and when the last ended, the turns running a tool their last
+// reply asked for, and whether other computers reach the gateway — shared
+// on the network, listening beyond loopback, or at a public address —
+// whose agents' next request can come at any time.
 func (s *Server) awakeState() awake.State {
 	b := s.Busy()
-	return awake.State{Busy: b.Any(), Last: b.Last, Shared: remoteKeyed() || publicURL() != ""}
+	busy := b.Any() || s.trace.toolRuns.any(time.Now())
+	return awake.State{Busy: busy, Last: b.Last, Shared: remoteKeyed() || publicURL() != ""}
+}
+
+// toolRunMax is how long after a reply asked its agent to run a tool the
+// turn still counts as running it. The agent sends nothing while its tool
+// runs, and a build or a test suite runs for longer than awake.Grace
+// (aooo_han on X: with Prevent sleep on, the Mac slept "after a while").
+// An agent closed while its tool ran, or a reply read wrong as calling a
+// tool, sends nothing to say so: such a turn keeps the computer awake an
+// hour at most.
+const toolRunMax = time.Hour
+
+// toolRuns are the agents' turns whose last reply asked them to run a
+// tool, and when that reply ended, by session (sessionTurnKey): turns
+// going on with no request in flight. Busy.Tools counts the same for the
+// subscription bridge's turns, which it serves itself; these are every
+// agent's. A reply that called no tool ends its turn, and a failed or cut
+// one (as turnFinal reads it) leaves the next step to the agent: it asks
+// again, a request in flight, or stops.
+type toolRuns struct {
+	mu sync.Mutex
+	m  map[string]time.Time
+}
+
+// end is a request of a turn ending (trace.update, beside turns.end).
+func (tr *toolRuns) end(r *Route, now time.Time) {
+	if !r.turn {
+		return // made on the side, or a subagent's: its parent's turn is the one
+	}
+	k := sessionTurnKey(r)
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	tr.dropOld(now)
+	if r.Status < 400 && r.Error == "" && r.tools.called() && !r.tools.unfinished() {
+		if tr.m == nil {
+			tr.m = map[string]time.Time{}
+		}
+		tr.m[k] = now
+		return
+	}
+	delete(tr.m, k)
+}
+
+// any is whether a turn is running a tool at now.
+func (tr *toolRuns) any(now time.Time) bool {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	tr.dropOld(now)
+	return len(tr.m) > 0
+}
+
+func (tr *toolRuns) dropOld(now time.Time) {
+	for k, at := range tr.m {
+		if now.Sub(at) >= toolRunMax {
+			delete(tr.m, k)
+		}
+	}
 }
 
 // CodexBusy is how many of Codex's requests are in flight and when its
