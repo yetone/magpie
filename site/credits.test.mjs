@@ -162,6 +162,30 @@ test("a platform after a \"by @\" handle is where, and none leaves it a GitHub l
   assert.deepEqual(parse("provider: a key's own model list never bars the vendor's decision model (bunnybit0121 on X, #7788)"), { names: [{ name: "bunnybit0121", via: "X", sure: true }], refs: [{ repo: "yetone/magpie", n: 7788 }] });
 });
 
+test("a body paragraph that opens with who said it, or a bracket of their handles, credits them", () => {
+  // be400389b (v0.1.4541)
+  assert.deepEqual(body("provider: Antigravity counts Gemini 4 Carbon and Argon at their original price, $4 / $20 / $0.20",
+    "ZhouYimingsjtu on X: with an Ultra 20x plan, ~$200 of real use gave\nCarbon:Neon:Hydrogen = 1.64:1:0.39. magpie priced them 2:3:1.5 by input\n(0.67:1:0.5), so Carbon read cheaper than Neon while Antigravity counts it\nabove."), ["ZhouYimingsjtu/X"]);
+  // e6e0585bd (v0.1.4177)
+  assert.deepEqual(body("antigravity: reword Hermes', OpenCode's, Codex CLI's and pi's identity lines, which Google refuses since 11-14 evening",
+    "Since about 18:43 on 11-14 Antigravity answers 429 \"Resource has been\nexhausted\" to a system instruction holding \"You are Hermes Agent\"\n(Hermes' current persona), \"You are OpenCode\", Codex CLI's \"You are a\ncoding agent running in the Codex CLI\" or pi's \"a coding assistant\nrunning inside pi\", whatever quota is left (@ZhouYimingsjtu,\n@Lmohn39 on X). Hermes' earlier persona is still refused as \"You're …\ncreated by\", so it keeps its \"built by\"."), ["ZhouYimingsjtu/X", "Lmohn39/X"]);
+  // e1c186cfe, d620ff6b5, a16da55d3, 81a24cf8f (two people; a verb before or after)
+  assert.deepEqual(parseBody("zzstar101 and m0eaki on X: after a refresh the GPT-6.2 models never appeared").map((n) => `${n.name}/${n.via}`), ["zzstar101/X", "m0eaki/X"]);
+  assert.deepEqual(parseBody("Parry_Moody and Cyrus on Discord: Codex on OpenAI through an API key before magpie").map((n) => n.name), ["Parry_Moody", "Cyrus"]);
+  assert.deepEqual(parseBody("Ported for nylesssssssss on X: #5584 (Suge8's interactive effort patch, ae3ba37a9)").map((n) => n.name), ["nylesssssssss"]);
+  assert.deepEqual(parseBody("ZeroClover asked on X: Auto Group ids group/auto-<slug> can't be looked up on models.dev.").map((n) => n.name), ["ZeroClover"]);
+  // not a platform, not a person, or more in the bracket than handles
+  for (const t of [
+    "Run on mote: go test ./internal/gateway ok", // 3cee9d4ff
+    "An R2 user on X: the sync bucket grew by 18 GB in under a month.", // 9dcec6751
+    "A user on Discord: the panel stays.", // e4a90aa62
+    "a hang (the same hang as f6c24c680's, @imty42 on X)", // bd60473c5
+    "several (gengyubo, Codex; xiaozuoyou, Cindy; @zuoyou_dev on X)", // cb0403c89
+    "the editor (the one on X) stays", // a bracket with no handle
+    "Tiger and a Windows user on Discord: the panel stays.", // a list with one that isn't a name
+  ]) assert.deepEqual(parseBody(t), [], t);
+});
+
 test("commit authors and co-authors are credited, agents and machines not, and no email is given", () => {
   const per = credit([
     { subject: "gui: a group's Save no longer leaves the Routing page blank (#884)", author: "wizzy-yang", email: "244719629+wizzy-yang@users.noreply.github.com", coauthors: [{ name: "magpie-fix", email: "fix@localhost" }] },

@@ -151,6 +151,22 @@ export function parseBody(text) {
     }
     for (const g of got) out.push({ name: g.name, via: g.via || lead || tail || null, sure: true });
   }
+  for (const p of flat.split("\n")) {
+    // a paragraph that opens with who said it: "ZhouYimingsjtu on X: with
+    // an Ultra 20x plan, …", "zzstar101 and m0eaki on X: …"
+    const m = p.match(/^([^:()]{1,80}?)\s+on\s+([^\s:]+):\s/);
+    const via = m && PLATFORMS[lower(m[2])];
+    if (!via) continue;
+    // "Ported for nylesssssssss on X:", "ZeroClover asked on X:"
+    const who = m[1].replace(/^(?:reported|requested|suggested|asked|ported)\s+(?:by|for)\s+/i, "").replace(/\s+asked$/i, "");
+    const names = who.split(/,\s*|\s+(?:and|&)\s+/).map(personName);
+    if (names.every(Boolean)) for (const name of names) out.push({ name, via, sure: true });
+  }
+  // a bracket of handles and nothing else: "(@ZhouYimingsjtu, @Lmohn39 on X)"
+  for (const m of flat.matchAll(/\((@[\w.-]+(?:(?:,\s*|\s+(?:and|&)\s+)@[\w.-]+)*)\s+on\s+([^\s()]+)\)/gu)) {
+    const via = PLATFORMS[lower(m[2])];
+    if (via) for (const n of m[1].split(/,\s*|\s+(?:and|&)\s+/)) out.push({ name: n.slice(1), via, sure: true });
+  }
   return out;
 }
 
