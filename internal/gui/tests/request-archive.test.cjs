@@ -121,7 +121,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=gateway");
       const calls = page.locator("#activity .call-item");
       await calls.first().waitFor();
-      assert.equal(await page.locator("#archiveList, #view-gateway [role=switch]").count(), 0, "no archive switch on the Gateway page");
+      assert.equal(await page.locator("#archiveList, #view-gateway [role=switch]:not(.gw-agents)").count(), 0, "no archive switch on the Gateway page (a model's own switch for agents is not it)");
       await press(calls.nth(0).locator(".call"), "#view-gateway");
       const details = calls.nth(0).locator(".call-details");
       await details.waitFor();

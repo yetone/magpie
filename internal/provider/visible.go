@@ -151,9 +151,22 @@ func PickedModels(agent string) (map[string]bool, bool) {
 }
 
 // ModelOff reports whether agent's lists leave an entry out by the picks
-// made one model at a time: every one not picked, when it is shown only
-// the models picked for it, else the ones taken out (HiddenModels).
+// made one model at a time: the ones turned off for every agent
+// (AgentsOff), and the agent's own (PicksOff). Every list an agent is
+// given goes through it, the gateway's /v1/models for a caller no agent
+// is named for ("") too.
 func ModelOff(agent string) func(id string) bool {
+	own, every := PicksOff(agent), AgentsOff()
+	if len(every) == 0 {
+		return own
+	}
+	return func(id string) bool { return every[id] || own(id) }
+}
+
+// PicksOff is ModelOff by agent's own picks alone: every one not picked,
+// when it is shown only the models picked for it, else the ones taken out
+// of its lists (HiddenModels).
+func PicksOff(agent string) func(id string) bool {
 	if on, only := PickedModels(agent); only {
 		return func(id string) bool { return !on[id] }
 	}
@@ -176,7 +189,9 @@ func SetOnlyPicked(agent string, on bool) error {
 		return nil
 	}
 	listed, _ := ListedFor(agent)
-	off := ModelOff(agent)
+	// its own picks: a model turned off for every agent keeps the agent's
+	// own choice for when it is turned on again
+	off := PicksOff(agent)
 	var shown, hidden []string
 	for _, e := range listed {
 		if off(e.ID) {

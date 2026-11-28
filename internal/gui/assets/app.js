@@ -3426,6 +3426,9 @@ async function openAgentModels(a, anchor, ev) {
   }
   if (agentModelsLoading !== loading) return;
   loading.drop();
+  // one turned off for agents on the Gateway page stays as it is here,
+  // as one the agent is set to does
+  for (const m of models) if (m.off) m.inUse = 1;
   // the button as it is drawn now
   anchor = loading.anchor;
   if (!anchor.isConnected) return;
@@ -3763,9 +3766,9 @@ async function openAgentModels(a, anchor, ev) {
           r.type = "button";
           r.setAttribute("role", "menuitemcheckbox");
           r.setAttribute("aria-checked", String(!m.hidden));
-          r.title = m.inUse ? t("{agent} is set to it, so it stays", { agent: a.name }) : m.id;
+          r.title = m.off ? t("Turned off for agents on the Gateway page") : m.inUse ? t("{agent} is set to it, so it stays", { agent: a.name }) : m.id;
           const n = el("span", "n", m.name);
-          if (m.inUse) n.append(el("span", "am-tag", t("Current")));
+          if (m.inUse && !m.off) n.append(el("span", "am-tag", t("Current")));
           const ck = el("span", "ck");
           if (!m.hidden) ck.append(svg("m3.5 8.5 3 3 6-7", 12, 1.9));
           // a routing group: its providers' icons stacked, as everywhere

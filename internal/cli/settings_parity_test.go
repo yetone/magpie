@@ -253,6 +253,8 @@ var cliForRoute = map[string]string{
 var notYet = map[string]string{
 	"POST /api/agent-fast":                       A,  // agent_models.go
 	"POST /api/agent-models/{id}":                A,  // agent_models.go
+	"GET /api/agents-off":                        A,  // agents_off.go
+	"POST /api/agents-off":                       A,  // agents_off.go
 	"GET /api/agents/cli":                        A,  // api.go
 	"GET /api/agents/install":                    A,  // api.go
 	"GET /api/agents/preview/{id}":               A,  // api.go

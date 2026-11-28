@@ -452,6 +452,9 @@ func models(args []string) error {
 	for _, e := range entries {
 		w = max(w, len(e.ID))
 	}
+	// turned off for every agent on the Gateway page: still served, through
+	// a routing group or a request that names it
+	off := provider.AgentsOff()
 	last := ""
 	for _, e := range entries {
 		head, name := e.Provider.ID, e.Provider.Name
@@ -468,6 +471,9 @@ func models(args []string) error {
 		}
 		if len(e.Efforts) > 0 {
 			line += faint.Render("  " + strings.Join(e.Efforts, "/"))
+		}
+		if agentID == "" && off[e.ID] {
+			line += faint.Render("  off for agents")
 		}
 		fmt.Println(line)
 	}

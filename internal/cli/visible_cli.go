@@ -165,7 +165,31 @@ func orNone(xs []string) string {
 // agent shown only the models picked for it.
 func explainHidden(id string, hidden []provider.Entry) {
 	_, kept := provider.ListedFor(id)
-	if n := len(hidden) - len(kept); n > 0 {
+	// after the ones its visibility keeps, the ones its picks leave out,
+	// and those turned off for every agent on the Gateway page
+	every, own := provider.AgentsOff(), provider.PicksOff(id)
+	n := len(hidden) - len(kept)
+	if len(every) > 0 {
+		vis := map[string]bool{}
+		for _, e := range kept {
+			vis[e.ID] = true
+		}
+		n = 0
+		gw := 0
+		for _, e := range hidden {
+			switch {
+			case vis[e.ID]:
+			case own(e.ID):
+				n++
+			case every[e.ID]:
+				gw++
+			}
+		}
+		if gw > 0 {
+			fmt.Println(faint.Render("  " + fmt.Sprint(gw) + " turned off for every agent on the Gateway page"))
+		}
+	}
+	if n > 0 {
 		if _, only := provider.PickedModels(id); only {
 			fmt.Println(faint.Render("  " + id + " is shown only the models picked for it: " + fmt.Sprint(n) + " not picked, and a new one stays off until it is ticked · magpie visible " + id + " --show-new shows new ones"))
 		} else {

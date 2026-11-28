@@ -36,7 +36,7 @@ function renderGatewayLoading() {
   page.setAttribute("aria-busy", "true");
   $("#connectNote").textContent = "";
   $("#callsNote").textContent = "";
-  $("#copyModels").hidden = true;
+  $("#copyModels").hidden = $("#agentsFor").hidden = true;
 
   const gateway = $("#gateway");
   gateway.replaceChildren();
@@ -89,6 +89,7 @@ function renderGatewayView() {
   if (gatewayKeyDraft === null && gatewayLimit === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
   renderConnect();
   renderGatewayModels();
+  readAgentsOff();
   renderActivity();
 }
 
@@ -717,6 +718,20 @@ function renderConnect() {
 }
 
 let modelQuery = "";
+// The models turned off for agents (辰林鸭~ on Discord): left out of every
+// agent's model list, still served through a routing group made of them
+// and to a request that names them. off is their ids, keep the agent set
+// to a model, which keeps it listed (as its own list does); null until
+// read, so no switch shows a state it doesn't know.
+let agentsOff = null;
+function readAgentsOff() {
+  api("agents-off").then((r) => { agentsOff = r; if (view === "gateway") renderGatewayModels(); }).catch(() => {});
+}
+async function setAgentsOff(ids, off) {
+  if (!ids.length) return;
+  try { agentsOff = await api("agents-off", { ids, off }); } catch (e) { statusErr(e); }
+  renderGatewayModels();
+}
 // The model list can be folded away, so Recent calls sits under Connect;
 // the fold is remembered.
 let modelsFolded = false;
@@ -740,7 +755,7 @@ function renderGatewayModels() {
     q.className = "find";
     q.oninput = () => { modelQuery = q.value; renderGatewayModels(); };
     q.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape" && q.value) { q.value = modelQuery = ""; renderGatewayModels(); } };
-    $("#copyModels").before(q);
+    $("#agentsFor").before(q);
   }
   q.hidden = all.length < 5 || list.hidden;
   q.title = t("Words match a model's id, name, provider or a group's models");
@@ -751,6 +766,23 @@ function renderGatewayModels() {
   });
   $("#copyModels").hidden = !models.length || list.hidden;
   $("#copyModels").onclick = () => copy(models.map((m) => m.id).join("\n"), t("Model ids"));
+  // a provider's models are turned off for agents, or on, several at once:
+  // those the list shows (narrowed by the search), or every model in a
+  // routing group, so agents see the group alone
+  const offs = new Set(agentsOff?.off || []);
+  const keeps = agentsOff?.keep || {};
+  const own = models.filter((m) => !m.group);
+  const canOff = (ms) => ms.filter((m) => !offs.has(m.id) && !keeps[m.id]).map((m) => m.id);
+  const inGroups = canOff(all.filter((m) => !m.group && all.some((g) => g.group && g.members.includes(m.id))));
+  const shownOff = canOff(own), shownOn = own.filter((m) => offs.has(m.id)).map((m) => m.id);
+  const fa = $("#agentsFor");
+  fa.hidden = !agentsOff || !own.length || list.hidden;
+  fa.onclick = () => openProtoMenu(fa, [
+    ...inGroups.length ? [{ v: "groups", name: t("Turn off the {n} in routing groups", { n: inGroups.length }), literalName: true }] : [],
+    { v: "off", name: t("Turn off the {n} shown", { n: shownOff.length }), literalName: true },
+    { v: "on", name: t("Turn on the {n} shown", { n: shownOn.length }), literalName: true },
+  ].filter((o) => o.v === "groups" || (o.v === "off" ? shownOff : shownOn).length), "", (v) => setAgentsOff(v === "groups" ? inGroups : v === "off" ? shownOff : shownOn, v !== "on"), "For agents", "", "right");
+  if (!shownOff.length && !shownOn.length && !inGroups.length) fa.hidden = true;
   if (!all.length) {
     const empty = el("div", "empty-state", "");
     empty.append(el("b", "", t("No models exposed yet")), t("Add a provider, or sign in to Codex or Copilot; their models show up here for every agent."));
@@ -762,12 +794,23 @@ function renderGatewayModels() {
     return;
   }
   for (const m of models) {
-    const row = el("div", "row model" + (m.id === (FLAVORS[flavor]?.decide ? decideModel : exampleModel) ? " selected" : ""));
+    const off = !m.group && offs.has(m.id);
+    const row = el("div", "row model" + (m.id === (FLAVORS[flavor]?.decide ? decideModel : exampleModel) ? " selected" : "") + (off ? " agents-off" : ""));
     const who = el("div", "who");
     const name = el("div", "name", m.id);
     if (namedFree(m.id, m.name)) name.append(freeBadge(false));
     who.append(name, el("div", "sub", m.name && m.name !== m.id.split("/")[1] ? `${m.name} · ${m.provider.name}` : m.provider.name));
-    row.append(m.group ? stackIcon(m.icons) : icon(m.provider.icon || "generic"), who, mediaInfo(m), copyBtn(m.id, t("Model id")));
+    row.append(m.group ? stackIcon(m.icons) : icon(m.provider.icon || "generic"), who, mediaInfo(m));
+    // listed for agents, or not: a group is what they keep seeing
+    if (!m.group && agentsOff) {
+      const keep = !off && keeps[m.id];
+      const sw = libSwitch("gw-agents", !off, t("Listed for agents"));
+      sw.title = keep ? t("{agent} is set to it, so it stays", { agent: keep }) : t(off ? "Off for agents · still served through routing groups and requests that name it" : "Listed for agents");
+      if (keep) sw.setAttribute("aria-disabled", "true");
+      sw.onclick = (e) => { e.stopPropagation(); if (!keep) setAgentsOff([m.id], !off); };
+      row.append(sw);
+    }
+    row.append(copyBtn(m.id, t("Model id")));
     row.title = t("Use this model in the snippets");
     // a decision model is put in System One's snippets, any other in the
     // other APIs'; the API follows the model clicked
@@ -915,7 +958,7 @@ magpie.plugin("gateway", (ctx) => {
 <p class="usage-note gw-keys-off" id="gatewayKeysOff" hidden data-t>Gateway keys are for other computers, a tunnel to this one such as Cloudflare Tunnel, and web pages: they are added here once Share on local network is on, or a web page is listed in Settings. Agents on this computer need none.</p>
 <div class="row-head"><button class="fold" id="foldConnect" aria-expanded="true" aria-controls="connect"><span class="label" data-t>Connect</span></button><span class="grow"></span><span class="note" id="connectNote"></span></div>
 <section class="list connect" id="connect"></section>
-<div class="row-head"><button class="fold" id="foldModels" aria-expanded="true" aria-controls="gwModels"><span class="label" data-t>Models</span><span class="note" id="modelsCount"></span></button><span class="grow"></span><button class="text" id="copyModels" data-t>Copy all ids</button></div>
+<div class="row-head"><button class="fold" id="foldModels" aria-expanded="true" aria-controls="gwModels"><span class="label" data-t>Models</span><span class="note" id="modelsCount"></span></button><span class="grow"></span><button class="text" id="agentsFor" hidden data-t>For agents</button><button class="text" id="copyModels" data-t>Copy all ids</button></div>
 <div class="list" id="gwModels"></div>
 <div class="row-head"><span class="label" data-t>Recent calls</span><span class="grow"></span><span class="note" id="callsNote"></span></div>
 <div class="list activity" id="activity"></div>
@@ -930,6 +973,7 @@ magpie.plugin("gateway", (ctx) => {
         renderConnect();
         backToReader($("#view-gateway"));
       };
+      menuOf($("#agentsFor"));
       $("#foldModels").prepend(svg(CHEV_R, 11, 1.6));
       $("#foldModels").onclick = () => {
         modelsFolded = !modelsFolded;

@@ -868,7 +868,11 @@ func (a *Agent) notOffered(ref string, opts []Option) error {
 	if slices.ContainsFunc(shown, func(e provider.Entry) bool { return slices.Contains(ids, e.ID) }) {
 		return nil // shown the agent: a field may offer fewer (Claude Desktop's tiers)
 	}
+	every := provider.AgentsOff()
 	for _, e := range provider.Catalog() {
+		if slices.Contains(ids, e.ID) && every[e.ID] {
+			return fmt.Errorf("%s is turned off for agents on magpie's Gateway page, so %s isn't shown it: turn it back on there, or pick a routing group it is in", ref, a.Name)
+		}
 		if slices.Contains(ids, e.ID) {
 			return fmt.Errorf("%s is one of magpie's models, but %s isn't shown it: magpie models %s says why, and magpie visible %s all shows it every model", ref, a.Name, a.ID, a.ID)
 		}

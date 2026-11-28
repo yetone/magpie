@@ -2993,6 +2993,16 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .row.model .copy { opacity: 0; }
 .row.model:hover .copy, .row.model.selected .copy { opacity: 1; }
 .row.model .copy.done { opacity: 1; }
+/* turned off for agents (plugins/gateway): dimmed, its switch shown; an
+   on one's switch shows with the copy button, on hover */
+.row.model .lib-switch.gw-agents { flex: none; width: 28px; height: 16px; padding: 0; border: 0; cursor: pointer; opacity: 0; }
+.row.model .lib-switch.gw-agents i { width: 12px; height: 12px; }
+.row.model .lib-switch.gw-agents.on i { transform: translateX(12px); }
+.row.model .lib-switch.gw-agents[aria-disabled="true"] { cursor: default; }
+.row.model:hover .gw-agents, .row.model.selected .gw-agents, .row.model .gw-agents:focus-visible, .row.model.agents-off .gw-agents { opacity: 1; }
+.row.model:is(:hover, .selected) .gw-agents[aria-disabled="true"] { opacity: .45; }
+.row.model.agents-off > :is(.ic, .who, .minfo) { opacity: .5; }
+@media (hover: none) { .row.model .gw-agents { opacity: 1; } .row.model .gw-agents[aria-disabled="true"] { opacity: .45; } }
 
 /* recent calls */
 .activity { padding: 5px 8px 6px; font-size: 11.5px; }
@@ -3765,7 +3775,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gwModels .none { padding: 16px; color: var(--muted); font-size: 12px; text-align: center; }
 /* no gateway key yet: said in its card as Recent calls says it has none */
 #gatewayKeys .none { padding: 13px 14px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
-#view-gateway .row-head .find { margin-right: 8px; }
+#view-gateway .row-head .find { margin-right: 8px; flex: 0 1 160px; min-width: 64px; }
 /* a row of the add sheet: an icon and a name, no frame; a row already
    added has a small green dot after its name rather than fading */
 .tile {

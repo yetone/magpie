@@ -3403,6 +3403,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		rw.WriteHeader(http.StatusNoContent)
 	})
 	agentModelsAPI(mux)
+	agentsOffAPI(mux)
 	speedsAPI(mux)
 	modelPriceRoutes(mux)
 	devListen(mux)

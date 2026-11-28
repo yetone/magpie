@@ -729,7 +729,7 @@ type providerAgent struct {
 	Model   string `json:"model,omitempty"`
 	Group   string `json:"group,omitempty"` // through this routing group, one of whose members it is
 	// Hides are this provider's models (by model id) the agent's own model
-	// list leaves out, set on the Agents page (provider.ModelOff): the
+	// list leaves out, set on the Agents page (provider.PicksOff): the
 	// editor's model picks are every agent's, so it says which agent
 	// doesn't show one it has ticked (Kylin_Cloud on X)
 	Hides []string `json:"hides,omitempty"`
@@ -958,9 +958,11 @@ type agentUse struct {
 	group      provider.Group
 	members    []provider.Member
 	inGroup    bool
-	// off is the agent's own model list's picks (provider.ModelOff), nil
+	// off is the agent's own model list's picks (provider.PicksOff), nil
 	// when it leaves nothing out, or another agent sharing its list (a WSL
-	// one, an omp profile) says it already
+	// one, an omp profile) says it already. The models turned off for
+	// every agent on the Gateway page aren't among them: each agent would
+	// name each one, so the editor's line would list every agent
 	off func(id string) bool
 }
 
@@ -972,7 +974,7 @@ func agentUses(agents []*agent.Agent, findGroup func(string) (provider.Group, []
 		if id := a.ListsFor(); !lists[id] {
 			lists[id] = true
 			if _, only := provider.PickedModels(id); only || len(provider.HiddenModels(id)) > 0 {
-				u.off = provider.ModelOff(id)
+				u.off = provider.PicksOff(id)
 			}
 		}
 		v := agentModel(a)
