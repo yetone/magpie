@@ -4,10 +4,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS, checkedX, avatar, replay } from "./credits.mjs";
 import { authors, excluded, xAccounts, aliases, toLookUp, honoured, xOfLink } from "./credits-cli.mjs";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
 const names = (subject, opts) => credit([{ subject, author: "yetone", email: "yetoneful@gmail.com" }], opts)[0].map((p) => p.name);
 const via = (subject) => credit([{ subject, author: "yetone", email: "yetoneful@gmail.com" }])[0].map((p) => `${p.name}/${p.via.join("+")}`);
@@ -578,4 +579,125 @@ test("the finder matches a name, login or X account, any case, a leading @ left 
   assert.ok(matches(bjz, "BJZ"));
   assert.ok(matches(rowKeys("教父", ""), "教"));
   assert.equal(norm("  @@Foo "), "foo");
+});
+
+// --- the community plugins (magpie-community/plugins) ---
+// Subjects from magpie-community/plugins' history, word for word.
+
+test("a plugin's bare #N is the plugins repository's, and yetone/magpie#N stays magpie's", () => {
+  const P = "magpie-community/plugins";
+  assert.deepEqual(parse("zcode 0.1.74: ask as the installed ZCode, 4.0.0 at the least; an empty 200 is the version refused (#1641)", P).refs, [{ repo: P, n: 1641 }]);
+  assert.deepEqual(parse("cursor 0.1.10: far from Cursor a conversation's tool steps add up to what Cursor counted, cache included (yetone/magpie#1053, #33)", P).refs, [{ repo: "yetone/magpie", n: 1053 }, { repo: P, n: 33 }]);
+  // magpie's own subjects are as before
+  assert.deepEqual(parse("gateway: x (#3110)").refs, [{ repo: "yetone/magpie", n: 3110 }]);
+  // credit() reads a commit's repo: the PR's author is the plugins repository's #1627's
+  const per = credit([{ repo: P, subject: "qoder 0.2.77: Qoder CN Teams (qoder.com.cn) as a provider, named for its organization (#1627)", author: "yetone", email: "yetoneful@gmail.com" }],
+    { issueAuthors: { [`${P}#1627`]: "handsomezhuzhu", "yetone/magpie#1627": "someone-else" } });
+  assert.deepEqual(per[0].map((p) => p.github), ["handsomezhuzhu"]);
+});
+
+test("a plugin's release shows as its folder and version, linked to npm, and sorts by time beside magpie's", () => {
+  const P = "magpie-community/plugins";
+  const people = wall([
+    { subject: "gateway: a HEIC photo goes to the vendor as JPEG, or PNG with alpha (Linmord on GitHub)", v: "0.1.5000" },
+    { repo: P, subject: "zcode 0.1.74: ask as the installed ZCode, 4.0.0 at the least; an empty 200 is the version refused (#1641)", author: "not2bad", email: "160416397+Linmord@users.noreply.github.com", v: "zcode@0.1.74" },
+    { repo: P, subject: "agents: add the Eta agent plugin (#845)", author: "ling", email: "1444707851@qq.com", v: "eta@0.1.0" },
+  ], { times: { "0.1.5000": 2000, "zcode@0.1.74": 3000, "eta@0.1.0": 1000 } });
+  // one card for the GitHub login, newest first by time, not by version
+  assert.deepEqual(people.map((p) => [p.name, p.releases.map((r) => r.v)]), [["Linmord", ["zcode@0.1.74", "0.1.5000"]], ["ling", ["eta@0.1.0"]]]);
+  // the subject's "zcode 0.1.74: " is what the mark already says; another prefix stays
+  assert.deepEqual(people[0].releases[0].what, ["ask as the installed ZCode, 4.0.0 at the least; an empty 200 is the version refused"]);
+  assert.deepEqual(people[1].releases[0].what, ["agents: add the Eta agent plugin"]);
+  const html = renderWall({ plugins: { zcode: "@magpie-community/opencode-zcode-auth" }, people }, "en");
+  assert.match(html, /<a href="https:\/\/www\.npmjs\.com\/package\/@magpie-community\/opencode-zcode-auth\/v\/0\.1\.74"><code>zcode 0\.1\.74<\/code><\/a> ask as/);
+  // a folder npm doesn't have links to the folder in the repository
+  assert.match(html, /<a href="https:\/\/github\.com\/magpie-community\/plugins\/tree\/main\/packages\/eta"><code>eta 0\.1\.0<\/code><\/a>/);
+  // magpie's releases look as before
+  assert.match(html, /<a href="https:\/\/github\.com\/yetone\/magpie-releases\/releases\/tag\/v0\.1\.5000"><code>v0\.1\.5000<\/code><\/a>/);
+  assert.doesNotMatch(html, /releases\/tag\/vzcode/);
+});
+
+test("the replay places a plugin's release at the first magpie release at or after it", () => {
+  const people = [
+    { name: "a", releases: [{ v: "zcode@0.1.74" }, { v: "zcode@0.1.73" }, { v: "0.1.1" }] },
+    { name: "b", releases: [{ v: "eta@0.1.0" }, { v: "nowhen@1.0.0" }] },
+  ];
+  const tags = [{ v: "0.1.1", t: 1000 }, { v: "0.1.2", t: 2000 }];
+  const r = replay(people, tags, { "zcode@0.1.74": 1500, "zcode@0.1.73": 1400, "eta@0.1.0": 9000 });
+  // a: 0.1.1 itself, both zcode versions once at 0.1.2; b: after the last
+  // release, at the last; a release with no time is left out
+  assert.deepEqual(r.e, [[0, 0], [1, 0, 1]]);
+  assert.deepEqual(r.v, ["0.1.1", "0.1.2"]);
+});
+
+// a git repository shaped like magpie-community/plugins, each commit at a
+// time of its own
+function pluginsRepo() {
+  const dir = mkdtempSync(join(tmpdir(), "credits-plugins-"));
+  const run = (args, env = {}) => execFileSync("git", args, { cwd: dir, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", ...env } }).trim();
+  run(["init", "-q", "-b", "main"]);
+  const commit = (t, who, subject, files) => {
+    for (const [f, text] of Object.entries(files)) { mkdirSync(join(dir, dirname(f)), { recursive: true }); writeFileSync(join(dir, f), text); }
+    run(["add", "-A"]);
+    const [name, email] = who.split("|");
+    const date = `@${t} +0000`;
+    run(["commit", "-q", "-m", subject], { GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
+    return run(["rev-parse", "HEAD"]);
+  };
+  const pj = (name, version) => JSON.stringify({ name, version });
+  const sha = {};
+  sha.c1 = commit(1000, "Ann|123+ann@users.noreply.github.com", "zcode 0.1.1: reads the sign-in (#5)", { "packages/zcode/package.json": pj("@magpie-community/opencode-zcode-auth", "0.1.1"), "packages/zcode/index.js": "1" });
+  sha.c2 = commit(2000, "yetone|yetoneful@gmail.com", "catpaw 0.2.1: each pasted token gets its own identity (#7, bob on Discord)", { "packages/catpaw/package.json": pj("@magpie-community/opencode-catpaw-auth", "0.2.1") });
+  sha.c3 = commit(3000, "Carl|carl@example.com", "registry: add a listing", { "registry.json": "[]" });
+  sha.c3b = commit(3500, "Fay|fay@example.com", "docs: both READMEs", { "packages/zcode/README.md": "z", "packages/catpaw/README.md": "c" });
+  sha.c4 = commit(4000, "Dee|456+dee@users.noreply.github.com", "zcode 0.1.2: a shared fix", { "packages/zcode/index.js": "2", "packages/catpaw/index.js": "2", "packages/zcode/package.json": pj("@magpie-community/opencode-zcode-auth", "0.1.2"), "packages/catpaw/package.json": pj("@magpie-community/opencode-catpaw-auth", "0.2.2") });
+  sha.c5 = commit(5000, "Eve|eve@example.com", "zcode 0.1.3: not published yet", { "packages/zcode/index.js": "3" });
+  // the dist branch: a commit for each publish run, naming the main commit it packed
+  run(["checkout", "-q", "--orphan", "dist"]);
+  run(["rm", "-rq", "--cached", "."]);
+  for (const [t, c] of [[2150, sha.c2], [4150, sha.c4]]) {
+    const date = `@${t} +0000`;
+    run(["commit", "-q", "--allow-empty", "-m", `dist: ${c.slice(0, 7)}`], { GIT_AUTHOR_NAME: "github-actions[bot]", GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com", GIT_COMMITTER_NAME: "github-actions[bot]", GIT_COMMITTER_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com", GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
+  }
+  run(["checkout", "-q", "-f", "main"]);
+  return { dir, sha };
+}
+
+test("a plugin's commit is credited in the first published version made from it or after", async () => {
+  const cli = await import("./credits-cli.mjs");
+  const { dir, sha } = pluginsRepo();
+  const clone = join(mkdtempSync(join(tmpdir(), "credits-clone-")), "plugins.git");
+  try {
+    // cloned the way the deploy does, from a path here instead of GitHub
+    assert.equal(cli.pluginsClone(clone, dir), true);
+    // zcode is on npm: 0.1.1 from c1 (gitHead), 0.1.2 with no gitHead, placed
+    // by its time; catpaw never was, so its dist versions count
+    const versions = async (name) => {
+      if (name === "@magpie-community/opencode-zcode-auth") return [{ v: "0.1.1", t: 1100, head: sha.c1 }, { v: "0.1.2", t: 4500, head: "" }];
+      return [];
+    };
+    const dist = async () => ({ packages: { "@magpie-community/opencode-catpaw-auth": { versions: { "0.2.1": { time: new Date(2100e3).toISOString() }, "0.2.2": { time: new Date(4100e3).toISOString() } } } } });
+    const got = await cli.pluginCommits(clone, { versions, dist });
+    assert.deepEqual(got.commits.map((c) => [c.subject.split(":")[0], c.v, c.repo]), [
+      ["zcode 0.1.1", "zcode@0.1.1", "magpie-community/plugins"],
+      ["catpaw 0.2.1", "catpaw@0.2.1", "magpie-community/plugins"],
+      // two packages, neither named: the first published of them
+      ["docs", "catpaw@0.2.2", "magpie-community/plugins"],
+      // two packages, one named first: that one's, though catpaw's came out first
+      ["zcode 0.1.2", "zcode@0.1.2", "magpie-community/plugins"],
+    ]);
+    // the registry's commit and the one after the last version are left out
+    assert.deepEqual(got.plugins, { zcode: "@magpie-community/opencode-zcode-auth" });
+    assert.deepEqual(got.times, { "zcode@0.1.1": 1100, "zcode@0.1.2": 4500, "catpaw@0.2.1": 2100, "catpaw@0.2.2": 4100 });
+    const people = wall(got.commits, { issueAuthors: { "magpie-community/plugins#5": "ann", "magpie-community/plugins#7": "kim", "yetone/magpie#7": "nobody" }, times: got.times });
+    assert.deepEqual(people.map((p) => p.github || p.name).sort(), ["Fay", "ann", "bob", "dee", "kim"]);
+    // npm can't be read for zcode: catpaw is still read
+    const half = await cli.pluginCommits(clone, { versions: async (name) => { if (name.includes("zcode")) throw new Error("HTTP 503"); return []; }, dist });
+    assert.deepEqual(half.commits.map((c) => c.v), ["catpaw@0.2.1", "catpaw@0.2.2", "catpaw@0.2.2"]);
+    // a repository that can't be cloned is no clone: magpie's own list still goes out
+    assert.equal(cli.pluginsClone(join(clone, "..", "none.git"), join(dir, "missing")), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(dirname(clone), { recursive: true, force: true });
+  }
 });

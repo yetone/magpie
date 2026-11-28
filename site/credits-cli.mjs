@@ -12,8 +12,11 @@
 //     (public/contributors/en.html, zh, ja), which worker.js puts into the
 //     page, and the replay's data (public/contributors/replay.json, read by
 //     public/contributors-replay.js). wrangler.jsonc's build runs it at each
-//     deploy. An X credit links to its account only when the account is in
-//     contributors-x.txt.
+//     deploy. A commit of magpie-community/plugins counts when a version of
+//     a package it changed was published (pluginCommits); the CLI keeps a
+//     bare clone of it in .cache/plugins.git; when that can't be read, magpie's
+//     own history still goes out. An X credit links to its account only
+//     when the account is in contributors-x.txt.
 //
 // The reporters a commit's body names ("Reported on X by @…") are credited
 // beside its subject's (credits.mjs parseBody).
@@ -33,14 +36,14 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins, handlesOf, checkedX, replay, anchors } from "./credits.mjs";
+import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins, handlesOf, checkedX, replay, anchors, PLUGINS, MAGPIE } from "./credits.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const warn = (m) => process.stderr.write(`credits: ${m}\n`);
 
 const SEP = "\x1f", END = "\x1e";
-function log(args) {
-  const out = execFileSync("git", ["log", `--format=%H${SEP}%P${SEP}%an${SEP}%ae${SEP}%s${SEP}%(trailers:key=Co-authored-by,valueonly,separator=%x1d)${SEP}%D${SEP}%ct${SEP}%b${END}`, ...args], { encoding: "utf8", maxBuffer: 1 << 30 });
+function log(args, gitDir) {
+  const out = execFileSync("git", [...(gitDir ? ["--git-dir", gitDir] : []), "log", `--format=%H${SEP}%P${SEP}%an${SEP}%ae${SEP}%s${SEP}%(trailers:key=Co-authored-by,valueonly,separator=%x1d)${SEP}%D${SEP}%ct${SEP}%b${END}`, ...args], { encoding: "utf8", maxBuffer: 1 << 30 });
   return out.split(END).map((r) => r.replace(/^\n/, "")).filter(Boolean).map((r) => {
     const [sha, parents, author, email, subject, co, refs, time, body] = r.split(SEP);
     return {
@@ -54,6 +57,153 @@ function log(args) {
       tags: (refs || "").split(", ").map((s) => s.replace(/^tag: /, "")).filter((t) => /^v\d+\.\d+\.\d+$/.test(t)),
     };
   });
+}
+
+// --- the community plugins (magpie-community/plugins) ---
+//
+// A plugin's commit is released when a version of a package it changed was
+// published: on npm, or, for a package npm has never had, on the plugins'
+// dist branch, where magpie installs it from (the repository's
+// scripts/dist.mjs). It goes out in the first such version made from a
+// commit at or after it: npm's gitHead for the version, the main commit a
+// dist commit names ("dist: 577aedc"), else the last commit made by the
+// version's publish time. A commit that changes several packages goes under
+// the one its subject names ("zcode 0.1.74: …"), else under the first
+// published.
+export const PLUGINS_GIT = `https://github.com/${PLUGINS}.git`;
+export const PLUGINS_DIST = `https://raw.githubusercontent.com/${PLUGINS}/dist/index.json`;
+
+// The plugins' main branch in a bare clone at dir, cloned the first time
+// and fetched after, and the dist branch's commits (no files: it holds
+// every tarball); false when there is no clone to read.
+export function pluginsClone(dir, src = PLUGINS_GIT) {
+  const git = (args) => execFileSync("git", args, { stdio: ["ignore", "ignore", "pipe"], timeout: 300000 });
+  const why = (e) => String(e.stderr || e.message).trim().split("\n")[0];
+  if (existsSync(join(dir, "HEAD"))) {
+    try { git(["--git-dir", dir, "fetch", "--quiet", src, "+refs/heads/main:refs/heads/main"]); }
+    catch (e) { warn(`${PLUGINS} not fetched (${why(e)}); its last fetch is read`); }
+  } else {
+    try {
+      mkdirSync(dirname(dir), { recursive: true });
+      git(["clone", "--quiet", "--bare", "--single-branch", "--branch", "main", src, dir]);
+    } catch (e) {
+      warn(`${PLUGINS} not cloned (${why(e)})`);
+      return false;
+    }
+  }
+  try { git(["--git-dir", dir, "-c", "remote.origin.promisor=true", "-c", "remote.origin.partialclonefilter=tree:0", "fetch", "--quiet", "--filter=tree:0", src, "+refs/heads/dist:refs/heads/dist"]); }
+  catch (e) { warn(`${PLUGINS}'s dist commits not fetched (${why(e)}); a dist version is placed by its time`); }
+  return true;
+}
+
+// npm's versions of a package: [{ v, t (Unix seconds), head }]; [] when npm
+// has no such package; throws when npm can't be read
+export async function npmVersions(name, { fetchImpl = globalThis.fetch } = {}) {
+  const res = await fetchImpl(`https://registry.npmjs.org/${name.replace("/", "%2f")}`, {
+    headers: { Accept: "application/json", "User-Agent": "magpie-credits" },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const doc = await res.json();
+  const out = [];
+  for (const [v, m] of Object.entries((doc && doc.versions) || {})) {
+    const t = Date.parse((doc.time || {})[v]);
+    if (!Number.isFinite(t)) continue;
+    out.push({ v, t: Math.round(t / 1000), head: m && typeof m.gitHead === "string" ? m.gitHead : "" });
+  }
+  return out;
+}
+
+// the dist branch's index.json: { packages: { <name>: { versions: { <v>:
+// { time } } } } }; throws when it can't be read
+export async function distIndex({ fetchImpl = globalThis.fetch } = {}) {
+  const res = await fetchImpl(PLUGINS_DIST, { headers: { "User-Agent": "magpie-credits" }, signal: AbortSignal.timeout(60000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const doc = await res.json();
+  if (!doc || typeof doc.packages !== "object") throw new Error("no packages");
+  return doc;
+}
+
+// The plugins' released commits, each { ...commit, repo: PLUGINS, v:
+// "<folder>@<version>" }, with each release's time and the npm package of
+// each folder that is on npm (its versions link there), read from the bare
+// clone at gitDir, npm and the dist index. A package that can't be read is
+// left out, and said.
+export async function pluginCommits(gitDir, { fetchImpl = globalThis.fetch, versions = npmVersions, dist = distIndex } = {}) {
+  const git = (args) => execFileSync("git", ["--git-dir", gitDir, ...args], { encoding: "utf8", maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "ignore"] });
+  const commits = log(["--topo-order", "--reverse", "main"], gitDir);
+  const pos = new Map(commits.map((c, i) => [c.sha, i]));
+  const short = new Map(commits.map((c, i) => [c.sha.slice(0, 7), i]));
+  // the folders under packages/ each commit changed
+  const dirs = new Map();
+  for (const r of git(["log", "--format=%x1e%H", "--name-only", "main", "--", "packages/"]).split("\x1e")) {
+    const [sha, ...files] = r.trim().split("\n");
+    if (!sha) continue;
+    const ds = new Set();
+    for (const f of files) { const m = f.match(/^packages\/([^/]+)\//); if (m) ds.add(m[1]); }
+    dirs.set(sha, ds);
+  }
+  // each folder's package name, from its package.json on main
+  const names = {};
+  for (const d of git(["ls-tree", "--name-only", "main", "packages/"]).split("\n").map((l) => l.replace(/^packages\//, "")).filter(Boolean)) {
+    try {
+      const n = JSON.parse(git(["show", `main:packages/${d}/package.json`])).name;
+      if (typeof n === "string" && n) names[d] = n;
+    } catch {}
+  }
+  // the dist commits, oldest first: when each was made and the main commit
+  // it packed
+  let packs = [];
+  try {
+    packs = git(["log", "--reverse", "--format=%ct %s", "dist"]).split("\n").map((l) => l.match(/^(\d+) dist: ([0-9a-f]{7,40})$/)).filter(Boolean).map((m) => ({ t: +m[1], at: short.get(m[2].slice(0, 7)) })).filter((p) => p.at != null);
+  } catch {}
+  // where a version is: the commit it was made from, else the last commit
+  // made by its time
+  const byTime = (t) => { let k = -1; commits.forEach((c, i) => { if (c.time <= t) k = i; }); return k; };
+  // a dist version's: the first dist commit made after it was packed, within the hour
+  const packed = (t) => { const p = packs.find((x) => x.t >= t); return p && p.t - t < 3600 ? p.at : byTime(t); };
+  const rel = {};
+  const times = {};
+  const onNpm = {};
+  let index = null;
+  const fromDist = async (name) => {
+    if (!index) index = dist({ fetchImpl });
+    const doc = await index;
+    return Object.entries(((doc.packages[name] || {}).versions) || {}).map(([v, m]) => ({ v, t: Math.round(Date.parse(m && m.time) / 1000) })).filter((x) => Number.isFinite(x.t));
+  };
+  const list = Object.entries(names);
+  for (let i = 0; i < list.length; i += 8) {
+    await Promise.all(list.slice(i, i + 8).map(async ([d, name]) => {
+      let vs;
+      try {
+        vs = (await versions(name, { fetchImpl })).map((x) => ({ ...x, at: pos.has(x.head) ? pos.get(x.head) : byTime(x.t) }));
+        if (vs.length) onNpm[d] = name;
+        else vs = (await fromDist(name)).map((x) => ({ ...x, at: packed(x.t) }));
+      } catch (e) {
+        warn(`${name}: versions not read (${e.message}); its commits are left out`);
+        return;
+      }
+      rel[d] = vs.filter((x) => x.at >= 0).sort((a, b) => a.at - b.at || a.t - b.t);
+      for (const x of rel[d]) times[`${d}@${x.v}`] = x.t;
+    }));
+  }
+  const out = [];
+  const plugins = {};
+  commits.forEach((c, i) => {
+    if (c.parents >= 2) return;
+    const hits = [];
+    for (const d of dirs.get(c.sha) || []) {
+      const x = (rel[d] || []).find((r) => r.at >= i);
+      if (x) hits.push({ d, x });
+    }
+    if (!hits.length) return;
+    const named = (c.subject.match(/^([\w.-]+)[\s:]/) || [])[1];
+    const pick = hits.find((h) => named && h.d.toLowerCase() === named.toLowerCase()) || hits.sort((a, b) => a.x.t - b.x.t || (a.d < b.d ? -1 : 1))[0];
+    if (onNpm[pick.d]) plugins[pick.d] = onNpm[pick.d];
+    out.push({ ...c, repo: PLUGINS, v: `${pick.d}@${pick.x.v}` });
+  });
+  return { commits: out, times, plugins, head: commits.length ? commits.at(-1).sha : "" };
 }
 
 // contributors-aliases.txt: "x-handle github-login" a line, an X account
@@ -234,8 +384,18 @@ async function cmdWall(out = join(here, "public", "contributors.json")) {
       pending = [];
     }
   }
-  const released = commits.filter((c) => c.v && c.parents < 2);
-  const refs = released.flatMap((c) => parse(c.subject).refs);
+  const own = commits.filter((c) => c.v && c.parents < 2);
+  // the plugins' released commits beside magpie's; when they can't be read,
+  // magpie's own still go out
+  let plug = { commits: [], times: {}, plugins: {}, head: "" };
+  try {
+    const dir = join(here, ".cache", "plugins.git");
+    if (pluginsClone(dir)) plug = await pluginCommits(dir);
+  } catch (e) {
+    warn(`${PLUGINS} not read (${String(e.message).split("\n")[0]}); only magpie's history is listed`);
+  }
+  const released = [...own, ...plug.commits];
+  const refs = released.flatMap((c) => parse(c.subject, c.repo || MAGPIE).refs);
   const issueAuthors = await authors(refs, { known: before.issueAuthors || {} });
   const exclude = excluded();
   const credited = logins(credit(released, { issueAuthors, exclude }));
@@ -243,17 +403,19 @@ async function cmdWall(out = join(here, "public", "contributors.json")) {
   const x = honoured(await xAccounts(toLookUp(credited, al), { known: before.xAccounts || {} }), credited, al);
   let checked = new Map();
   try { checked = checkedX(readFileSync(join(here, "contributors-x.txt"), "utf8")); } catch (e) { warn(`contributors-x.txt not read (${e.message}); no X links`); }
-  const people = wall(released, { issueAuthors, exclude, xAccounts: x, checkedX: checked });
-  const data = { generated: new Date().toISOString(), head: commits.length ? commits.at(-1).sha : "", issueAuthors, xAccounts: x, people };
-  // each release's time: its tagged commit's
+  // each release's time: its tagged commit's, a plugin version's npm publish
   const tags = commits.flatMap((c) => c.tags.map((t) => ({ v: t.slice(1), t: c.time })));
+  const times = { ...plug.times };
+  for (const g of tags) if (!(g.v in times)) times[g.v] = g.t;
+  const people = wall(released, { issueAuthors, exclude, xAccounts: x, checkedX: checked, times });
+  const data = { generated: new Date().toISOString(), head: commits.length ? commits.at(-1).sha : "", pluginsHead: plug.head, plugins: plug.plugins, issueAuthors, xAccounts: x, people };
   const put = (file, text) => { writeFileSync(file + ".tmp", text); renameSync(file + ".tmp", file); };
   put(out, JSON.stringify(data) + "\n");
   const dir = join(dirname(out), "contributors");
   mkdirSync(dir, { recursive: true });
   for (const lang of ["en", "zh", "ja"]) put(join(dir, `${lang}.html`), renderWall(data, lang) + "\n");
-  put(join(dir, "replay.json"), JSON.stringify(replay(people, tags)) + "\n");
-  warn(`${people.length} people over ${released.length} released commits → ${out}`);
+  put(join(dir, "replay.json"), JSON.stringify(replay(people, tags, times)) + "\n");
+  warn(`${people.length} people over ${own.length} released commits and ${plug.commits.length} of ${PLUGINS} → ${out}`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

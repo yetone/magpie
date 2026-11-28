@@ -32,6 +32,10 @@
 // page). It imports nothing, so the worker can bundle it.
 
 export const MAINTAINERS = ["yetone"];
+export const MAGPIE = "yetone/magpie";
+// the community plugins' repository: its commits that reached a version on
+// npm are credited too, each under "<package folder>@<version>"
+export const PLUGINS = "magpie-community/plugins";
 // agents and bots that author or co-author commits
 const BOT = /\[bot\]$|^(claude( code| opus.*| sonnet.*| haiku.*)?|amp|codex|copilot|github copilot|cursor( agent)?|devin( ai)?|gemini|opencode|droid|factory-droid|dependabot|github-actions|renovate|jev)$/i;
 // agents and machine accounts that co-author commits: "Instinct Agent
@@ -225,20 +229,21 @@ export function parseBody(text) {
 }
 
 // The credits in one subject: names (sure, or to be taken only if seen
-// elsewhere) and the issues or PRs its brackets name.
-export function parse(subject) {
+// elsewhere) and the issues or PRs its brackets name. repo is the one a bare
+// "#N" is in: the commit's own (magpie-community/plugins for a plugin's).
+export function parse(subject, repo = MAGPIE) {
   // older subjects carry their whole body after " — "; credits come before
   const [head, ...rest] = String(subject).split(" — ");
   const out = { names: [], refs: [] };
-  for (const m of head.matchAll(/\(([^()]*)\)/g)) if (!quoted(head, m)) group(m[1], out);
+  for (const m of head.matchAll(/\(([^()]*)\)/g)) if (!quoted(head, m)) group(m[1], out, repo);
   // but a bracket there that says who reported it is one: "(reported by
   // @duanckham on X)", "(spotted by @hezhizhen in #103)"
   const tail = rest.join(" — ");
-  for (const m of tail.matchAll(/\(((?:reported|requested|suggested|asked|spotted)\s+by\s+@[^()]*)\)/gi)) if (!quoted(tail, m)) group(m[1], out);
+  for (const m of tail.matchAll(/\(((?:reported|requested|suggested|asked|spotted)\s+by\s+@[^()]*)\)/gi)) if (!quoted(tail, m)) group(m[1], out, repo);
   return out;
 }
 
-function group(text, out) {
+function group(text, out, home = MAGPIE) {
   const bare = [];
   let parts = 0;
   for (let piece of text.split(/;\s*/)) {
@@ -261,8 +266,8 @@ function group(text, out) {
       if (by) { out.names.push({ name: by[1], via: atVia || "GitHub", sure: true }); context = true; }
       // "#12", "plugins#12", "plugins #12", "magpie-community/plugins#12"
       p = p.replace(/(?:\b(plugins)\s+|([\w.-]+\/)?([\w.-]+))?#(\d+)\b/g, (_, spaced, owner, repo, n) => {
-        const r = spaced || (!repo ? "yetone/magpie" : `${owner || ""}${repo}`);
-        const known = { "yetone/magpie": "yetone/magpie", magpie: "yetone/magpie", plugins: "magpie-community/plugins", "magpie-community/plugins": "magpie-community/plugins" }[r];
+        const r = spaced || (!repo ? home : `${owner || ""}${repo}`);
+        const known = { [MAGPIE]: MAGPIE, magpie: MAGPIE, plugins: PLUGINS, [PLUGINS]: PLUGINS }[r];
         if (known) out.refs.push({ repo: known, n: +n });
         context = true;
         return " ";
@@ -327,7 +332,7 @@ export function credit(commits, { issueAuthors = {}, exclude = [], xAccounts = {
   const ex = new Set([...exclude].map((s) => lower(String(s).trim())).filter(Boolean));
   const onX = xLogins(xAccounts);
   const parsed = commits.map((c) => {
-    const p = parse(c.subject);
+    const p = parse(c.subject, c.repo || MAGPIE);
     p.names.push(...parseBody(String(c.subject).split(" — ").slice(1).join(" — ") + "\n\n" + (c.body || "")));
     return p;
   });
@@ -453,6 +458,26 @@ const SHOWN = 3;
 const PART = 40;
 const RELEASE = (v) => `https://github.com/yetone/magpie-releases/releases/tag/v${encodeURIComponent(v)}`;
 
+// A plugin's release, "zcode@0.1.74": its folder under the plugins
+// repository's packages/ and the version npm has; null for magpie's own
+// ("0.1.4970").
+export function pluginRelease(v) {
+  const m = String(v).match(/^([A-Za-z0-9][\w.-]*)@(\d[\w.+-]*)$/);
+  return m ? { p: m[1], v: m[2] } : null;
+}
+const NPM_NAME = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/;
+// what a release's mark shows and links to: magpie's release page, or the
+// plugin's version on npm (plugins: folder → npm package, contributors.json's)
+function mark(v, plugins = {}) {
+  const pr = pluginRelease(v);
+  if (!pr) return { href: RELEASE(v), text: `v${v}` };
+  const npm = Object.hasOwn(plugins, pr.p) && NPM_NAME.test(plugins[pr.p]) ? plugins[pr.p] : "";
+  const href = npm
+    ? `https://www.npmjs.com/package/${npm}/v/${encodeURIComponent(pr.v)}`
+    : `https://github.com/${PLUGINS}/tree/main/packages/${encodeURIComponent(pr.p)}`;
+  return { href, text: `${pr.p} ${pr.v}` };
+}
+
 // contributors-x.txt: lowercased handle → { sn, pic }, the X accounts
 // checked to be the people credited under those names (pic: the small
 // profile picture's path under pbs.twimg.com/profile_images/, "" for X's
@@ -516,7 +541,8 @@ export function renderWall(data, lang) {
   if (!people.length) return `<p>${esc(w.none)}</p>`;
   const xOf = new Map(Object.entries((data && data.xAccounts) || {}).map(([l, h]) => [lower(l), handlesOf(h)]));
   const ids = anchors(people);
-  const line = (r) => r.what.map((t) => `<li><a href="${RELEASE(r.v)}"><code>v${esc(r.v)}</code></a> ${esc(t)}</li>`).join("");
+  const plugins = (data && data.plugins) || {};
+  const line = (r) => { const k = mark(r.v, plugins); return r.what.map((t) => `<li><a href="${esc(k.href)}"><code>${esc(k.text)}</code></a> ${esc(t)}</li>`).join(""); };
   const rows = people.map((p, i) => {
     const href = p.github ? `https://github.com/${encodeURIComponent(p.github)}` : p.x ? `https://x.com/${encodeURIComponent(p.x)}` : "";
     const name = href ? `<a href="${href}">${esc(p.name)}</a>` : esc(p.name);
@@ -564,8 +590,27 @@ export function newer(a, b) {
   return false;
 }
 
+// Map or object of release → its time, as a lookup
+function timer(times) {
+  if (times instanceof Map) return (v) => times.get(v);
+  return (v) => (times && Object.hasOwn(times, v) ? times[v] : undefined);
+}
+
+// a plugin commit's subject without the "zcode 0.1.74: " its release's mark
+// already shows
+function plainWhat(text, v) {
+  const pr = pluginRelease(v);
+  if (!pr) return text;
+  const m = text.match(/^([\w.-]+)(?:\s+v?\d+(?:\.\d+)+)?:\s+(?=\S)/);
+  return m && lower(m[1]) === lower(pr.p) ? text.slice(m[0].length) : text;
+}
+
 // contributors.json's people from released commits ({ ...commit, v }):
-// each person with the versions their reports led to, newest first.
+// each person with the versions their reports led to, newest first. A
+// plugin's commit ({ repo: PLUGINS, v: "zcode@0.1.74" }) counts the same
+// way. opts.times (release → Unix seconds: a magpie tag's, a plugin
+// version's npm publish) puts magpie's and the plugins' releases in one
+// order; without it, versions are compared.
 // opts.checkedX (checkedX()): an X credit whose name is a checked handle
 // gets that account (x, and xpic for its picture); any other X name stays
 // a name.
@@ -580,39 +625,60 @@ export function wall(commits, opts = {}) {
       for (const v of p.via) if (!e.via.includes(v)) e.via.push(v);
       if (p.github) e.github = p.github;
       if (!e.byV.has(c.v)) e.byV.set(c.v, []);
-      const t = what(c.subject);
+      const t = plainWhat(what(c.subject), c.v);
       if (t && !e.byV.get(c.v).includes(t)) e.byV.get(c.v).push(t);
     }
   });
+  const at = timer(opts.times);
+  const later = (a, b) => {
+    const x = at(a), y = at(b);
+    if (Number.isFinite(x) && Number.isFinite(y) && x !== y) return x > y;
+    return newer(a, b);
+  };
   const people = [...all.values()].map((e) => {
-    const releases = [...e.byV.entries()].map(([v, w]) => ({ v, what: w })).sort((a, b) => (newer(a.v, b.v) ? -1 : newer(b.v, a.v) ? 1 : 0));
+    const releases = [...e.byV.entries()].map(([v, w]) => ({ v, what: w })).sort((a, b) => (later(a.v, b.v) ? -1 : later(b.v, a.v) ? 1 : 0));
     const out = { name: e.name, via: e.via, releases };
     if (e.github) out.github = e.github;
     const x = !e.github && e.via.includes("X") && opts.checkedX && opts.checkedX.get(lower(e.name.replace(/^@/, "")));
     if (x) { out.x = x.sn; if (x.pic) out.xpic = x.pic; }
     return out;
   });
-  people.sort((a, b) => (newer(a.releases[0].v, b.releases[0].v) ? -1 : newer(b.releases[0].v, a.releases[0].v) ? 1 : lower(a.name) < lower(b.name) ? -1 : 1));
+  people.sort((a, b) => (later(a.releases[0].v, b.releases[0].v) ? -1 : later(b.releases[0].v, a.releases[0].v) ? 1 : lower(a.name) < lower(b.name) ? -1 : 1));
   return people;
 }
 
 // The replay above the table: when each person was credited, by release.
-// people: contributors.json's; tags: [{ v, t }] with t in Unix seconds.
+// people: contributors.json's; tags: [{ v, t }] with t in Unix seconds, one
+// for each magpie release. A plugin's release isn't one of them: times
+// (release → Unix seconds) places it at the first magpie release at or after
+// its publish, the last one when none is, and a release with no time is left
+// out.
 // Gives { t0, v: versions oldest first, t: each one's minutes after t0,
 // p: [[name, picture URL, row id]] in people's order, e: [[version index, person
 // index, …]] for the versions that credit someone }.
-export function replay(people, tags) {
+export function replay(people, tags, times) {
   const seen = new Set();
   const list = [...tags].filter((g) => g && g.v && Number.isFinite(g.t) && !seen.has(g.v) && seen.add(g.v))
     .sort((a, b) => a.t - b.t || (newer(a.v, b.v) ? 1 : newer(b.v, a.v) ? -1 : 0));
   const t0 = list.length ? list[0].t : 0;
   const at = new Map(list.map((g, i) => [g.v, i]));
   const ids = anchors(people);
+  const timeOf = timer(times);
+  // the first release at or after t
+  const after = (t) => {
+    if (!list.length || !Number.isFinite(t)) return null;
+    let lo = 0, hi = list.length - 1;
+    if (t > list[hi].t) return hi;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid].t >= t) hi = mid; else lo = mid + 1; }
+    return lo;
+  };
   const by = new Map();
   people.forEach((p, i) => {
+    const mine = new Set();
     for (const r of p.releases || []) {
-      const vi = at.get(r.v);
-      if (vi == null) continue;
+      const vi = at.has(r.v) ? at.get(r.v) : pluginRelease(r.v) ? after(timeOf(r.v)) : null;
+      if (vi == null || mine.has(vi)) continue;
+      mine.add(vi);
       if (!by.has(vi)) by.set(vi, []);
       by.get(vi).push(i);
     }
