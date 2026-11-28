@@ -907,6 +907,9 @@ func dialHub(ctx context.Context, s *Server, changed func()) (hubConn, error) {
 		return nil, err
 	}
 	m, err := c.ask(ctx, "initialize", initParams())
+	if v := versionAsked(m, mcpProtocol); err == nil && v != "" {
+		m, err = c.ask(ctx, "initialize", initParamsAt(v))
+	}
 	if err == nil && m.Error != nil {
 		err = healthErr(*initError(m))
 	}

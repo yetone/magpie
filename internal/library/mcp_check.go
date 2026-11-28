@@ -319,8 +319,9 @@ type rpcMsg struct {
 	Params json.RawMessage `json:"params"`
 	Result json.RawMessage `json:"result"`
 	Error  *struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
+		Code    int             `json:"code"`
+		Message string          `json:"message"`
+		Data    json.RawMessage `json:"data"`
 	} `json:"error"`
 }
 
@@ -335,14 +336,69 @@ func request(id int, method string, params any) []byte {
 	return b
 }
 
-func initializeReq() []byte { return request(1, "initialize", initParams()) }
+func initializeReq() []byte { return initializeAt(1, mcpProtocol) }
 
-func initParams() map[string]any {
+// initializeAt is initialize under id, asking for protocol version v.
+func initializeAt(id int, v string) []byte { return request(id, "initialize", initParamsAt(v)) }
+
+func initParams() map[string]any { return initParamsAt(mcpProtocol) }
+
+func initParamsAt(v string) map[string]any {
 	return map[string]any{
-		"protocolVersion": mcpProtocol,
+		"protocolVersion": v,
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "magpie", "version": gateway.Version},
 	}
+}
+
+// initAgainID is the id initialize is asked again under, at the version
+// the server named (versionAsked): an id is used once in a session.
+const initAgainID = 1000
+
+// versionAsked is the protocol version to ask initialize again with, when
+// the server refused the one sent: the spec's error for that ("Unsupported
+// protocol version") names the versions it supports in data.supported.
+// Affinity's server (cpp-mcp) takes its one version alone, 2025-11-25,
+// and refuses every other with that error (Vokeeeeee on X). The newest
+// version named, other than sent; "" when the error names none.
+func versionAsked(m *rpcMsg, sent string) string {
+	if m == nil || m.Error == nil || len(m.Error.Data) == 0 {
+		return ""
+	}
+	var d struct {
+		Supported json.RawMessage `json:"supported"`
+	}
+	if json.Unmarshal(m.Error.Data, &d) != nil {
+		return ""
+	}
+	var named []string
+	if json.Unmarshal(d.Supported, &named) != nil {
+		var one string
+		if json.Unmarshal(d.Supported, &one) != nil {
+			return ""
+		}
+		named = []string{one}
+	}
+	best := ""
+	for _, v := range named {
+		// a version is a date, YYYY-MM-DD, so the newest sorts last
+		if isProtocolVersion(v) && v != sent && v > best {
+			best = v
+		}
+	}
+	return best
+}
+
+func isProtocolVersion(v string) bool {
+	if len(v) != 10 || v[4] != '-' || v[7] != '-' {
+		return false
+	}
+	for i, c := range v {
+		if i != 4 && i != 7 && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 var initializedNote = []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
@@ -806,6 +862,14 @@ func checkStdioIn(ctx context.Context, s *Server, distro, dir string) ServerHeal
 	if h != nil {
 		return *h
 	}
+	if v := versionAsked(m, mcpProtocol); v != "" {
+		if err := send(initializeAt(initAgainID, v)); err != nil {
+			return failed("start", err.Error())
+		}
+		if m, h = await(initAgainID); h != nil {
+			return *h
+		}
+	}
 	if h := initError(m); h != nil {
 		return *h
 	}
@@ -1012,6 +1076,13 @@ func (c *httpSession) initialize(ctx context.Context, init []byte) *ServerHealth
 	if h != nil {
 		return h
 	}
+	asked := mcpProtocol
+	if v := versionAsked(m, mcpProtocol); v != "" {
+		if m, h = c.call(ctx, initAgainID, initializeAt(initAgainID, v)); h != nil {
+			return h
+		}
+		asked = v
+	}
 	if h := initError(m); h != nil {
 		return h
 	}
@@ -1020,6 +1091,7 @@ func (c *httpSession) initialize(ctx context.Context, init []byte) *ServerHealth
 	}
 	c.mu.Lock()
 	c.init = m.Result
+	c.version = asked
 	if json.Unmarshal(m.Result, &r) == nil && r.ProtocolVersion != "" {
 		c.version = r.ProtocolVersion
 	}
@@ -1258,6 +1330,14 @@ func checkSSE(ctx context.Context, s *Server) ServerHealth {
 	m, h := await(1)
 	if h != nil {
 		return *h
+	}
+	if v := versionAsked(m, mcpProtocol); v != "" {
+		if h := post(initializeAt(initAgainID, v)); h != nil {
+			return *h
+		}
+		if m, h = await(initAgainID); h != nil {
+			return *h
+		}
 	}
 	if h := initError(m); h != nil {
 		return *h

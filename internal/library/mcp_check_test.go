@@ -101,6 +101,8 @@ func TestFakeMCPServer(t *testing.T) {
 				Name      string          `json:"name"`
 				Arguments json.RawMessage `json:"arguments"`
 				Meta      json.RawMessage `json:"_meta"`
+				// initialize's
+				ProtocolVersion string `json:"protocolVersion"`
 			} `json:"params"`
 		}
 		json.Unmarshal(sc.Bytes(), &m)
@@ -156,6 +158,16 @@ func TestFakeMCPServer(t *testing.T) {
 			text, _ := json.Marshal(said)
 			fmt.Printf(`{"jsonrpc":"2.0","id":%d,"result":{"content":[{"type":"text","text":%s}]}}`+"\n", *m.ID, text)
 		case "initialize":
+			// MAGPIE_FAKE_MCP_ONLY: the one version it takes, refusing the
+			// others as cpp-mcp does (mcp_version_test.go)
+			if only := os.Getenv("MAGPIE_FAKE_MCP_ONLY"); only != "" {
+				if m.Params.ProtocolVersion != only {
+					fmt.Printf(`{"jsonrpc":"2.0","id":%d,"error":{"code":-32602,"message":"Unsupported protocol version","data":{"supported":[%q],"requested":%q}}}`+"\n", *m.ID, only, m.Params.ProtocolVersion)
+					continue
+				}
+				fmt.Printf(`{"jsonrpc":"2.0","id":%d,"result":{"protocolVersion":%q,"capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"1"}}}`+"\n", *m.ID, only)
+				continue
+			}
 			fmt.Printf(`{"jsonrpc":"2.0","id":%d,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"1"}}}`+"\n", *m.ID)
 		case "notifications/initialized":
 			os.WriteFile(os.Getenv("MAGPIE_FAKE_MCP_INIT"), []byte("yes"), 0o644)
