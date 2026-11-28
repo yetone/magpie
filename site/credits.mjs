@@ -450,6 +450,7 @@ const WORDS = {
   ja: { name: "誰が", led: "そこから生まれた変更（新しい順）", more: (n) => `ほか ${n} 件`, none: "一覧は今は表示できません。", find: "名前で探す", one: "1 人", many: "{n} 人" },
 };
 const SHOWN = 3;
+const PART = 40;
 const RELEASE = (v) => `https://github.com/yetone/magpie-releases/releases/tag/v${encodeURIComponent(v)}`;
 
 // contributors-x.txt: lowercased handle → { sn, pic }, the X accounts
@@ -522,6 +523,9 @@ export function renderWall(data, lang) {
     const via = (p.via || []).length ? `<br><span class="cw-via">${p.via.map(esc).join(" · ")}</span>` : "";
     const also = [];
     for (const k of [p.github, ...((p.github && xOf.get(lower(p.github))) || [])]) if (k && lower(k) !== lower(p.name) && !also.includes(lower(k))) also.push(lower(k));
+    // not the replay's size (replay() below): a lazy <img> whose URL the
+    // replay fetches takes the picture in at once, and each one lays the
+    // whole table out again while the replay plays
     const src = avatar(p, 48);
     const pic = src
       ? `<img class="cw-av" src="${esc(src)}" alt="" width="24" height="24" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-i="${esc(initial(p.name))}">`
@@ -532,9 +536,25 @@ export function renderWall(data, lang) {
     const rest = items.slice(SHOWN);
     const more = rest.length ? `<details><summary>${esc(w.more(rest.length))}</summary><ul>${rest.map(line).join("")}</ul></details>` : "";
     return `<tr id="${esc(ids[i])}"${also.length ? ` data-k="${esc(also.join(" "))}"` : ""}><td><div class="cw-who">${pic}<div><b>${name}</b>${via}</div></div></td><td><ul>${head}</ul>${more}</td></tr>`;
-  }).join("");
+  });
+  // The rows go in parts of PART, each its own table (same columns, fixed
+  // layout) under content-visibility: auto, so the browser lays out, paints
+  // and watches (each lazy picture) only the parts near the screen. One
+  // table of ~47,000 elements was walked on every frame the replay above it
+  // drew, which held it at half speed. A part's size until it is drawn is
+  // guessed from its rows (--h, at a desktop's width; docs.css).
+  const parts = [];
+  for (let i = 0; i < rows.length; i += PART) {
+    let h = 0;
+    for (const p of people.slice(i, i + PART)) {
+      const n = (p.releases || []).reduce((s, r) => s + (r.what || []).length, 0);
+      h += 24 + Math.max(40, Math.min(n, SHOWN) * 46 + (n > SHOWN ? 22 : 0));
+    }
+    const head = i ? "" : `<thead><tr><th>${esc(w.name)}</th><th>${esc(w.led)}</th></tr></thead>`;
+    parts.push(`<div class="cw-part" style="--h:${h}px"><table class="cw"><colgroup><col class="cw-c1"><col></colgroup>${head}<tbody>${rows.slice(i, i + PART).join("")}</tbody></table></div>`);
+  }
   const find = `<div class="cw-find" hidden data-one="${esc(w.one)}" data-many="${esc(w.many)}"><input id="cw-q" type="search" placeholder="${esc(w.find)}" aria-label="${esc(w.find)}" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="cw-n" aria-live="polite"></span></div>`;
-  return `${find}<div class="table-wrap"><table class="cw"><thead><tr><th>${esc(w.name)}</th><th>${esc(w.led)}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `${find}<div class="table-wrap cw-wrap" data-no-record>${parts.join("")}</div>`;
 }
 
 const vnum = (v) => String(v).split(".").map((x) => parseInt(x, 10) || 0);

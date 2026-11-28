@@ -159,8 +159,16 @@ pre .s { color: var(--ink2); }
 /* the contributors page's list (credits.mjs renderWall) */
 /* fixed columns: one long word in a release's line can't widen the table past a phone */
 .cw { table-layout: fixed; }
-.cw th:first-child { width: 13em; }
-@media (max-width: 600px) { .cw th:first-child { width: 9.5em; } }
+.cw .cw-c1 { width: 13em; }
+@media (max-width: 600px) { .cw .cw-c1 { width: 9.5em; } }
+/* credits.mjs renderWall: parts drawn only near the screen; the finder
+   draws one it cuts down (.cw-drawn, wall.js), a part with no row found goes */
+.cw-part { content-visibility: auto; contain-intrinsic-size: auto var(--h, 4000px); }
+@media (max-width: 600px) { .cw-part { contain-intrinsic-size: auto calc(var(--h, 4000px) * 1.9); } }
+.cw-part.cw-drawn { content-visibility: visible; }
+.cw-part[hidden] { display: none; }
+.cw-part .cw tr:last-child td { border-bottom: 1px solid var(--line); }
+.cw-part:last-child .cw tr:last-child td, .cw-part .cw tr.cw-last td { border-bottom: 0; }
 .cw td, .cw td:first-child { white-space: normal; overflow-wrap: anywhere; }
 .cw ul { margin: 0; padding: 0; list-style: none; }
 .cw li { margin: 0 0 4px; }
@@ -174,7 +182,6 @@ pre .s { color: var(--ink2); }
 .cw-find input::-webkit-search-cancel-button { display: none; }
 @media (max-width: 600px) { .cw-find input { font-size: 16px; max-width: none; } }
 .cw-n { color: var(--ink3); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.cw tr.cw-last td { border-bottom: 0; }
 /* the row a link lands on */
 .cw tr:target > td { background: var(--bg2); }
 .cw-who { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
@@ -185,7 +192,9 @@ img.cw-av { box-shadow: 0 0 0 1px var(--line); }
 
 /* the replay above it (contributors-replay.js) */
 .replay { border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin: 0 0 28px; overflow: hidden; }
-.rp-stage { position: relative; height: 400px; touch-action: pan-y; }
+/* strict: what changes in it each frame (the date, the count, the names
+   arriving) is laid out on its own, never with the page's long table */
+.rp-stage { position: relative; height: 400px; touch-action: pan-y; contain: strict; }
 .rp-stage.hit { cursor: pointer; }
 .rp-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .rp-bird { position: absolute; left: 0; top: 0; width: 40px; height: 40px; transform-origin: 0 0; }

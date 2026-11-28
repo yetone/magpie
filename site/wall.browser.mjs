@@ -88,6 +88,10 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
         const shown = await page.locator("table.cw tbody tr:visible").evaluateAll((rs) => rs.map((r) => r.id));
         assert.deepEqual(shown, [ROW]);
         assert.equal(await page.locator(".cw-n").textContent(), one);
+        // the list is in parts (renderWall): only the part holding the row
+        // shows, and the last row shown has no rule under it
+        assert.equal(await page.locator(".cw-part:visible").count(), 1);
+        assert.equal(await page.$eval(`#${ROW} > td`, (td) => getComputedStyle(td).borderBottomWidth), "0px");
         // any case, a leading @
         await input.fill("@LIJIHO96940561");
         assert.deepEqual(await page.locator("table.cw tbody tr:visible").evaluateAll((rs) => rs.map((r) => r.id)), [ROW]);
@@ -95,12 +99,15 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
         if (shots) await page.screenshot({ path: `${shots}/${ename}-${width}-${lang}-find.png` });
         // nobody: the table goes, the count says 0
         await input.fill("zzqqxx-nobody");
-        assert.equal(await page.locator("table.cw").isVisible(), false);
+        assert.equal(await page.locator(".cw-wrap").isVisible(), false);
         assert.match(await page.locator(".cw-n").textContent(), /^0\b/);
         // Escape gives the whole list back
         await page.keyboard.press("Escape");
         assert.equal(await input.inputValue(), "");
         assert.equal(await page.locator("table.cw tbody tr:visible").count(), all);
+        // a part's last row, not the list's, keeps its rule
+        assert.equal(await page.$eval(".cw-part:first-child tbody tr:last-child > td", (td) => getComputedStyle(td).borderBottomWidth), "1px");
+        assert.equal(await page.$eval(".cw-part:last-child tbody tr:last-child > td", (td) => getComputedStyle(td).borderBottomWidth), "0px");
 
         // a link to a row the filter hid brings the list back and lands on it
         await input.fill("zzqqxx-nobody");

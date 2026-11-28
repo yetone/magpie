@@ -697,7 +697,10 @@ test("contributors: each language's page gets its own table, and keeps its line 
     const get = async (path) => (await worker.fetch(new Request(`https://usemagpie.ai${path}`, { headers: { Cookie: "lang=en" } }), env, ctx)).text();
     for (const [path, lang, head] of [["/docs/contributors", "en", "What came of it"], ["/docs/zh/contributors", "zh", "带来的改动"], ["/docs/ja/contributors.html", "ja", "そこから生まれた"]]) {
       const html = await get(path);
-      assert.match(html, /<div id="wall"><div class="cw-find" hidden [^>]*><input id="cw-q" [^>]*><span class="cw-n" aria-live="polite"><\/span><\/div><div class="table-wrap"><table class="cw">/, path);
+      assert.match(html, /<div id="wall"><div class="cw-find" hidden [^>]*><input id="cw-q" [^>]*><span class="cw-n" aria-live="polite"><\/span><\/div><div class="table-wrap cw-wrap" data-no-record><div class="cw-part" style="--h:\d+px"><table class="cw"><colgroup><col class="cw-c1"><col><\/colgroup><thead>/, path);
+      // the table and the replay stay out of session recordings
+      assert.ok(html.includes('<div id="replay" class="replay" data-no-record hidden>'), path);
+      assert.ok(html.includes('blockSelector:"[data-no-record]"'), path);
       // the finder's script, and the row a link lands on
       assert.ok(html.includes('<script src="/wall.js"></script>'), `${path} loads the finder`);
       assert.ok(html.includes('<tr id="packinggoodsllc_07668">'), path);

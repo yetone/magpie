@@ -324,6 +324,10 @@ test("an X name links to its account only when contributors-x.txt has it", () =>
   const html = renderWall({ people }, "en");
   assert.match(html, /<a href="https:\/\/x\.com\/qikamatata">qikamatata<\/a>/);
   assert.match(html, /src="https:\/\/pbs\.twimg\.com\/profile_images\/2048404033933905920\/AmUEXX_C_normal\.jpg"[^>]*referrerpolicy="no-referrer"/);
+  // never the replay's picture: each the replay fetched would lay the table out again
+  const rp = replay(people, []);
+  assert.ok(rp.p.some(([, url]) => url));
+  for (const [, url] of rp.p) if (url) assert.ok(!html.includes(`src="${url}"`), url);
   assert.doesNotMatch(html, /x\.com\/Chen/);
   // no picture: the name's first letter
   assert.match(html, /<span class="cw-av" aria-hidden="true">C<\/span><div><b>Chen<\/b>/);

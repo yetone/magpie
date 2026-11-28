@@ -158,24 +158,45 @@
     const fit = (e) => Math.min((w / 2 - 12) / ((e + .7) * ax), (h / 2 - 22) / ((e + .7) * ay));
 
     // --- faces ---
+    // Pictures are asked for in the order the history needs them, a few at
+    // a time, and only once the page has loaded and the replay is near the
+    // screen: until then they would hold up the page's own load and its
+    // table's pictures. Each is decoded off the main thread before it is
+    // drawn.
     const faces = new Array(N); // a loaded face: { img, sprite, at }
+    const queue = [];
+    let qi = 0, inFlight = 0, open = false;
+    const FLIGHTS = 16;
+    const pump = () => {
+      while (open && inFlight < FLIGHTS && qi < queue.length) {
+        const i = queue[qi++], img = new Image();
+        inFlight++;
+        img.referrerPolicy = "no-referrer";
+        img.decoding = "async";
+        const done = () => { inFlight--; pump(); };
+        img.onload = () => {
+          (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => {
+            const sp = document.createElement("canvas");
+            sp.width = sp.height = SPRITE;
+            const g = sp.getContext("2d");
+            g.beginPath(); g.arc(SPRITE / 2, SPRITE / 2, SPRITE / 2, 0, TAU); g.clip();
+            g.drawImage(img, 0, 0, SPRITE, SPRITE);
+            faces[i] = { img, sprite: sp, at: slot[i] >= 0 ? performance.now() : 0 };
+            if (kept[i] === 1) fading.push(i);
+            wake();
+            done();
+          });
+        };
+        img.onerror = done;
+        img.src = d.p[i][1];
+      }
+      if (qi > 512 && qi === queue.length) { queue.length = 0; qi = 0; }
+    };
     const load = (i) => {
-      const url = d.p[i][1];
-      if (!url || faces[i] !== undefined) return;
+      if (!d.p[i][1] || faces[i] !== undefined) return;
       faces[i] = null;
-      const img = new Image();
-      img.referrerPolicy = "no-referrer";
-      img.decoding = "async";
-      img.onload = () => {
-        const sp = document.createElement("canvas");
-        sp.width = sp.height = SPRITE;
-        const g = sp.getContext("2d");
-        g.beginPath(); g.arc(SPRITE / 2, SPRITE / 2, SPRITE / 2, 0, TAU); g.clip();
-        g.drawImage(img, 0, 0, SPRITE, SPRITE);
-        faces[i] = { img, sprite: sp, at: slot[i] >= 0 ? performance.now() : 0 };
-        wake();
-      };
-      img.src = url;
+      queue.push(i);
+      pump();
     };
     const initial = (name) => ((String(name).match(/[\p{L}\p{N}]/u) || ["?"])[0]).toUpperCase();
 
@@ -205,7 +226,7 @@
         if (slot[i] < 0) {
           slot[i] = placed++; order.push(i); born[i] = quiet ? -1e9 : now; load(i);
           if (!quiet && now - feedAt > 140) { feedAt = now; arrive(d.p[i][0]); }
-        } else if (!quiet) lit[i] = now;
+        } else if (!quiet) { if (now - lit[i] >= PULSE) litNow.push(i); lit[i] = now; }
         if (!quiet) { if (v !== gv) { tie(); gv = v; } group.push(i); }
       }
       if (!quiet) tie();
@@ -251,19 +272,28 @@
     };
 
     // --- drawing ---
+    // what the page shows in words is written only when it changes: the
+    // page's own scripts and anything watching it see one change a day of
+    // history, not one a frame
     let shown = { date: "", ver: "", count: "" };
     const hud = () => {
       const date = day.format(new Date((d.t0 + T * 60) * 1000));
       const ver = vi >= 0 ? "v" + d.v[vi] : "";
       const count = W.count(num.format(placed), num.format(vi + 1));
+      if (date !== shown.date || ver !== shown.ver) {
+        hist.setAttribute("aria-valuenow", String(Math.round(T)));
+        hist.setAttribute("aria-valuetext", date + (ver ? " · " + ver : ""));
+      }
       if (date !== shown.date) elDate.textContent = shown.date = date;
       if (ver !== shown.ver) elVer.textContent = shown.ver = ver;
       if (count !== shown.count) elCount.innerHTML = shown.count = count;
-      hist.setAttribute("aria-valuenow", String(Math.round(T)));
-      hist.setAttribute("aria-valuetext", date + (ver ? " · " + ver : ""));
     };
+    let histAt = -1;
     const drawHist = () => {
       const hw = hv.width / dpr, hh = hv.height / dpr;
+      const x = Math.round((T / END) * hw * dpr) / dpr;
+      if (x === histAt) return;
+      histAt = x;
       hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       hctx.clearRect(0, 0, hw, hh);
       const bw = hw / days, now = T / 1440;
@@ -272,39 +302,40 @@
         hctx.fillStyle = k < now ? C.ink3 : C.line;
         hctx.fillRect(k * bw + bw * .12, hh - bh, Math.max(1, bw * .76), bh);
       }
-      const x = Math.round((T / END) * hw);
       hctx.fillStyle = C.ink;
       hctx.fillRect(Math.min(hw - 1.5, x), 0, 1.5, hh);
     };
-    const face = (i, x, y, r) => {
+    // a face as it is now: its picture, fading in over its place if it came
+    // after the place was shown, or the empty place with its letter
+    const fadeOf = (f, now) => (f && f.at ? (now - f.at) / 180 : 1);
+    const face = (g, i, x, y, r, now) => {
       const f = faces[i];
-      const fade = f && f.at ? (performance.now() - f.at) / 180 : 1;
+      const fade = fadeOf(f, now);
       if (f && fade >= 1) {
         if (r * 2 * dpr > SPRITE) {
-          ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.clip();
-          ctx.drawImage(f.img, x - r, y - r, r * 2, r * 2);
-          ctx.restore();
-        } else ctx.drawImage(f.sprite, x - r, y - r, r * 2, r * 2);
+          g.save(); g.beginPath(); g.arc(x, y, r, 0, TAU); g.clip();
+          g.drawImage(f.img, x - r, y - r, r * 2, r * 2);
+          g.restore();
+        } else g.drawImage(f.sprite, x - r, y - r, r * 2, r * 2);
         return;
       }
       if (f) {
-        // came in after its place was shown: over the empty place
-        const a = ctx.globalAlpha;
-        ctx.fillStyle = C.code; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-        ctx.globalAlpha = a * out(Math.max(0, fade));
-        ctx.drawImage(f.sprite, x - r, y - r, r * 2, r * 2);
-        ctx.globalAlpha = a;
+        const a = g.globalAlpha;
+        g.fillStyle = C.code; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+        g.globalAlpha = a * out(Math.max(0, fade));
+        g.drawImage(f.sprite, x - r, y - r, r * 2, r * 2);
+        g.globalAlpha = a;
         busy = true;
         return;
       }
-      ctx.fillStyle = C.code;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-      if (r >= 3) { ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.stroke(); }
+      g.fillStyle = C.code;
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+      if (r >= 3) { g.strokeStyle = C.line; g.lineWidth = 1; g.stroke(); }
       if (r >= 9) {
-        ctx.fillStyle = C.ink3;
-        ctx.font = `600 ${Math.round(r * .9)}px system-ui, sans-serif`;
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(initial(d.p[i][0]), x, y + r * .05);
+        g.fillStyle = C.ink3;
+        g.font = `600 ${Math.round(r * .9)}px system-ui, sans-serif`;
+        g.textAlign = "center"; g.textBaseline = "middle";
+        g.fillText(initial(d.p[i][0]), x, y + r * .05);
       }
     };
     // where a newcomer is q of the way along its flight from the bird: a
@@ -313,7 +344,52 @@
       const ex = c.x * s, ey = c.y * s, bend = (i & 1 ? .2 : -.2) * Math.sin(q * Math.PI);
       return [cx + ex * q - ey * bend, cy + ey * q + ex * bend];
     };
-    let busy = false;
+
+    // Everyone who has settled in their place is drawn once into a layer,
+    // at the camera's scale then (s0), and the layer is drawn each frame
+    // scaled by s / s0 around the middle: every place and size is in
+    // proportion to the scale, so that is the same picture. Only what
+    // moves is drawn again each frame: newcomers, the faces a ring or a wave
+    // is passing, the lit ones and pictures fading in. The layer is drawn
+    // again when the camera has moved more than SNAP from s0.
+    const SNAP = .02, PAD = .08;
+    const layer = document.createElement("canvas"), lg = layer.getContext("2d");
+    let s0 = 0, lw = 0, lh = 0, upTo = 0;
+    const kept = new Uint8Array(N); // 0 not in the layer, 1 as its empty place, 2 as its picture
+    let fresh = [], fading = [], glowing = [], litNow = [];
+    const settle = () => (still.matches ? POP : FLY);
+    const keep = (n, now) => {
+      const i = order[n], c = cells[n], r = s0 * .44;
+      const x = cx + c.x * s0, y = cy + c.y * s0;
+      const f = faces[i], whole = !!f && fadeOf(f, now) >= 1;
+      if (x < -lw * PAD - r || y < -lh * PAD - r || x > lw * (1 + PAD) + r || y > lh * (1 + PAD) + r) { kept[i] = whole ? 2 : 1; return; }
+      if (kept[i] === 1) {
+        // the empty place goes, so its edge doesn't show around the picture
+        lg.globalCompositeOperation = "destination-out";
+        lg.beginPath(); lg.arc(x, y, r + .75, 0, TAU); lg.fill();
+        lg.globalCompositeOperation = "source-over";
+      }
+      lg.globalAlpha = 1;
+      face(lg, i, x, y, r, whole ? now : -1); // not whole yet: its empty place
+      kept[i] = whole ? 2 : 1;
+      if (f && !whole && !fading.includes(i)) fading.push(i);
+    };
+    const rebuild = (now) => {
+      s0 = cam; lw = w; lh = h;
+      const lpw = Math.round(w * (1 + 2 * PAD) * dpr), lph = Math.round(h * (1 + 2 * PAD) * dpr);
+      if (layer.width !== lpw || layer.height !== lph) { layer.width = lpw; layer.height = lph; }
+      lg.setTransform(dpr, 0, 0, dpr, w * PAD * dpr, h * PAD * dpr);
+      lg.globalCompositeOperation = "source-over";
+      lg.clearRect(-w * PAD, -h * PAD, w * (1 + 2 * PAD), h * (1 + 2 * PAD));
+      kept.fill(0); fresh = []; fading = [];
+      const S = settle(), M = Math.min(order.length, cells.length);
+      for (upTo = 0; upTo < M; upTo++) if (now - born[order[upTo]] < S) fresh.push(upTo); else keep(upTo, now);
+    };
+    const unkept = () => { s0 = 0; };
+    // the faces whose place is in [e0, e1): cells are nearest the middle first
+    const from = (e, hi) => { let lo = 0; while (lo < hi) { const m = (lo + hi) >> 1; if (cells[m].e < e) lo = m + 1; else hi = m; } return lo; };
+
+    let busy = false, seen = true, mark = new Uint32Array(N), stamp = 0;
     const draw = (now) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
@@ -322,6 +398,7 @@
       const beat = playing && !still.matches && k >= KICK ? Math.pow(Math.max(0, 1 - (pos % 4) / 1.6), 2) : 0;
       const s = cam * (1 + .01 * beat * k), r = cam * .44;
       busy = beat > 0;
+      const M = Math.min(order.length, cells.length);
       const reach = placed ? cells[Math.min(placed, cells.length) - 1].e + 1 : HOLE + 1;
 
       rings = rings.filter((g) => now - g.at < 1100);
@@ -329,41 +406,89 @@
       // how far out each ring is, in places from the middle
       const ringAt = rings.map((g) => { const q = (now - g.at) / 1100; return { q, e: HOLE * .8 + out(q) * reach * 1.15, k: g.k }; });
       waves = waves.filter((v) => now - v.at < v.ms);
+      const waveAt = waves.map((v) => ({ e: out((now - v.at) / v.ms) * (reach + 2), k: v.k }));
       busy = busy || rings.length > 0 || threads.length > 0 || waves.length > 0;
-
-      const flying = [];
-      for (let n = 0; n < order.length && n < cells.length; n++) {
-        const i = order[n], c = cells[n];
-        const age = now - born[i];
-        if (age < FLY && !still.matches) { flying.push(n); busy = true; continue; }
-        let x = cx + c.x * s, y = cy + c.y * s, a = 1, rr = r, glow = 0;
-        if (x < -r * 2 || y < -r * 2 || x > w + r * 2 || y > h + r * 2) continue;
-        if (age < POP) { a = out(Math.max(0, age) / POP); busy = true; }
-        for (const v of waves) {
-          const dd = (out((now - v.at) / v.ms) * (reach + 2)) - c.e;
-          if (dd > 0 && dd < 2) glow = Math.max(glow, Math.sin((Math.PI * dd) / 2) * v.k);
-        }
+      const glowOf = (e) => {
+        let glow = 0;
+        for (const v of waveAt) { const dd = v.e - e; if (dd > 0 && dd < 2) glow = Math.max(glow, Math.sin((Math.PI * dd) / 2) * v.k); }
         // a beat's ring lifts the faces it passes, a little
-        for (const g of ringAt) {
-          const dd = g.e - c.e;
-          if (dd > 0 && dd < 1.4) glow = Math.max(glow, Math.sin((Math.PI * dd) / 1.4) * g.k * .4 * (1 - g.q));
+        for (const g of ringAt) { const dd = g.e - e; if (dd > 0 && dd < 1.4) glow = Math.max(glow, Math.sin((Math.PI * dd) / 1.4) * g.k * .4 * (1 - g.q)); }
+        return glow;
+      };
+
+      // the layer: kept up to date, then drawn at this frame's scale
+      if (!s0 || Math.abs(cam / s0 - 1) > SNAP || lw !== w || lh !== h || M < upTo) rebuild(now);
+      const S = settle();
+      if (fresh.length) {
+        const still_ = [];
+        for (const n of fresh) if (n < M && now - born[order[n]] >= S) keep(n, now); else if (n < M) still_.push(n);
+        fresh = still_;
+      }
+      for (; upTo < M; upTo++) if (now - born[order[upTo]] < S) fresh.push(upTo); else keep(upTo, now);
+      if (fading.length) {
+        const left = [];
+        for (const i of fading) {
+          if (slot[i] < 0) continue;
+          if (fadeOf(faces[i], now) >= 1) keep(slot[i], now); else left.push(i);
         }
-        rr *= 1 + .16 * glow;
-        ctx.globalAlpha = a;
-        face(i, x, y, rr);
+        fading = left;
+      }
+      const z = s / s0;
+      ctx.globalAlpha = 1;
+      ctx.drawImage(layer, cx - (cx + w * PAD) * z, cy - (cy + h * PAD) * z, w * (1 + 2 * PAD) * z, h * (1 + 2 * PAD) * z);
+
+      // over it, what moves: first the places a ring or a wave is passing
+      stamp++;
+      glowing = [];
+      const band = (e0, e1) => { for (let n = from(e0, M); n < M && cells[n].e < e1; n++) if (mark[n] !== stamp) { mark[n] = stamp; glowing.push(n); } };
+      for (const v of waveAt) band(v.e - 2, v.e);
+      for (const g of ringAt) band(g.e - 1.4, g.e);
+      const at = (n) => [cx + cells[n].x * s, cy + cells[n].y * s];
+      for (const n of glowing) {
+        const i = order[n];
+        if (now - born[i] < S || kept[i] === 0) continue;
+        const glow = glowOf(cells[n].e);
+        if (glow <= .01) continue;
+        const [x, y] = at(n), rr = r * (1 + .16 * glow);
+        if (x < -rr || y < -rr || x > w + rr || y > h + rr) continue;
+        ctx.globalAlpha = 1;
+        face(ctx, i, x, y, rr, now);
         if (glow > .02) {
           ctx.globalAlpha = glow * .55; ctx.strokeStyle = C.ink; ctx.lineWidth = 1;
           ctx.beginPath(); ctx.arc(x, y, rr + 1.5, 0, TAU); ctx.stroke();
         }
-        const la = now - lit[i];
-        if (la < PULSE) {
-          const q = la / PULSE;
-          ctx.globalAlpha = (1 - q) * .7;
-          ctx.strokeStyle = C.ink;
-          ctx.lineWidth = 1.25;
-          ctx.beginPath(); ctx.arc(x, y, rr + 1.5 + (still.matches ? 0 : out(q) * s * .22), 0, TAU); ctx.stroke();
-          busy = true;
+      }
+      // pictures that came in after their place was shown, fading in
+      for (const i of fading) {
+        const n = slot[i]; if (n < 0 || n >= M || now - born[i] < S) continue;
+        const [x, y] = at(n), rr = r * (1 + .16 * glowOf(cells[n].e));
+        ctx.globalAlpha = 1;
+        face(ctx, i, x, y, rr, now);
+      }
+      // newcomers just landed (reduced motion: fading in where they are)
+      const flying = [];
+      for (const n of fresh) {
+        const i = order[n], age = now - born[i];
+        if (age < FLY && !still.matches) { flying.push(n); busy = true; continue; }
+        const [x, y] = at(n), glow = glowOf(cells[n].e), rr = r * (1 + .16 * glow);
+        busy = true;
+        ctx.globalAlpha = age < POP ? out(Math.max(0, age) / POP) : 1;
+        face(ctx, i, x, y, rr, now);
+        if (glow > .02) {
+          ctx.globalAlpha = glow * .55; ctx.strokeStyle = C.ink; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(x, y, rr + 1.5, 0, TAU); ctx.stroke();
         }
+      }
+      // the ones a release credits again: a ring that opens and goes
+      litNow = litNow.filter((i) => now - lit[i] < PULSE);
+      for (const i of litNow) {
+        const n = slot[i]; if (n < 0 || n >= M || now - born[i] < S) continue;
+        const q = (now - lit[i]) / PULSE, [x, y] = at(n), rr = r * (1 + .16 * glowOf(cells[n].e));
+        ctx.globalAlpha = (1 - q) * .7;
+        ctx.strokeStyle = C.ink;
+        ctx.lineWidth = 1.25;
+        ctx.beginPath(); ctx.arc(x, y, rr + 1.5 + (still.matches ? 0 : out(q) * s * .22), 0, TAU); ctx.stroke();
+        busy = true;
       }
       // over the faces: the beat's rings, and the threads of one release
       ctx.strokeStyle = C.ink;
@@ -397,14 +522,16 @@
         ctx.stroke();
         const [x, y] = flight(i, c, s, q);
         ctx.globalAlpha = Math.min(1, q * 2.5);
-        face(i, x, y, r * (.55 + .45 * q));
+        face(ctx, i, x, y, r * (.55 + .45 * q), now);
       }
       ctx.globalAlpha = 1;
       const bs = Math.max(18, Math.min(40, s * 1.9)) * (1 + .07 * beat);
-      bird.style.transform = `translate(${cx - bs / 2}px, ${cy - bs / 2}px) scale(${bs / 40})`;
+      const tf = `translate(${(cx - bs / 2).toFixed(2)}px, ${(cy - bs / 2).toFixed(2)}px) scale(${(bs / 40).toFixed(4)})`;
+      if (tf !== birdAt) bird.style.transform = birdAt = tf;
       hud();
       drawHist();
     };
+    let birdAt = "";
 
     // --- the clock: the music's when it plays, the page's otherwise ---
     let playing = false, last = 0, raf = 0, sound = false, music = null, actx = null;
@@ -427,8 +554,9 @@
       const want = target();
       if (still.matches) cam = want;
       else cam += (want - cam) * (1 - Math.exp(-dt / 380));
-      draw(now);
-      if (playing || busy || Math.abs(want - cam) > .02) raf = requestAnimationFrame(frame);
+      if (seen) draw(now);
+      else { busy = false; hud(); }
+      if (playing || (seen && (busy || Math.abs(want - cam) > .02))) raf = requestAnimationFrame(frame);
     };
     const wake = () => { if (!raf) { last = 0; raf = requestAnimationFrame(frame); } };
     const play = (on) => {
@@ -544,11 +672,23 @@
     });
 
     // --- size, theme, and starting when it is seen ---
-    new ResizeObserver(() => { layout(); cam = target(); wake(); }).observe(stage);
-    const recolour = () => { colours(); wake(); };
+    new ResizeObserver(() => { layout(); cam = target(); unkept(); histAt = -1; wake(); }).observe(stage);
+    const recolour = () => { colours(); unkept(); histAt = -1; wake(); };
     new MutationObserver(recolour).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
     matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", recolour);
     layout();
+    // pictures once the page has loaded and the replay is within a screen
+    // of being seen; frames only while any of it is on the screen
+    let loaded = document.readyState === "complete", near = false;
+    const gate = () => { if (!open && loaded && near) { open = true; pump(); } };
+    if (!loaded) addEventListener("load", () => { loaded = true; gate(); }, { once: true });
+    new IntersectionObserver((es) => {
+      near = es[es.length - 1].isIntersecting; gate();
+    }, { rootMargin: "100% 0px" }).observe(stage);
+    new IntersectionObserver((es) => {
+      seen = es[es.length - 1].isIntersecting;
+      if (seen) wake();
+    }).observe(stage);
     if (still.matches) {
       // nothing moves: everyone, as it is now
       seek(STEPS, performance.now());
