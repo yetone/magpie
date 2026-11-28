@@ -98,8 +98,27 @@ func holdsBounds(q provider.SubscriptionQuota, w provider.QuotaWindow, at time.T
 // or the first reading that had some again, whichever is earlier (zero
 // while neither is known). A call the vendor answered in it
 // may have been paid from credits (Codex) or extra usage (Claude), not
-// from the windows, and nothing in the log tells which.
-type dryRun struct{ lastLeft, firstDry, refilled time.Time }
+// from the windows, and nothing in the log tells which. line is the
+// window's (LineName): only a call that window counts drew on it.
+type dryRun struct {
+	lastLeft, firstDry, refilled time.Time
+	line                         string
+}
+
+// draws is whether a call to model drew on the window that ran dry, by
+// ws, its card's windows. Antigravity's Claude & GPT pool running dry
+// left every Gemini call answered meanwhile looking paid from credits,
+// and the Gemini rows said "not enough data" though the account has no
+// credits (tmr11235 on X). A window the card no longer has may have
+// counted any call.
+func (d dryRun) draws(ws []provider.QuotaWindow, model string) bool {
+	for _, w := range ws {
+		if w.Family == "" && w.LineName() == d.line {
+			return w.CountsIn(ws, model)
+		}
+	}
+	return true
+}
 
 func (d dryRun) holds(t time.Time) bool {
 	return !t.Before(d.lastLeft) && (d.refilled.IsZero() || t.Before(d.refilled))
@@ -124,7 +143,9 @@ func dryRuns(qs []provider.SubscriptionQuota, hist []provider.QuotaHistory, now 
 			if w.Unlimited || w.Aside || w.Family != "" || math.IsNaN(w.Used) {
 				continue
 			}
-			k := q.Provider + "\x00" + strings.ToLower(q.User) + "\x00" + w.Name
+			// kept under its line's name, as history keeps it: two
+			// pools' "7 days" are two windows
+			k := q.Provider + "\x00" + strings.ToLower(q.User) + "\x00" + w.LineName()
 			pts := lines[k]
 			if n := len(pts); n == 0 || pts[n-1].At.Before(at) {
 				p := provider.QuotaPoint{At: at, Left: max(0, 100-w.Used), ResetsAt: w.ResetsAt}
@@ -138,7 +159,8 @@ func dryRuns(qs []provider.SubscriptionQuota, hist []provider.QuotaHistory, now 
 		}
 	}
 	for k, pts := range lines {
-		acct := k[:strings.LastIndex(k, "\x00")]
+		cut := strings.LastIndex(k, "\x00")
+		acct, line := k[:cut], k[cut+1:]
 		var run *dryRun
 		var lastLeft time.Time
 		for _, p := range pts {
@@ -162,7 +184,7 @@ func dryRuns(qs []provider.SubscriptionQuota, hist []provider.QuotaHistory, now 
 			case p.Left > 0:
 				lastLeft = p.At
 			case run == nil:
-				run = &dryRun{lastLeft: lastLeft, firstDry: p.At}
+				run = &dryRun{lastLeft: lastLeft, firstDry: p.At, line: line}
 			}
 			if run != nil && p.ResetsAt != nil {
 				run.refilled = *p.ResetsAt
@@ -192,7 +214,9 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 	want := map[slot]span{}
 	why := map[slot]string{} // a window not reckoned, and why
 	byAccount := map[string][]slot{}
+	cards := map[string][]provider.QuotaWindow{} // account → its card's windows
 	for i, q := range qs {
+		cards[q.Provider+"\x00"+strings.ToLower(q.User)] = q.Windows
 		at := readAtOf(q, now)
 		for j, w := range q.Windows {
 			start, _, no := holdsBounds(q, w, at)
@@ -241,7 +265,7 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 		}
 		var runs []runKey
 		for i, d := range dry[acct] {
-			if !d.holds(r.Time) {
+			if !d.holds(r.Time) || !d.draws(cards[acct], r.Model) {
 				continue
 			}
 			k := runKey{acct, i}

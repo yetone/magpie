@@ -310,6 +310,65 @@ func TestWindowHoldsLeavesOutCallsPaidOtherwise(t *testing.T) {
 	}
 }
 
+// tmr11235 on X: Antigravity's Claude & GPT pool read none left for a
+// day, and every Gemini row said "not enough data", since a Gemini call
+// answered meanwhile looked paid from credits the account doesn't have.
+// A call drew on the window that ran dry only when that window counts it.
+func TestWindowHoldsDryPoolLeavesTheOtherPoolsReckoned(t *testing.T) {
+	now := time.Date(2026, 11, 28, 12, 0, 0, 0, time.UTC)
+	at := func(d time.Duration) *time.Time { x := now.Add(d); return &x }
+	day, five, week := 24*time.Hour, 5*time.Hour, 7*24*time.Hour
+	qs := []provider.SubscriptionQuota{{Provider: "agy-cli", User: "u@x.com", ReadAt: &now, Windows: []provider.QuotaWindow{
+		{Name: "Gemini 3 Pro", Model: "gemini-3-pro", Family: "Gemini", Pool: "Gemini", Used: 86, ResetsAt: at(5 * day)},
+		{Name: "Claude Sonnet 4.6", Model: "claude-sonnet-4-6", Family: "Claude", Pool: "Claude & GPT", Used: 100, ResetsAt: at(5 * day)},
+		{Name: "5 hours", Pool: "Gemini", Span: five, Aside: true, Used: 8, ResetsAt: at(4 * time.Hour)},
+		{Name: "7 days", Pool: "Gemini", Span: week, Aside: true, Used: 86, ResetsAt: at(5 * day)},
+		{Name: "7 days", Pool: "Claude & GPT", Span: week, Aside: true, Used: 100, ResetsAt: at(5 * day)},
+	}}}
+	pt := func(ago time.Duration, left float64, reset time.Duration) provider.QuotaPoint {
+		return provider.QuotaPoint{At: now.Add(-ago), Left: left, ResetsAt: at(reset)}
+	}
+	hist := []provider.QuotaHistory{{Provider: "agy-cli", User: "u@x.com", Lines: []provider.QuotaLine{
+		{Name: "Gemini · 5 hours", Points: []provider.QuotaPoint{pt(time.Hour, 100, 4*time.Hour), pt(time.Minute, 92, 4*time.Hour)}},
+		{Name: "Gemini · 7 days", Points: []provider.QuotaPoint{pt(2*day, 100, 5*day), pt(day, 40, 5*day), pt(time.Minute, 14, 5*day)}},
+		{Name: "Claude & GPT · 7 days", Points: []provider.QuotaPoint{pt(2*day, 100, 5*day), pt(30*time.Hour, 5, 5*day), pt(day, 0, 5*day), pt(time.Minute, 0, 5*day)}},
+	}}}
+	call := func(ago time.Duration, model string, status int) Record {
+		return Record{Time: now.Add(-ago), Provider: "agy-cli", ProviderAccount: "u@x.com", Model: model, Input: 1000, Status: status}
+	}
+	calls := []Record{
+		call(40*time.Hour, "claude-sonnet-4-6", 200),
+		call(20*time.Hour, "gemini-3-pro", 200), // in Claude & GPT's dry day
+		call(30*time.Minute, "gemini-3-pro", 200),
+		{Time: now.Add(-10 * time.Hour), Provider: "agy-cli", ProviderAccount: "u@x.com", Model: "claude-sonnet-4-6", Status: 429}, // turned away: no credits
+	}
+	holds := func(recs []Record) []provider.QuotaWindow {
+		return windowHolds(qs, now, now.Add(-30*day), func(Record) *catalog.Price { return nil }, provider.Renames{}, nil, dryRuns(qs, hist, now), func(fn func(Record)) {
+			for _, r := range recs {
+				fn(r)
+			}
+		})[0].Windows
+	}
+	ws := holds(calls)
+	for _, x := range []struct {
+		w      int
+		routed int64
+	}{{2, 1000}, {3, 2000}, {4, 1000}} {
+		if h := ws[x.w].Holds; h == nil || h.Routed.Tokens != x.routed {
+			t.Errorf("%s: %+v (why %q), want %d routed", ws[x.w].LineName(), h, ws[x.w].HoldsWhy, x.routed)
+		}
+	}
+	// a Claude call answered after its pool read none is still left out,
+	// in that pool only
+	ws = holds(append(calls, call(10*time.Hour, "claude-sonnet-4-6", 200)))
+	if w := ws[4]; w.Holds != nil || w.HoldsWhy != provider.HoldsCredits {
+		t.Errorf("Claude & GPT · 7 days answered while dry: %+v, why %q, want %q", w.Holds, w.HoldsWhy, provider.HoldsCredits)
+	}
+	if ws[2].Holds == nil || ws[3].Holds == nil {
+		t.Errorf("Gemini's windows left out over a Claude call: %q, %q", ws[2].HoldsWhy, ws[3].HoldsWhy)
+	}
+}
+
 // A successful call after the vendor's reset is in the new allowance,
 // even when the first reading of the refill arrives a few seconds later.
 func TestWindowHoldsResetBeforeRefillReading(t *testing.T) {

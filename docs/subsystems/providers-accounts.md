@@ -586,7 +586,11 @@ readings on both sides of detected boundaries.
 Whole-window estimates in [`window_holds.go`](../../internal/usage/window_holds.go)
 leave out a window whose calls fall in one of the account's dry runs, since a
 call answered there may have been paid from credits or extra usage (#2010,
-NorethSea). A known vendor reset ends a dry run, even when the next poll sees
+NorethSea). A dry run is its window's, kept under the window's line name
+(`LineName`, as history keeps it), and only a call that window counts
+(`CountsIn`) falls in it: a Gemini call answered while Antigravity's
+Claude & GPT pool read none was paid from Gemini's pool, and left every
+Gemini row "not enough data" (tmr11235 on X). A known vendor reset ends a dry run, even when the next poll sees
 the refill later, and a following dry run starts no earlier than that reset,
 so calls between the two still count. A reset time that isn't known keeps the
 run open. A stale dry reading taken after its own reset can't extend a run.
