@@ -81,7 +81,12 @@ func agyWorld(t *testing.T, ownListed bool) *agyWorldT {
 	w.googleUp.Store(true)
 	old := agyKeyringHere
 	agyKeyringHere = func() (agyKeyring, error) { return w.kr, nil }
-	t.Cleanup(func() { agyKeyringHere = old })
+	t.Cleanup(func() {
+		agyKeyringHere = old
+		agyPending.Lock()
+		agyPending.from, agyPending.to, agyPending.said, agyPending.running = "", "", false, AgyRunning{}
+		agyPending.Unlock()
+	})
 	agyRunning(t) // nothing runs on agy's sign-in, whatever runs here
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		w.google.Add(1)

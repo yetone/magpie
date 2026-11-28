@@ -3857,6 +3857,35 @@ func writeJSONRows[T any](rw http.ResponseWriter, r *http.Request, key string, r
 	return tag
 }
 
+// joinPIDs is pids as "12, 34", for an error's map of strings.
+func joinPIDs(pids []int) string {
+	s := make([]string, len(pids))
+	for i, p := range pids {
+		s[i] = strconv.Itoa(p)
+	}
+	return strings.Join(s, ", ")
+}
+
+// agyUnlistedSaid is a refused agy switch when the processes couldn't be
+// listed, in an i18n.js key.
+const agyUnlistedSaid = "magpie couldn't tell whether agy or the Antigravity app is running, so nothing was changed. Try again"
+
+// agyRunningSaid is a refused agy switch in an i18n.js key, its pids in
+// {pids} (the plugin's among them) and {plugin}. The plugin's agy alone
+// needs no quitting: it ends by itself.
+func agyRunningSaid(r provider.AgyRunning) string {
+	agy := len(r.PIDs) > 0 || len(r.Plugin) > 0 && r.App
+	switch {
+	case r.App && agy:
+		return "Quit the Antigravity app and agy (pid {pids}) first: while they run they keep the account they started on and write it back over a switch. Nothing was changed"
+	case r.App:
+		return "Quit the Antigravity app first: while it runs it keeps the account it started on and writes it back over a switch. Nothing was changed"
+	case len(r.PIDs) > 0:
+		return "Quit agy (pid {pids}) first: while it runs it keeps the account it started on and writes it back over a switch. Nothing was changed"
+	}
+	return "The Antigravity CLI plugin's agy (pid {plugin}) is still on agy's account; it ends by itself within ten minutes, then switch. Nothing was changed"
+}
+
 func fail(rw http.ResponseWriter, err error) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusBadRequest)
@@ -3897,6 +3926,16 @@ func fail(rw http.ResponseWriter, err error) {
 		out["detail"] = redactProxyErr(unreachable.Err.Error())
 		out["error"] = redactProxyErr(out["error"])
 		out["said"] = unreachableSaid[unreachable.Proxy != ""]
+	}
+	// a switch of agy's sign-in refused while agy or the Antigravity app
+	// runs on it (#1908): what runs, said in the reader's language
+	var agyRunning *provider.AgyRunning
+	if errors.As(err, &agyRunning) {
+		out["code"], out["said"], out["pids"], out["plugin"] = "agy_running", agyRunningSaid(*agyRunning), joinPIDs(append(slices.Clone(agyRunning.PIDs), agyRunning.Plugin...)), joinPIDs(agyRunning.Plugin)
+	}
+	var agyUnlisted *provider.AgyUnlistedError
+	if errors.As(err, &agyUnlisted) {
+		out["code"], out["said"] = "agy_unlisted", agyUnlistedSaid
 	}
 	var noModels *agent.NoModelsError
 	if errors.As(err, &noModels) {

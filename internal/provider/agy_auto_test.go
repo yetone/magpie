@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -211,10 +212,31 @@ func TestAgyAutoSwitchWaitsForAgy(t *testing.T) {
 	if err != nil || !waiting || to != "" || len(w.kr.writes) != 0 {
 		t.Fatalf("SwitchAgyWhenSpent with the app open = %q, %v, %v; %d writes", to, waiting, err, len(w.kr.writes))
 	}
+	// the editor says what it waits for, and what now runs: the app was
+	// quit and agy started
+	if got := AgyWaiting(); got == nil || got.From != "a@x.com" || got.To != "b@x.com" || !got.App || len(got.PIDs) != 0 {
+		t.Fatalf("AgyWaiting with the app open = %+v", got)
+	}
+	agyRunning(t, proc.Kin{PID: 20, PPID: 1, Args: "/u/bin/agy chat"})
+	if _, waiting, _ := SwitchAgyWhenSpent(context.Background()); !waiting {
+		t.Fatal("not waiting for agy")
+	}
+	if got := AgyWaiting(); got == nil || got.App || !slices.Equal(got.PIDs, []int{20}) {
+		t.Fatalf("AgyWaiting with agy running = %+v", got)
+	}
+	if err := SetAutoSwitch(agyCLIID, false); err != nil || AgyWaiting() != nil {
+		t.Fatalf("AgyWaiting with Switch automatically off = %+v (%v)", AgyWaiting(), err)
+	}
+	if err := SetAutoSwitch(agyCLIID, true); err != nil {
+		t.Fatal(err)
+	}
 	agyRunning(t)
 	to, waiting, err = SwitchAgyWhenSpent(context.Background())
 	if err != nil || waiting || to != "b@x.com" || agyFirst(t) != "b@x.com" {
 		t.Fatalf("SwitchAgyWhenSpent once it quit = %q, %v, %v; first %q", to, waiting, err, agyFirst(t))
+	}
+	if got := AgyWaiting(); got != nil {
+		t.Fatalf("AgyWaiting after the switch = %+v", got)
 	}
 }
 

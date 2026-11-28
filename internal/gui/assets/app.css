@@ -3194,7 +3194,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
    card, as above; a touch screen keeps the lines in place and no mark */
 #view-settings .update-auto-row .name .as-tip { display: none; margin-left: 5px; vertical-align: -1px; color: var(--muted); }
 @media (hover: hover) { #view-settings .update-auto-row .name .as-tip { display: inline-flex; } }
-.editor .accts .auto-switch .sign-in-moves { line-height: 1.5; color: var(--fg-2); }
+.editor .accts .auto-switch :is(.sign-in-moves, .as-wait) { line-height: 1.5; color: var(--fg-2); }
 .editor .accts .auto-switch .as-keep { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--fg-2); }
 .editor .accts .auto-switch .keep-as { max-width: 240px; }
 /* Claude Code's interactive mode or -p, with why (claudeModeRow) */

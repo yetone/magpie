@@ -40,6 +40,12 @@ function agyAutoSwitch(p) {
   head.title = t("When agy's account runs low, magpie signs agy in to the next one with room, once agy and the Antigravity app have quit.");
   head.append(name, sw);
   box.append(head);
+  // a switch it waits to make: agy or the app runs on the spent account
+  // (provider.AgyWaiting), so the switch that hasn't come is no mystery
+  const w = p.agyWait;
+  if (w) box.append(el("div", "as-wait", t(w.app || w.pids?.length
+    ? "{from} has used its allowance. magpie signs agy in to {to} once agy and the Antigravity app have quit"
+    : "{from} has used its allowance. magpie signs agy in to {to} when the Antigravity CLI plugin's agy has ended, within ten minutes", w)));
   sw.onclick = () => { sw.disabled = true; accountAction("provider/autoswitch", { id: p.id, autoSwitch: !on }, t("Saved")); };
   return box;
 }

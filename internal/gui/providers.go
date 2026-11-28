@@ -425,6 +425,9 @@ type providerJSON struct {
 	// AutoSwitch: magpie signs agy in to the next Antigravity CLI account
 	// with room by itself, under SwitchOnly (provider.Provider.AutoSwitch)
 	AutoSwitch bool `json:"autoSwitch,omitempty"`
+	// AgyWait: the switch AutoSwitch waits to make until agy and the
+	// Antigravity app have quit (provider.AgyWaiting)
+	AgyWait *provider.AgyWait `json:"agyWait,omitempty"`
 	// Self: a Remote magpie that turned out to be this magpie (sync
 	// brought it from the computer that uses this one), left out of
 	// routing unless KeepSelf (provider.Provider.SelfAnswered)
@@ -1064,6 +1067,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	}
 	if p.Account != nil && p.Account.Agent == p.ID {
 		out.SignInMoves = provider.SignInMovesOf(p.ID)
+	}
+	if p.AutoSwitch {
+		out.AgyWait = provider.AgyWaiting()
 	}
 	out.AgentChoices = agentChoicesOf(p)
 	if p.Account != nil {

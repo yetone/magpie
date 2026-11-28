@@ -81,16 +81,66 @@ func agyProcKind(args string) string {
 	return ""
 }
 
-// agyRunningOwn lists what runs on agy's own sign-in now, as the user
-// would quit it: "the Antigravity app", "agy (pid 123)". A process whose
-// environment can't be read is counted: it may be on the keyring. One
-// magpie started (the agy-cli plugin's) is told by its environment too;
-// on Windows, which doesn't tell it, one of magpie's is the plugin's,
-// which runs agy on the keyring for a moment only to read its usage.
+// AgyRunning is what runs on agy's own sign-in now: the Antigravity
+// app, and agy CLIs by pid, the agy-cli plugin's own apart (Plugin: kept
+// for a request served before Only switch was ticked, each ends after ten
+// idle minutes). As a switch's refusal it names them for the user to
+// quit; the GUI says the same in the reader's language (code
+// agy_running).
+type AgyRunning struct {
+	App    bool
+	PIDs   []int
+	Plugin []int
+}
+
+func (r AgyRunning) none() bool { return !r.App && len(r.PIDs) == 0 && len(r.Plugin) == 0 }
+
+// names is r as the user would quit it: "the Antigravity app",
+// "agy (pid 123)".
+func (r AgyRunning) names() []string {
+	var out []string
+	if r.App {
+		out = append(out, "the Antigravity app")
+	}
+	for _, pid := range r.PIDs {
+		out = append(out, fmt.Sprintf("agy (pid %d)", pid))
+	}
+	for _, pid := range r.Plugin {
+		out = append(out, fmt.Sprintf("agy (pid %d, the Antigravity CLI plugin's, which ends by itself within ten minutes)", pid))
+	}
+	return out
+}
+
+func (r *AgyRunning) Error() string {
+	return fmt.Sprintf("quit %s first: while it runs it keeps the account it started on, and writes it back over a switch; nothing was changed", strings.Join(r.names(), ", "))
+}
+
+// AgyUnlistedError is a switch refused because the processes couldn't be
+// listed: whether agy runs is unknown.
+type AgyUnlistedError struct{ Err error }
+
+func (e *AgyUnlistedError) Error() string {
+	return fmt.Sprintf("magpie couldn't tell whether agy or the Antigravity app is running (%v); nothing was changed", e.Err)
+}
+
+func (e *AgyUnlistedError) Unwrap() error { return e.Err }
+
+// agyRunningOwn lists what runs on agy's own sign-in now (AgyRunning's
+// names). A process whose environment can't be read is counted: it may
+// be on the keyring. One magpie started (the agy-cli plugin's) is told by
+// its environment too; on Windows, which doesn't tell it, one of
+// magpie's is the plugin's, which runs agy on the keyring for a moment
+// only to read its usage.
 func agyRunningOwn(ctx context.Context) ([]string, error) {
+	r, err := agyRunningNow(ctx)
+	return r.names(), err
+}
+
+func agyRunningNow(ctx context.Context) (AgyRunning, error) {
+	var r AgyRunning
 	ps, err := agyFamily(ctx)
 	if err != nil {
-		return nil, err
+		return r, err
 	}
 	me := os.Getpid()
 	parent := make(map[int]int, len(ps))
@@ -105,54 +155,40 @@ func agyRunningOwn(ctx context.Context) ([]string, error) {
 		}
 		return false
 	}
-	var out []string
-	app := false
 	for _, p := range ps {
 		if p.PID == me {
 			continue
 		}
 		switch agyProcKind(p.Args) {
 		case "app":
-			app = true
+			r.App = true
 		case "agy":
 			env, err := agyEnvOf(ctx, p.PID, "SSH_CONNECTION")
 			if err == nil && env["SSH_CONNECTION"] != "" {
 				continue // its sign-in is in a file under its HOME
 			}
 			if !mine(p.PID) {
-				out = append(out, fmt.Sprintf("agy (pid %d)", p.PID))
+				r.PIDs = append(r.PIDs, p.PID)
 			} else if !errors.Is(err, proc.ErrNoEnv) {
-				// the plugin's, kept for a request served before Only
-				// switch was ticked: it ends after ten idle minutes
-				out = append(out, fmt.Sprintf("agy (pid %d, the Antigravity CLI plugin's, which ends by itself within ten minutes)", p.PID))
+				r.Plugin = append(r.Plugin, p.PID)
 			}
 		}
 	}
-	if app {
-		out = append([]string{"the Antigravity app"}, out...)
-	}
-	return out, nil
+	return r, nil
 }
 
-// agyQuitFirst is agyRunningOwn as a switch's refusal: nil when nothing
-// runs on agy's sign-in. A listing that fails is unknown, and refused.
+// agyQuitFirst is a switch's refusal while something runs on agy's
+// sign-in (*AgyRunning): nil when nothing does. A listing that fails is
+// unknown, and refused (*AgyUnlistedError).
 func agyQuitFirst(ctx context.Context) error {
-	running, err := agyRunningOwn(ctx)
+	r, err := agyRunningNow(ctx)
 	if err != nil {
-		return fmt.Errorf("magpie couldn't tell whether agy or the Antigravity app is running (%v); nothing was changed", err)
+		return &AgyUnlistedError{err}
 	}
-	if len(running) > 0 {
-		return &agyBusyError{running}
+	if !r.none() {
+		return &r
 	}
 	return nil
-}
-
-// agyBusyError is a switch refused while running names what runs on
-// agy's sign-in.
-type agyBusyError struct{ running []string }
-
-func (e *agyBusyError) Error() string {
-	return fmt.Sprintf("quit %s first: while it runs it keeps the account it started on, and writes it back over a switch; nothing was changed", strings.Join(e.running, ", "))
 }
 
 // agyPoolsPast is the pools of q, by name, with a window of their own at
@@ -247,7 +283,32 @@ func nextAgyLogin(ctx context.Context) (from, to string, ok bool) {
 var agyPending struct {
 	sync.Mutex
 	from, to string
-	said     bool // its wait was logged
+	said     bool       // its wait was logged
+	running  AgyRunning // what it waits for
+}
+
+// AgyWait is a switch magpie makes by itself that a running agy or
+// Antigravity app holds back: from the account agy is on, which is spent,
+// to the next with room, once what runs has quit. The editor and agy's
+// Agents rows say it, so a switch that hasn't come is not a mystery.
+type AgyWait struct {
+	From   string `json:"from"`
+	To     string `json:"to"`
+	App    bool   `json:"app,omitempty"`
+	PIDs   []int  `json:"pids,omitempty"`
+	Plugin []int  `json:"plugin,omitempty"`
+}
+
+// AgyWaiting is the switch waiting now, nil for none, or once Switch
+// automatically is off.
+func AgyWaiting() *AgyWait {
+	agyPending.Lock()
+	w := AgyWait{From: agyPending.from, To: agyPending.to, App: agyPending.running.App, PIDs: slices.Clone(agyPending.running.PIDs), Plugin: slices.Clone(agyPending.running.Plugin)}
+	agyPending.Unlock()
+	if w.To == "" || !agyAutoSwitching() {
+		return nil
+	}
+	return &w
 }
 
 // SwitchAgyWhenSpent signs agy in to the next agy-cli account with room
@@ -259,7 +320,7 @@ func SwitchAgyWhenSpent(ctx context.Context) (to string, waiting bool, err error
 	from, to, ok := nextAgyLogin(ctx)
 	if !ok {
 		agyPending.Lock()
-		agyPending.from, agyPending.to, agyPending.said = "", "", false
+		agyPending.from, agyPending.to, agyPending.said, agyPending.running = "", "", false, AgyRunning{}
 		agyPending.Unlock()
 		return "", false, nil
 	}
@@ -270,18 +331,18 @@ func SwitchAgyWhenSpent(ctx context.Context) (to string, waiting bool, err error
 // on agy's sign-in: then it is kept as pending, for the next look.
 func switchAgyWhenFree(ctx context.Context, from, to string) (string, bool, error) {
 	err := switchLoginBy(agyCLIID, to, true)
-	var busy *agyBusyError
+	var busy *AgyRunning
 	if errors.As(err, &busy) {
 		agyPending.Lock()
 		defer agyPending.Unlock()
 		if !agyPending.said || !strings.EqualFold(agyPending.to, to) {
-			log.Printf("agy: %s has used its allowance; it is signed in to %s once %s has quit", from, to, strings.Join(busy.running, ", "))
+			log.Printf("agy: %s has used its allowance; it is signed in to %s once %s has quit", from, to, strings.Join(busy.names(), ", "))
 		}
-		agyPending.from, agyPending.to, agyPending.said = from, to, true
+		agyPending.from, agyPending.to, agyPending.said, agyPending.running = from, to, true, *busy
 		return "", true, nil
 	}
 	agyPending.Lock()
-	agyPending.from, agyPending.to, agyPending.said = "", "", false
+	agyPending.from, agyPending.to, agyPending.said, agyPending.running = "", "", false, AgyRunning{}
 	agyPending.Unlock()
 	if err != nil {
 		return "", false, err
@@ -314,8 +375,13 @@ func KeepAgyOnAnAccountWithRoom(ctx context.Context) {
 		if due := !time.Now().Before(full); due || pending {
 			// between full looks, only once agy has ended: then the look
 			// is made again, the user's own switch since included
-			if running, lerr := agyRunningOwn(c); !due && (lerr != nil || len(running) > 0) {
+			if running, lerr := agyRunningNow(c); !due && (lerr != nil || !running.none()) {
 				waiting = true
+				if lerr == nil {
+					agyPending.Lock()
+					agyPending.running = running
+					agyPending.Unlock()
+				}
 			} else {
 				if due {
 					full = time.Now().Add(loginSwitchEvery)

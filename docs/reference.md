@@ -2605,7 +2605,8 @@ auto-switch agy-cli on`). Then, when the account agy is on has used its
 allowance, the whole account or one of its pools of models (Gemini,
 Claude & GPT), magpie signs agy in to the next account that is on and
 has room there, once agy and the app have quit; till then it waits and
-looks again every ten seconds. Unticking
+looks again every ten seconds, and a line under the switch says which
+account is used up and which agy goes to. Unticking
 *Only switch agy's sign-in* turns it off too.
 
 **Switch accounts only.** To use magpie only to switch Claude Code (or

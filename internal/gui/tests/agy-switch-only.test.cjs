@@ -10,6 +10,8 @@
 // width too, in Chromium and WebKit; no click moves the page. Ticked,
 // Switch agy's account automatically shows under it, off by default, and
 // switching it on posts provider/autoswitch; unticked, it isn't there.
+// A switch it holds back while agy or the app runs is said under it, and
+// a switch refused for the same reason is said in the reader's language.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -26,7 +28,7 @@ const agents = () => [
 function providersOf(w) {
   const agy = {
     id: "agy-cli", name: "Antigravity CLI", icon: "antigravity-color", chat: "", responses: "", anthropic: "", catalog: "", routing: "smart",
-    models: [{ id: "gemini-3-pro", name: "Gemini 3 Pro", on: true }], agents: [], fallback: [], headers: {}, keyList: [], switchOnly: w.switchOnly || undefined, autoSwitch: w.autoSwitch || undefined,
+    models: [{ id: "gemini-3-pro", name: "Gemini 3 Pro", on: true }], agents: [], fallback: [], headers: {}, keyList: [], switchOnly: w.switchOnly || undefined, autoSwitch: w.autoSwitch || undefined, agyWait: w.agyWait,
     account: {
       agent: "agy-cli", agentName: "Antigravity CLI", user: w.active,
       logins: ["work@example.com", "home@example.com"].map((user) => ({ user, active: user === w.active, on: true })),
@@ -50,6 +52,8 @@ function server(lang, w, posts) {
     if (req.method() === "POST" && ["/api/login/switch", "/api/provider/switchonly", "/api/provider/autoswitch"].includes(url.pathname)) {
       const body = req.postDataJSON();
       posts.push([url.pathname, body]);
+      // what fail() answers for a provider.AgyRunning (api.go)
+      if (url.pathname === "/api/login/switch" && w.busy) return route.fulfill({ status: 400, json: { error: "quit the Antigravity app, agy (pid 4312) first: …", code: "agy_running", said: K.refusedBoth, pids: "4312", plugin: "" } });
       if (url.pathname === "/api/login/switch") w.active = body.user;
       if (url.pathname === "/api/provider/switchonly") w.switchOnly = body.switchOnly;
       if (url.pathname === "/api/provider/autoswitch") w.autoSwitch = body.autoSwitch;
@@ -71,6 +75,10 @@ const K = {
   served: "magpie serves no requests on these accounts",
   auto: "Switch {agent}'s account automatically",
   autoTip: "When agy's account runs low, magpie signs agy in to the next one with room, once agy and the Antigravity app have quit.",
+  note: "magpie only switches {agent}'s own sign-in between these accounts; no requests go through magpie.",
+  waits: "{from} has used its allowance. magpie signs agy in to {to} once agy and the Antigravity app have quit",
+  waitsPlugin: "{from} has used its allowance. magpie signs agy in to {to} when the Antigravity CLI plugin's agy has ended, within ten minutes",
+  refusedBoth: "Quit the Antigravity app and agy (pid {pids}) first: while they run they keep the account they started on and write it back over a switch. Nothing was changed",
 };
 const row = (id) => `.row.agent[data-id="${id}"]`;
 
@@ -126,10 +134,37 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await sw.getAttribute("aria-checked"), "false");
         const ab = await auto.boundingBox();
         assert.ok(ab.x >= 0 && ab.x + ab.width <= width, `the switch fits across ${width}`);
+        assert.equal(await page.locator(".editor .accts .auto-switch .as-wait").count(), 0, "nothing waits");
         await sw.click();
         await page.waitForFunction(() => document.querySelector(".editor .accts .auto-switch button.lib-switch")?.getAttribute("aria-checked") === "true");
         assert.deepEqual(posts[1], ["/api/provider/autoswitch", { id: "agy-cli", autoSwitch: true }]);
         assert.deepEqual(await scrolled(), before, "the page doesn't move");
+        // the field's note says what Only switch does, not the gateway's order
+        const note = page.locator(".editor .fld", { has: page.locator(".accts") }).first().locator(".hint.expl");
+        await page.waitForFunction(() => document.querySelector(".editor .accts .switch-only input")?.checked === true);
+        assert.equal(await note.textContent(), await tr(K.note, { agent: "Antigravity CLI" }), "the accounts note says magpie only switches");
+        assert.deepEqual(errors, []);
+      });
+
+      test(`${engine} ${lang} ${width}px: a switch agy holds back is said under Switch automatically, and a refused one in the reader's language`, async (t) => {
+        const w = { active: "work@example.com", switchOnly: true, autoSwitch: true, busy: true, agyWait: { from: "work@example.com", to: "home@example.com", app: true } };
+        const { page, errors, tr } = await open(engine, lang, width, w, "providers", t);
+        const prow = page.locator(".row.provider", { hasText: "Antigravity CLI" }).first();
+        await prow.waitFor({ timeout: 60000 });
+        await prow.click();
+        const wait = page.locator(".editor .accts .auto-switch .as-wait");
+        await wait.waitFor();
+        assert.equal(await wait.textContent(), await tr(K.waits, { from: "work@example.com", to: "home@example.com" }));
+        const wb = await wait.boundingBox();
+        assert.ok(wb.x >= 0 && wb.x + wb.width <= width, `the line fits across ${width}`);
+        // the plugin's agy alone: it ends by itself
+        w.agyWait = { from: "work@example.com", to: "home@example.com", plugin: [60] };
+        await page.evaluate(() => accountAction("provider/autoswitch", { id: "agy-cli", autoSwitch: true }, ""));
+        await page.waitForFunction((s) => document.querySelector(".editor .accts .auto-switch .as-wait")?.textContent === s, await tr(K.waitsPlugin, { from: "work@example.com", to: "home@example.com" }));
+        // a switch refused while agy runs says what to quit, translated
+        await page.evaluate(() => accountAction("login/switch", { agent: "agy-cli", user: "home@example.com" }, ""));
+        const said = await tr(K.refusedBoth, { pids: "4312" });
+        await page.waitForFunction((s) => [...document.querySelectorAll("#status, .editor .err, .editor-error")].some((e) => e.textContent.includes(s)), said);
         assert.deepEqual(errors, []);
       });
 
