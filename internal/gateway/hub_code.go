@@ -18,11 +18,11 @@ import (
 // router's tools and gives back only what the script returns and logs. A
 // model that needs several calls, or one call whose answer it reads only
 // part of, makes one call in place of many, and the answers it doesn't
-// need never reach its context. The script runs in goja, a JavaScript
+// need never reach its context. The script runs in moejs, a JavaScript
 // interpreter with nothing of the computer's: no files, network,
 // processes, require or import, in a process of its own (coderun: a
-// builtin is past goja's interrupt, and could take magpie's memory or a
-// core with it). What it can reach is the tools
+// builtin that misses the interrupt could take magpie's memory or a core
+// with it). What it can reach is the tools
 // the agent's router gives it, each run as call_tool runs one (hubCall:
 // the key's limit, HereOnly, the Library's off tools, a row of the request
 // log each). settings' RouterNoCode turns it off.
@@ -60,7 +60,8 @@ const (
 const hubCodeMax = 40000
 
 // hubCodeHeap is how far the heap of a script's process may grow before
-// it is ended: goja has no memory limit of its own.
+// it is ended, and the interpreter's own memory limit: a builtin that
+// allocates past its count still ends with the process.
 var hubCodeHeap uint64 = 512 << 20
 
 // hubCodeHelper is the program a script runs in, started as
