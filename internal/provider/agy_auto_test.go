@@ -272,11 +272,3 @@ func TestSetAutoSwitchNeedsSwitchOnly(t *testing.T) {
 		t.Fatal("AutoSwitch came back with switch-only")
 	}
 }
-
-// Under switch-only no warm-up goes through magpie on agy's accounts.
-func TestAgyWarmupKeptUnderSwitchOnly(t *testing.T) {
-	agyWorld(t, true)
-	if err := warmAgyModel(context.Background(), "b@x.com", "gemini-4-neon"); !errors.Is(err, errAgyKept) {
-		t.Fatalf("warmAgyModel = %v", err)
-	}
-}

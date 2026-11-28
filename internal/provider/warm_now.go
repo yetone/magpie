@@ -4,10 +4,11 @@ package provider
 // once from Settings › Warm-up and check-in, whatever the warm-up settings
 // say. It is the request the scheduled warm-up sends — warmCodexLogin for
 // a ChatGPT account, Claude Code's own run (WarmClaudeVia) for a Claude
-// one, the agy CLI's through its plugin to each idle pool of an agy-cli
-// one (warmAgyNow) — to that account alone, and what it says back is the result. The
-// scheduled warm-up's file is left to the scheduled one: its next look
-// reads the window as started, from its own read.
+// one — to that account alone, and what it says back is the result. An
+// agy CLI account has none: a request only to start its windows is one
+// agy's own users never send (xuanwo on X). The scheduled warm-up's file
+// is left to the scheduled one: its next look reads the window as
+// started, from its own read.
 
 import (
 	"context"
@@ -31,7 +32,7 @@ var claudeWarmSend func(ctx context.Context, configDir string) error
 // WarmClaudeVia sets how a Claude account's warm-up runs Claude Code.
 func WarmClaudeVia(f func(ctx context.Context, configDir string) error) { claudeWarmSend = f }
 
-// WarmNow sends agent's ("codex", "claude" or "agy-cli") account user
+// WarmNow sends agent's ("codex" or "claude") account user
 // the warm-up's one tiny request now, and says why it failed. Once it went, what the
 // account has left is read again, as after a scheduled warm-up.
 func WarmNow(ctx context.Context, agent, user string) error {
@@ -41,8 +42,6 @@ func WarmNow(ctx context.Context, agent, user string) error {
 		name = "ChatGPT"
 	case "claude":
 		name = "Claude"
-	case agyCLIID:
-		name = "agy"
 	default:
 		return fmt.Errorf("%q has no warm-up", agent)
 	}
@@ -57,14 +56,6 @@ func WarmNow(ctx context.Context, agent, user string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, warmNowWait)
 	defer cancel()
-	if agent == agyCLIID {
-		// a request to each pool whose windows aren't running
-		if err := warmAgyNow(ctx, ls[i].User, LoginUsage(ctx, agent), agyModels(), time.Now(), warmAgyModel); err != nil {
-			return err
-		}
-		StaleAllowance(agent, ls[i].User)
-		return nil
-	}
 	if agent == "codex" {
 		if err := warmCodexLogin(ctx, ls[i].User); err != nil {
 			return err
@@ -103,7 +94,7 @@ const warmAllAtOnce = 3
 // and one already in its windows, are left alone and listed with why; one
 // whose sign-in lapsed is sent nothing and failed, as Warm up now has it.
 func WarmAll(ctx context.Context, agent string) ([]WarmAllResult, error) {
-	name := map[string]string{"codex": "ChatGPT", "claude": "Claude", agyCLIID: "agy"}[agent]
+	name := map[string]string{"codex": "ChatGPT", "claude": "Claude"}[agent]
 	if name == "" {
 		return nil, fmt.Errorf("%q has no warm-up", agent)
 	}
@@ -112,9 +103,6 @@ func WarmAll(ctx context.Context, agent string) ([]WarmAllResult, error) {
 		return nil, fmt.Errorf("no %s account to warm up", name)
 	}
 	usage := LoginUsage(ctx, agent)
-	if agent == agyCLIID {
-		usage = agyByAccount(usage, agyModels())
-	}
 	return warmAll(ctx, ls, usage, time.Now(), func(ctx context.Context, user string) error { return WarmNow(ctx, agent, user) }), nil
 }
 

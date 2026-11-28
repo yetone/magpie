@@ -42,7 +42,7 @@ var Keys = []string{
 	"redact", "redactPersonal", "redactKinds", "redactWords", "redactWordsAnyCase", "redactWordsWhole", "redactShape",
 	"hideRequestText", "noStats", "noUsageStats", "otel",
 	// warm-ups and check-ins
-	"codexWarmup", "claudeWarmup", "agyWarmup", "codexWarmAt", "claudeWarmAt", "codexWarmAts", "claudeWarmAts",
+	"codexWarmup", "claudeWarmup", "codexWarmAt", "claudeWarmAt", "codexWarmAts", "claudeWarmAts",
 	"workbuddyCheckin", "traeCheckin", "minimaxCheckin", "qoderCheckin", "checkinAt",
 	// models: replies, vision, images, search
 	"replyModel", "noLoopGuard", "claudeLeanPrompt", "claudeNoExtraUsage", "claudeRegionHold", "claudeWaysOut", "claudePrintMode", "refusalRetries", "retryAfterCap",
@@ -68,7 +68,6 @@ var Choices = map[string][]string{
 	"trayCurrency":    settings.TotalCurrencies,
 	"codexWarmup":     {"off", "week", "all"},
 	"claudeWarmup":    {"off", "week", "all"},
-	"agyWarmup":       {"off", "week", "all"},
 	"trayUsageEvery":  ints(settings.TrayEvery),
 	"dayStart":        {"0", "1", "2", "3", "4", "5", "6"},
 	"updateChannel":   {settings.UpdateStable, settings.UpdateDaily},
