@@ -260,6 +260,8 @@ func nextAgyLogin(ctx context.Context) (from, to string, ok bool) {
 	}
 	share, _ := loginSwitching(agyCLIID)
 	now := time.Now()
+	// the one reading of agy's usage magpie makes (usageWithheld)
+	ctx = agySwitchReading(ctx)
 	q, known := someLoginUsage(ctx, agyCLIID, from)[from]
 	if !known || q.Error != "" {
 		return "", "", false

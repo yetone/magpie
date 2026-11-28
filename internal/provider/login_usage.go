@@ -244,6 +244,10 @@ func loginUsageOf(ctx context.Context, agent string, only map[string]bool) (map[
 	}
 	out := map[string]SubscriptionQuota{}
 	logins, ok := usageLogins(agent)
+	switching := isAgySwitchReading(ctx)
+	if pp, isPlugin := pluginOfAgent(agent); switching && isPlugin && pp.ID == agyCLIID {
+		logins, ok = pluginAskableLogins(pp), true
+	}
 	if !ok {
 		return out, asked, states
 	}
@@ -269,7 +273,8 @@ func loginUsageOf(ctx context.Context, agent string, only map[string]bool) (map[
 	}
 	wg.Wait()
 	usageRead(agent, out) // a window not started: the warm-up looks now
-	if len(out) > 0 {
+	// Switch automatically's reading is its own: no quota history shows it
+	if len(out) > 0 && !switching {
 		// the batch's readings are points of each account's quota history
 		// too, as a Usage-page reading is: a magpie only ever serving
 		// other magpies has nobody on its Usage page, and its quota

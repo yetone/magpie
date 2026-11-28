@@ -70,13 +70,52 @@ func pluginCard(pp plugin.Provider) (string, string) {
 	return name, PluginIcon(pp)
 }
 
-// pluginUsageLogins are the accounts of pp whose allowance can be asked.
+// pluginUsageLogins are the accounts of pp whose allowance can be asked:
+// none of an Antigravity provider's (usageWithheld).
 func pluginUsageLogins(pp plugin.Provider) []Login {
+	if usageWithheld[pp.ID] {
+		return nil
+	}
+	return pluginAskableLogins(pp)
+}
+
+// pluginAskableLogins are pp's accounts its plugin tells the allowance of.
+func pluginAskableLogins(pp plugin.Provider) []Login {
 	if !pp.Usage || !pp.SignedIn || movingNow(pp.ID) {
 		return nil
 	}
 	return pluginLoginList(pp)
 }
+
+// usageWithheld are the plugin providers whose allowance magpie doesn't
+// ask for: Antigravity's (agy-cli, agy-tui, and the withdrawn Antigravity
+// plugin). Reading it is agy's /usage per account, about a dozen calls to
+// Google, asked again every few minutes, and in agy-cli's case through
+// `agy -p`, the one way of running agy that Google can tell apart from its
+// own TUI; developers said it puts the account at risk (xuanwo on X). T3
+// Code, which runs agy as agy-cli does (agy acp), asks Google nothing of
+// its own either. No card, account row, routing or warm-up reads it; only
+// "Switch agy's account automatically", which the user turns on, reads the
+// account agy is on (agySwitchReading).
+var usageWithheld = map[string]bool{agyCLIID: true, "agy-tui": true, "antigravity": true}
+
+// agySwitchReadKey marks a context as Switch automatically's own reading
+// of agy-cli's accounts (nextAgyLogin): the one read usageWithheld lets by.
+type agySwitchReadKey struct{}
+
+// agySwitchReading is ctx as Switch automatically's reading.
+func agySwitchReading(ctx context.Context) context.Context {
+	return context.WithValue(ctx, agySwitchReadKey{}, true)
+}
+
+// isAgySwitchReading says ctx is agySwitchReading's.
+func isAgySwitchReading(ctx context.Context) bool {
+	on, _ := ctx.Value(agySwitchReadKey{}).(bool)
+	return on
+}
+
+// errUsageWithheld is a usageWithheld provider's reading asked for anyway.
+const errUsageWithheld = "magpie doesn't read this provider's usage"
 
 // signInGone is a plugin's usage saying the account's sign-in is gone.
 var signInGone = lazyre.New(`(?i)sign-in has (expired|lapsed)|sign in again`)
@@ -89,6 +128,10 @@ func pluginLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	q := SubscriptionQuota{Provider: PluginID(pp.ID), Name: name, Icon: icon, Plan: l.Plan, User: l.User, Windows: []QuotaWindow{}}
 	if !ok {
 		q.Error = "no such plugin provider"
+		return q
+	}
+	if usageWithheld[pp.ID] && !isAgySwitchReading(ctx) {
+		q.Error = errUsageWithheld
 		return q
 	}
 	key := ""
