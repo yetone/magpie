@@ -2163,11 +2163,19 @@ func hostEnv(env []string) []string {
 			out = append(out, "MAGPIE_"+k+"="+v)
 		case "MAGPIE_ADDR":
 			// an empty one is Settings' (hostAddr)
+		case "MAGPIE_EXE":
+			// this magpie's own, below
 		default:
 			out = append(out, e)
 		}
 	}
-	return append(out, "MAGPIE_ADDR="+addr)
+	out = append(out, "MAGPIE_ADDR="+addr)
+	// a plugin that drives an agent's interactive mode runs
+	// `$MAGPIE_EXE tui-helper` (internal/tuihelper) for its terminal
+	if exe, err := os.Executable(); err == nil {
+		out = append(out, "MAGPIE_EXE="+exe)
+	}
+	return out
 }
 
 // Fetch sends r through the provider's plugin — its loader's fetch, or

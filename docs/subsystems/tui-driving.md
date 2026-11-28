@@ -105,8 +105,41 @@ Magpie serves Antigravity through the agy-cli plugin, which runs the real
 agy over ACP (`agy acp`). On an API key, the TUI, `-p` and ACP send the same
 main request, headers included, and the TUI and ACP both send the title
 request first. `-p` is the one that can be told apart. The Google sign-in
-path was not compared, as that needs a real account. So no agy driver
-serves requests yet. The test shows the package carries one.
+path was not compared, as that needs a real account. magpie itself has no
+agy driver; the agy-tui plugin drives agy's TUI through `magpie tui-helper`
+(below).
+
+## A plugin's terminal: `magpie tui-helper`
+
+A plugin is JavaScript in the plugin host, with no terminal of its own.
+`magpie tui-helper` ([`internal/tuihelper`](../../internal/tuihelper/tuihelper.go))
+is this package's `Term` for it: the plugin spawns the helper and speaks JSON
+lines with it. The host gives every plugin `MAGPIE_EXE`, this magpie's own
+path (`hostEnv` in [`host.go`](../../internal/plugin/host.go)), so a plugin
+starts the helper that came with the magpie it runs in.
+
+- stdin: `{"start": {"path", "args", "env", "dir", "replies"}}` first and
+  once, then `{"write": "…"}` (typed to the program) and `{"stop": true}`.
+- stdout: `{"started": true}`, `{"screen": "…"}` (`Now`, each time it
+  changed, at most every 50ms), and last `{"exit": {"code", "error"}}` or
+  `{"error": "…"}` when it couldn't start.
+- The environment is the one given, whole. With no `env` it is the
+  helper's own, as the plugin spawned it, so the proxies the host adds to a
+  plugin's programs (`proxied` in host.js) reach the agent.
+- `replies` are `Term.Replies`: what the agent asks the terminal beyond the
+  two the package answers.
+- The program ends with the helper: stdin closing (the plugin gone),
+  `stop`, or a signal in `EndSignals`.
+
+The helper runs in `Main` before anything of magpie's starts (`CheckEnv`,
+the app folders): the plugin starts it with the agent's HOME, and magpie
+must create nothing there. On Windows it runs the program in ConPTY, as
+`Term` does for Claude Code there; the helper's tests are Unix only, and
+it hasn't been tried on Windows.
+
+The agy-tui plugin (magpie-community/plugins `packages/agy-tui`) is its
+first user. It drives agy's TUI as `TestDrivesAgy` does, one agy a request
+in a folder of its own, and reads the answer from agy's transcript.
 
 ## Contracts
 
@@ -124,12 +157,16 @@ serves requests yet. The test shows the package carries one.
 
 ```sh
 go test ./internal/tuidrive/ ./internal/claudetui/ -count=1
-GOOS=windows go vet ./internal/tuidrive/ ./internal/claudetui/
+go test ./internal/tuihelper/ -count=1
+go test ./internal/plugin/ -run TestHostToldMagpieExe -count=1
+GOOS=windows go vet ./internal/tuidrive/ ./internal/claudetui/ ./internal/tuihelper/
 ```
 
 `TestEndedAfterLastWordsRead` and `TestReadPastEAGAIN` cover reading.
 `TestDrivesAgy` (with `MAGPIE_TEST_AGY_BIN`) drives a real agy.
-`TestGridDrawsInPlace` covers the grid. `TestDescendants` and `TestEtime`
+`TestGridDrawsInPlace` covers the grid. `internal/tuihelper`'s tests run
+the helper on pipes (typed and drawn, replies, the caller gone, no env),
+and `TestHostToldMagpieExe` the host's `MAGPIE_EXE`. `TestDescendants` and `TestEtime`
 cover `Waiting`. The Claude Code driver's own suite (`internal/claudetui`
 and the gateway's `claude_tui_*` tests) runs the whole path against a fake
 Claude Code in the pty.

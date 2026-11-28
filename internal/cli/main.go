@@ -40,6 +40,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/shortcut"
 	"github.com/yetone/magpie/internal/tui"
+	"github.com/yetone/magpie/internal/tuihelper"
 	"github.com/yetone/magpie/internal/update"
 )
 
@@ -231,6 +232,17 @@ func Main(v string) {
 		// internal: a run_code script, in a process of its own; it reads
 		// and writes no file of magpie's
 		os.Exit(coderun.Main())
+	}
+	if len(os.Args) > 1 && os.Args[1] == tuihelper.Command {
+		// internal: a plugin's terminal for an agent's interactive mode. It
+		// runs before magpie reads its environment: the plugin starts it
+		// with the agent's HOME (an account's own), where magpie has no
+		// folders and makes none
+		if err := tuihelper.Run(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "magpie:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 	// before anything reads or writes a file: no home, or a relative one,
 	// would put the agents' configs and magpie's keys under the working
