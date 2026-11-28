@@ -77,6 +77,23 @@ func TestModelTestPinnedToAnAccount(t *testing.T) {
 	}
 }
 
+// A routing group's member keeps its account as the account's stable id
+// (memberAccountKept), and its row's Test sends that id (#4540): the
+// test is asked of that account, not of the one routing takes first.
+func TestModelTestPinnedToAnAccountsStableID(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	p, wrong := twoAccountPlugin(t, ctx, nil)
+	kept, ok := memberAccountKept(p.ID+"/fake-1", "b@fake")
+	if !ok || kept == "b@fake" {
+		t.Fatalf("b@fake kept in a group as %q (%v), not its stable id", kept, ok)
+	}
+	rs := p.TestModels(TestOn(ctx, kept), []string{"fake-1"})
+	if len(rs) != 1 || !rs[0].OK || rs[0].Account != "b@fake" {
+		t.Fatalf("pinned to b@fake by its id %s: %+v (others asked %v)", kept, rs, wrong())
+	}
+}
+
 // tmr11235 on X: "这个开启就直接上线启用了，但我想先测试能不能用再开". A
 // key that is off is offered for a test too, after those on, and a test
 // pinned to it is answered by it while it stays off: routing still never

@@ -8523,6 +8523,94 @@ function routingPage(part) {
     };
     // the Accounts section below, drawn again as members come and go
     let drawAccounts = () => {};
+    // what each member answered its own tiny request (#4540), by its model
+    // and account (the reasoning it is fixed at aside): null while asked,
+    // then the result. Kept while this group's editor is open, so a
+    // reordering or a redraw keeps the answers, and dropped with it, so
+    // none is read as this minute's when it isn't.
+    if (!gEdit.tests) gEdit.tests = {};
+    const memberTests = gEdit.tests;
+    const testKey = (id) => { const [model, , acct] = splitMember(id); return acct ? model + "#" + acct : model; };
+    // testAs: what a member is tested as — its provider, the model the
+    // vendor is asked for and the account it alone is sent on — and why it
+    // can't be when it can't. A group in the group is tested on its own
+    // card; a provider that tests its models as one endpoint says so
+    // (provider.ModelTest), in the words the Providers page says it. A
+    // member of a group not saved yet has no memberInfo, so its model's
+    // ref in groups.models answers.
+    const testAs = (id) => {
+      const info = infoOf(id), m = modelOf(id), s = subOf(id);
+      if (s) return { why: t("A group in the group: open {name}'s card to test its models there", { name: s.name }) };
+      const provider = info?.provider || m?.provider || "";
+      const model = info?.model || (provider && m?.id?.startsWith(provider + "/") ? m.id.slice(provider.length + 1) : "");
+      if (!provider || !model) return { why: t("No provider serves {id} now; it is skipped", { id }) };
+      const why = info ? info.modelTest : m?.modelTest;
+      if (why) return { why: modelTestWhy({ modelTest: why, name: info?.name || m?.providerName || provider }) };
+      return { provider, model, account: splitMember(id)[2] || "" };
+    };
+    // testMember: the smallest request a model can be sent, through the
+    // provider magpie has saved (POST provider/test, the Providers page's
+    // own) and not through the group, so a member the group has passed
+    // over (resting, paused, or not first) can be judged here. It changes
+    // nothing in the group and rests no key, member or group.
+    const testMember = async (id) => {
+      const at = testAs(id), key = testKey(id);
+      if (at.why) return status(at.why, "warn");
+      if (memberTests[key] === null) return; // asked already
+      memberTests[key] = null;
+      redrawKeeping(key);
+      try {
+        const r = await api("provider/test", { id: at.provider, test: [at.model], ...(at.account ? { account: at.account } : {}) });
+        if (gEdit?.draft !== d) return; // the editor closed or moved on
+        const x = r?.results?.[0] || { ok: false, error: t("No answer came back") };
+        memberTests[key] = x;
+        const model = memberName(id), via = x.protocol ? apiLabel(x.protocol) : "", took = ledTook(x.ms), error = (x.status ? x.status + " · " : "") + x.error;
+        status(x.queued ? model + ": " + queuedSaid(x) : x.ok
+          ? via ? t("{model} answered via {api} in {took}", { model, api: via, took }) : t("{model} answered in {took}", { model, took })
+          : via ? t("{model} didn't answer via {api}: {error}", { model, api: via, error }) : t("{model} didn't answer: {error}", { model, error }), x.queued ? "" : x.ok ? "ok" : "err");
+      } catch (e) {
+        if (gEdit?.draft !== d) return;
+        delete memberTests[key];
+        status(e.message, "err");
+      }
+      redrawKeeping(key);
+    };
+    // a redraw takes the row's Test with it: the keyboard stays on it
+    const redrawKeeping = (key) => {
+      const had = document.activeElement?.closest?.(".rt-mtest")?.dataset.test === key;
+      draw();
+      if (had) list.querySelector(`.rt-mtest[data-test="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+    };
+    // its row's Test: a dot after the word says what the last test came to,
+    // as a model chip's on the Providers page does (green it answered, a
+    // red cross it didn't, amber queued), and its title gives the timing or
+    // the error; a click asks again. The word never changes, so the row's
+    // other controls stay where they are. Where the model can't be tested
+    // one by one, its title and a click say why.
+    const testButton = (id) => {
+      const at = testAs(id), key = testKey(id), res = at.why ? undefined : memberTests[key];
+      const b = el("button", "text rt-mtest");
+      b.type = "button";
+      b.dataset.test = key;
+      b.setAttribute("aria-label", t("Test {name}", { name: memberName(id) }));
+      b.append(el("span", "", t("Test")));
+      b.onclick = () => testMember(id);
+      if (at.why) { b.title = at.why; return b; }
+      if (res === null) {
+        b.append(el("span", "tdot wait"));
+        b.setAttribute("aria-busy", "true");
+        b.setAttribute("aria-disabled", "true");
+        b.title = t("Testing…");
+        return b;
+      }
+      if (!res) { b.title = t("Test this model"); return b; }
+      b.append(el("span", "tdot " + (res.queued ? "queued" : res.ok ? "ok" : "bad")));
+      const via = res.protocol ? apiLabel(res.protocol) : "";
+      b.title = t("Test this model") + "\n" + (res.queued ? queuedSaid(res) : res.ok
+        ? via ? t("Answered via {api} in {took}", { api: via, took: ledTook(res.ms) }) : t("Answered in {took}", { took: ledTook(res.ms) })
+        : (via ? via + " · " : "") + (res.status ? res.status + " · " : "") + res.error);
+      return b;
+    };
     const draw = () => {
       drawAccounts();
       list.replaceChildren();
@@ -8755,6 +8843,9 @@ function routingPage(part) {
         // its share by weight (#1910): a click edits it in place, Enter
         // or leaving it keeps it, Escape puts it back
         if (d.routing === "weight") row.append(memberWeight(id, off));
+        // tested from its row, where the reader sees the group the model is
+        // in and the members it is passed over for (#4540)
+        row.append(testButton(id));
         if (s) row.title = s.members.map((x) => memberLabel(s, x)).join(memberJoin(s));
         if (!m && !s) { row.classList.add("off"); row.title = info?.providerOff ? offWords(info) : t("No provider serves {id} now; it is skipped", { id }); }
         if (i) { const up = el("button", "text", t("Up")); up.onclick = () => moveMember(i, i - 1); row.append(up); }

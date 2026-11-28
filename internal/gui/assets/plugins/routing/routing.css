@@ -904,6 +904,18 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 /* a member's weight under By weight (#1910), edited in place */
 .rt-gedit .fbrow .rt-weight { font-variant-numeric: tabular-nums; }
 .rt-gedit .fbrow .rt-weight-in { width: 64px; flex: none; height: 24px; font-size: 12px; padding: 0 6px; }
+/* a member's own Test (#4540): a dot after the word says what its model
+   answered, as a model chip's does on the Providers page (green, a red
+   cross, amber queued), and its title gives the time or the error. The word
+   stays the same while it is asked, so the Up and Remove beside it stay put */
+.rt-gedit .fbrow .rt-mtest { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+.rt-gedit .fbrow .rt-mtest[aria-busy="true"] { cursor: default; }
+.rt-gedit .fbrow .rt-mtest .tdot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--faint); }
+.rt-gedit .fbrow .rt-mtest .tdot.ok { background: var(--green); }
+.rt-gedit .fbrow .rt-mtest .tdot.queued { background: var(--amber); }
+.rt-gedit .fbrow .rt-mtest .tdot.bad { background: var(--red); -webkit-mask: var(--x-mark) center / contain no-repeat; mask: var(--x-mark) center / contain no-repeat; border-radius: 0; transform: scale(1.5); }
+.rt-gedit .fbrow .rt-mtest .tdot.wait { animation: rttest .8s linear infinite alternate; }
+@keyframes rttest { to { opacity: .25; } }
 /* a group a member of a group is: it takes no reasoning of its own (its
    models reason as it says, provider.SaveGroup), so its chip names the group
    it follows and opens that group's card instead. It takes the room it needs

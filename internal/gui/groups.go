@@ -193,6 +193,12 @@ type memberJSON struct {
 	// OwnFast: that fast mode is asked of a provider the user added by its
 	// address, which may or may not serve it (provider.OwnFast, #1615)
 	OwnFast bool `json:"ownFast,omitempty"`
+	// ModelTest is why its model can't be sent a test request of its own,
+	// as its provider says it (provider.ModelTest): "decide" for a decision
+	// API whose models are tested as one endpoint, "own-api" for a sign-in
+	// reached through its agent's own API. "" when it can be tested, which
+	// is what the row's Test reads.
+	ModelTest string `json:"modelTest,omitempty"`
 	// Efforts: the reasoning levels this member is offered. A model's own,
 	// or — a member that is itself a group — the levels it passes on to
 	// agents, which are the ones every model in it has (provider.groupEntries).
@@ -236,6 +242,10 @@ type modelRef struct {
 	// OwnFast: asked of a provider the user added by its address, which may
 	// or may not serve it (provider.OwnFast, #1615)
 	OwnFast bool `json:"ownFast,omitempty"`
+	// ModelTest is why it can't be sent a test request of its own, as its
+	// provider says it (provider.ModelTest), so a member added to a group
+	// not saved yet is tested as one of a saved group is. "" when it can
+	ModelTest string `json:"modelTest,omitempty"`
 	// Images: agents are told it takes images (provider.Entry.Images); a
 	// group's editor says of each member what it says of it (#756).
 	// ImagesUnknown: nothing was read of it either way (imagesUnknown),
@@ -385,6 +395,30 @@ func groupsState() groupsJSON {
 			out.Templates[i].Group.Members = []string{} // one that can't be made has none
 		}
 	}
+	// ModelTest read once for each provider: the page says why a member's
+	// model can't be tested on its own, on every one of its rows, and tests
+	// a model of a group not saved yet from the models list too (#4540)
+	tests := map[string]string{}
+	testWhy := func(p provider.Provider) string {
+		if why, ok := tests[p.ID]; ok {
+			return why
+		}
+		why := p.ModelTest()
+		tests[p.ID] = why
+		return why
+	}
+	// a decision model is asked a System One question where its API takes
+	// one (AsksDecideModels), as the Providers page's chip tests it, even
+	// on a provider whose other models are chats
+	testWhyOf := func(p provider.Provider, model string) string {
+		if p.DecidesModel(model) {
+			if p.AsksDecideModels() {
+				return ""
+			}
+			return "decide"
+		}
+		return testWhy(p)
+	}
 	// the decision models a group's pickers offer: a provider's picks, and
 	// any a group names already, whatever the picks, so its card still
 	// reads it as a decision model
@@ -398,7 +432,7 @@ func groupsState() groupsJSON {
 		}
 	}
 	for _, e := range provider.OfferedDeciders(func(id string) bool { return named[id] }) {
-		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Sub: e.Provider.Account != nil})
+		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Sub: e.Provider.Account != nil, ModelTest: testWhyOf(*e.Provider, e.Model)})
 	}
 	out.Accounts = groupAccounts(all)
 	out.GatewayKeys = groupKeys()
@@ -411,6 +445,7 @@ func groupsState() groupsJSON {
 			chat[e.ID] = true
 			ref := servedRef(e, set)
 			ref.UltraOK = ref.CanFast && provider.UltraOn(*e.Provider, e.Model, ultra())
+			ref.ModelTest = testWhyOf(*e.Provider, e.Model)
 			out.Models = append(out.Models, ref)
 		}
 	}
@@ -429,7 +464,7 @@ func groupsState() groupsJSON {
 			if chat[ref] || p.DrawerHidden(m.ID) && !named[ref] {
 				continue
 			}
-			out.Drawers = append(out.Drawers, modelRef{ID: ref, Name: cmp.Or(m.Name, m.ID), Provider: p.ID, PName: p.Name, Icon: p.Icon, VendorPicks: gateway.VendorPicksDrawer(p)})
+			out.Drawers = append(out.Drawers, modelRef{ID: ref, Name: cmp.Or(m.Name, m.ID), Provider: p.ID, PName: p.Name, Icon: p.Icon, VendorPicks: gateway.VendorPicksDrawer(p), ModelTest: testWhy(p)})
 		}
 	}
 	// every provider's models read once for the groups, not once a group
@@ -510,6 +545,7 @@ func groupsState() groupsJSON {
 				m.Ultra = m.Fast && m.UltraOK && g.IsUltra(id)
 				m.Free = p.FreeModel(model)
 				m.Billing = p.BillingKind()
+				m.ModelTest = testWhyOf(p, model)
 				for _, e := range served {
 					if e.Group == "" && e.Provider.ID == p.ID && e.Model == model {
 						m.Context, m.Images, m.ImagesUnknown = e.Context, seesImages(e), imagesUnknown(e)
@@ -524,10 +560,12 @@ func groupsState() groupsJSON {
 				_, who := onOf(p)
 				_, model, _ := strings.Cut(of, "/")
 				m.Ready, m.Provider, m.Name, m.Icon, m.Model, m.On = true, p.ID, p.Name, p.Icon, model, max(len(who), 1)
+				m.ModelTest = testWhy(p)
 				gj.Ready = true
 			} else if pid, model, ok := strings.Cut(of, "/"); ok {
 				if p, err := provider.Find(pid); err == nil && !p.On() {
 					m.ProviderOff, m.Provider, m.Name, m.Icon, m.Model = true, p.ID, p.Name, p.Icon, model
+					m.ModelTest = testWhyOf(*p, model)
 				}
 			}
 			gj.Info = append(gj.Info, m)

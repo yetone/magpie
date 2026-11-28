@@ -118,11 +118,12 @@ func (p Provider) testAccounts() []testAccount {
 	return out
 }
 
-// accountNamed is p as its account named ref (a pool's user), on or off,
-// served by the user's say-so: the user asked for this one.
+// accountNamed is p as its account named ref (a pool's user, or its
+// stable id, which a routing group's member keeps: memberAccountKept), on
+// or off, served by the user's say-so: the user asked for this one.
 func (p Provider) accountNamed(ref string) (Provider, bool) {
 	for _, a := range p.testAccounts() {
-		if strings.EqualFold(a.Account.User, ref) {
+		if strings.EqualFold(a.Account.User, ref) || strings.EqualFold(a.AccountID(), ref) {
 			return a.Provider, true
 		}
 	}
