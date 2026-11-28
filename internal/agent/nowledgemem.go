@@ -192,12 +192,20 @@ func memBase(p memProvider) string {
 // model, or for one named magpie that isn't this magpie's (memOn), a
 // magpie on a server, host/model, which is never read as a model of this
 // magpie's (Alex on Discord: the cloud magpie's deepseek/pro showed Mem
-// as connected here).
+// as connected here). So is one of another name on another machine
+// whose model reads as one of this magpie's (an OpenAI-compatible
+// provider the user added at the server's magpie): it is the server's,
+// and Mem isn't connected here, nor taken off it by Disconnect.
 func memOwnValue(id string, p memProvider) string {
-	if id == magpieID && p.Model != "" {
-		if u, err := url.Parse(memBase(p)); err == nil && u.Host != "" {
-			return u.Host + "/" + p.Model
-		}
+	if p.Model == "" {
+		return ""
+	}
+	b := memBase(p)
+	if id != magpieID && !(onAnotherMachine(b) && !sameHost(b, gatewayV1()) && isMagpie(p.Model)) {
+		return p.Model
+	}
+	if u, err := url.Parse(b); err == nil && u.Host != "" {
+		return u.Host + "/" + p.Model
 	}
 	return p.Model
 }
@@ -343,6 +351,33 @@ func nowledgeMem(home string) *Agent {
 			body := memBody(p, magpieID, p.Model)
 			body["api_base"] = gatewayV1()
 			return c.post("/remote-llm/config", body)
+		},
+		// magpie's provider pointed at another machine since magpie set
+		// it up, there answering as another magpie (Alex on Discord: the
+		// magpie on their server imported over it), is the user's: what
+		// magpie stashed and remembers setting goes, so the Agents page
+		// shows Mem as not connected rather than changed outside magpie,
+		// and the first read after a start isn't taken for this magpie's
+		// while the address hasn't answered (memOn). Asked once as the page
+		// is drawn: a start's first one waits for that answer.
+		Follow: func() error {
+			s, _ := now()
+			p, ok := s.Providers[magpieID]
+			if !ok || !onAnotherMachine(memBase(p)) {
+				return nil
+			}
+			memAsked(s)
+			if !memElsewhere(p) {
+				return nil
+			}
+			if unstashPeek(keyPrev) != "" {
+				forget(keyPrev)
+			}
+			if unstashPeek("nowledge-mem.connect.was") != "" {
+				forget("nowledge-mem.connect.was")
+			}
+			(&Agent{ID: "nowledge-mem"}).forgetSetUp()
+			return nil
 		},
 		Check: func() string {
 			s, _ := now()

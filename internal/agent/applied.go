@@ -938,6 +938,11 @@ func (a *Agent) Disconnect() (err error) {
 		return a.Native.Execute(plan)
 	}
 	if !a.Wired() {
+		// nothing of magpie's in its config, but what magpie remembers
+		// setting would still show it changed outside magpie, among those
+		// connected: that goes, as at the end of a Disconnect (Alex on
+		// Discord: Disconnect said done and Nowledge Mem stayed there)
+		a.forgetSetUp()
 		return nil
 	}
 	// the user's say, kept till they connect it again: nothing magpie does
