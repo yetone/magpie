@@ -9,11 +9,11 @@ import (
 	"maps"
 	"net/http"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -61,7 +61,7 @@ var skillsPullScript string
 
 // skillsBaseOK is the address pull.sh is written with: a URL's characters
 // only, nothing a shell's single quotes would end on.
-var skillsBaseOK = regexp.MustCompile(`^https?://[A-Za-z0-9.\-_~:\[\]%/@]+$`)
+var skillsBaseOK = lazyre.New(`^https?://[A-Za-z0-9.\-_~:\[\]%/@]+$`)
 
 // skillsPullAllowed answers w for r when it is not given the skills, and
 // says whether it is.
