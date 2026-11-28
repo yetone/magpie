@@ -33,6 +33,8 @@
 //                          the contributors page, its table put in from
 //                          public/contributors/<lang>.html (credits-cli.mjs
 //                          wall, at each deploy)
+//   /c/<id>                a contributor's card (cards.js), from
+//                          public/contributors/c/<id>.json
 //   /download              the Apple Silicon dmg
 //   /download/mac-arm64    the same;  /download/mac-intel  the Intel dmg
 //   /download/windows      the Windows app (x64);  /download/windows-arm64
@@ -76,6 +78,7 @@ import { handle as pluginStats, prune as prunePlugins } from "./pluginstats.js";
 import { api as shareAPI, page as sharePage, content as shareContent, prune as pruneShares, CONTENT as SHARE_HOST } from "./shares.js";
 import { api as groupAPI, page as groupPage, prune as pruneGroups } from "./groups.js";
 import { api as liveAPI, ShareLive } from "./live.js";
+import { page as cardPage } from "./cards.js";
 
 // each shared page's data and room (live.js)
 export { ShareLive };
@@ -128,6 +131,10 @@ export default {
     if (url.pathname === "/api/groups" || url.pathname.startsWith("/api/groups/")) return groupAPI(req, env, ctx);
     if (url.pathname.startsWith("/g/") || url.pathname === "/groups" || url.pathname === "/groups/") {
       const got = await groupPage(req, env);
+      if (got) return got;
+    }
+    if (url.pathname.startsWith("/c/")) {
+      const got = await cardPage(req, env);
       if (got) return got;
     }
     if (url.pathname === "/api/plugins/tagged") return taggedPlugins(ctx);

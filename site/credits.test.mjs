@@ -2,7 +2,7 @@
 // one from yetone/magpie's own history, word for word.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS, checkedX, avatar, replay } from "./credits.mjs";
+import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS, checkedX, avatar, replay, cards } from "./credits.mjs";
 import { authors, excluded, xAccounts, aliases, toLookUp, honoured, xOfLink } from "./credits-cli.mjs";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -628,6 +628,32 @@ test("the replay places a plugin's release at the first magpie release at or aft
   // release, at the last; a release with no time is left out
   assert.deepEqual(r.e, [[0, 0], [1, 0, 1]]);
   assert.deepEqual(r.v, ["0.1.1", "0.1.2"]);
+});
+
+test("each card is numbered by the person's first credited release, and lists every line credited", () => {
+  const people = [
+    { name: "Late", github: "Late", releases: [{ v: "0.1.3", what: ["c"] }] },
+    { name: "never", releases: [{ v: "0.1.9", what: ["no time"] }] },
+    { name: "early", x: "early_x", releases: [{ v: "0.1.2", what: ["b"] }, { v: "zcode@0.1.74", what: ["a", "a2"] }] },
+    { name: "Bee", releases: [{ v: "0.1.3", what: ["d"] }] },
+  ];
+  const times = { "0.1.2": 2000, "0.1.3": 3000, "zcode@0.1.74": 1500 };
+  const got = cards(people, times, {});
+  const by = Object.fromEntries(got.map((c) => [c.name, c]));
+  // early's first is the plugin release at 1500; Bee and Late tie on 0.1.3
+  // and go by name, any case; a release with no time sorts last
+  assert.deepEqual(got.map((c) => [c.name, c.no]), [["Late", 3], ["never", 4], ["early", 1], ["Bee", 2]]);
+  assert.ok(got.every((c) => c.of === 4));
+  assert.deepEqual(by.early.since, { v: "zcode 0.1.74", t: 1500 });
+  assert.deepEqual(by.never.since, { v: "v0.1.9" });
+  assert.equal(by.early.n, 2);
+  assert.deepEqual(by.early.lines.map((l) => [l.v, l.t]), [["v0.1.2", "b"], ["zcode 0.1.74", "a"], ["zcode 0.1.74", "a2"]]);
+  // the id is the row's id on the wall, so a card and its row match
+  assert.deepEqual(got.map((c) => c.id), anchors(people));
+  assert.equal(by.Late.github, "Late");
+  assert.match(by.Late.pic, /^https:\/\/avatars\.githubusercontent\.com\//);
+  assert.equal(by.early.x, "early_x");
+  assert.equal(by.Bee.pic, undefined);
 });
 
 // a git repository shaped like magpie-community/plugins, each commit at a

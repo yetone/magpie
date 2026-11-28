@@ -152,4 +152,36 @@
   }
   addEventListener("hashchange", land);
   land();
+
+  // A row's card (usemagpie.ai/c/<id>, cards.js): its link is put in the
+  // row a pointer or focus reaches, the row a link lands on, and every row
+  // a search narrows to a few, so the list's HTML carries none of them.
+  const CARD = { zh: "贡献卡", ja: "カード" }[(document.documentElement.lang || "").slice(0, 2)] || "Card";
+  function card(tr) {
+    if (!tr || !tr.id || tr.dataset.card) return;
+    const via = tr.querySelector(".cw-via");
+    if (!via) return;
+    tr.dataset.card = "1";
+    const a = document.createElement("a");
+    a.className = "cw-card";
+    a.href = "/c/" + encodeURIComponent(tr.id);
+    a.textContent = CARD;
+    via.after(a);
+  }
+  const rowOf = (e) => e.target.closest && e.target.closest(".cw-wrap tbody tr");
+  wrap.addEventListener("pointerover", (e) => card(rowOf(e)));
+  wrap.addEventListener("focusin", (e) => card(rowOf(e)));
+  input.addEventListener("input", () => {
+    if (!norm(input.value)) return;
+    const on = rows.filter((r) => !r.el.hidden);
+    if (on.length <= 50) on.forEach((r) => card(r.el));
+  });
+  function landed() {
+    let h;
+    try { h = decodeURIComponent(location.hash.slice(1)); } catch (e) { return; }
+    const el = h && document.getElementById(h);
+    if (el && el.closest(".cw-wrap") === wrap) card(el);
+  }
+  addEventListener("hashchange", landed);
+  landed();
 })();

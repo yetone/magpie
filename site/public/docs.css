@@ -175,6 +175,9 @@ pre .s { color: var(--ink2); }
 .cw details summary { cursor: pointer; color: var(--ink2); font-size: 13px; }
 .cw details ul { margin-top: 4px; }
 .cw-via { color: var(--ink3); font-size: 12px; font-weight: 400; }
+.cw-card { margin-left: 8px; color: var(--ink2); font-size: 12px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.cw-card::before { content: "·"; margin-right: 8px; color: var(--ink3); }
+.cw-card:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
 /* its finder (public/wall.js): no motion, the rows just go */
 .cw-find { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
 .cw-find[hidden], .table-wrap[hidden] { display: none; }

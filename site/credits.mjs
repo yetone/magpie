@@ -495,8 +495,9 @@ export function checkedX(text) {
 // a person's picture: their GitHub one, their checked X account's, or ""
 export function avatar(p, size = 64) {
   if (p.github) return `https://avatars.githubusercontent.com/${encodeURIComponent(p.github)}?s=${size}`;
-  // X's small picture is 48px; "_bigger" is the same at 73px
-  if (p.xpic) return `https://pbs.twimg.com/profile_images/${p.xpic.split("/").map(encodeURIComponent).join("/").replace(/_normal(?=\.\w+$|$)/, size > 48 ? "_bigger" : "_normal")}`;
+  // X's small picture is 48px; "_bigger" is the same at 73px, "_400x400"
+  // at 400
+  if (p.xpic) return `https://pbs.twimg.com/profile_images/${p.xpic.split("/").map(encodeURIComponent).join("/").replace(/_normal(?=\.\w+$|$)/, size > 200 ? "_400x400" : size > 48 ? "_bigger" : "_normal")}`;
   return "";
 }
 
@@ -645,6 +646,44 @@ export function wall(commits, opts = {}) {
   });
   people.sort((a, b) => (later(a.releases[0].v, b.releases[0].v) ? -1 : later(b.releases[0].v, a.releases[0].v) ? 1 : lower(a.name) < lower(b.name) ? -1 : 1));
   return people;
+}
+
+// Each person's contributor card (cards.js serves it at /c/<id>): who they
+// are, their number among everyone in the order they were first credited
+// (a release's time; one with no time known goes after those with one,
+// and within a release by name), when that was, and every line they are
+// credited with, newest release first as on the wall.
+export function cards(people, times, plugins = {}) {
+  const ids = anchors(people);
+  const timeOf = timer(times);
+  const first = people.map((p) => {
+    let best = null;
+    for (const r of p.releases || []) {
+      const t = timeOf(r.v);
+      if (Number.isFinite(t) && (!best || t < best.t)) best = { v: r.v, t };
+    }
+    const last = (p.releases || []).at(-1);
+    return best || (last ? { v: last.v, t: null } : null);
+  });
+  const order = people.map((_, i) => i).sort((a, b) => {
+    const x = first[a] && first[a].t, y = first[b] && first[b].t;
+    if (Number.isFinite(x) !== Number.isFinite(y)) return Number.isFinite(x) ? -1 : 1;
+    if (Number.isFinite(x) && x !== y) return x - y;
+    const n = lower(people[a].name), m = lower(people[b].name);
+    return n < m ? -1 : n > m ? 1 : ids[a] < ids[b] ? -1 : 1;
+  });
+  const no = new Array(people.length);
+  order.forEach((i, k) => { no[i] = k + 1; });
+  return people.map((p, i) => {
+    const out = { id: ids[i], name: p.name, no: no[i], of: people.length, n: (p.releases || []).length };
+    if (p.github) out.github = p.github;
+    if (p.x) out.x = p.x;
+    const pic = avatar(p, 400);
+    if (pic) out.pic = pic;
+    if (first[i]) out.since = { v: mark(first[i].v, plugins).text, ...(Number.isFinite(first[i].t) ? { t: first[i].t } : {}) };
+    out.lines = (p.releases || []).flatMap((r) => { const k = mark(r.v, plugins); return r.what.map((t) => ({ v: k.text, href: k.href, t })); });
+    return out;
+  });
 }
 
 // The replay above the table: when each person was credited, by release.

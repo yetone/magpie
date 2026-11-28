@@ -33,10 +33,10 @@
 // too, for the one X account each line names. Names in
 // contributors-exclude.txt are never given.
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins, handlesOf, checkedX, replay, anchors, PLUGINS, MAGPIE } from "./credits.mjs";
+import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins, handlesOf, checkedX, replay, cards, anchors, PLUGINS, MAGPIE } from "./credits.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const warn = (m) => process.stderr.write(`credits: ${m}\n`);
@@ -415,6 +415,11 @@ async function cmdWall(out = join(here, "public", "contributors.json")) {
   mkdirSync(dir, { recursive: true });
   for (const lang of ["en", "zh", "ja"]) put(join(dir, `${lang}.html`), renderWall(data, lang) + "\n");
   put(join(dir, "replay.json"), JSON.stringify(replay(people, tags, times)) + "\n");
+  // each person's card, read by cards.js; a card no one has any more goes
+  const cdir = join(dir, "c");
+  rmSync(cdir, { recursive: true, force: true });
+  mkdirSync(cdir, { recursive: true });
+  for (const c of cards(people, times, plug.plugins)) put(join(cdir, `${c.id}.json`), JSON.stringify(c) + "\n");
   warn(`${people.length} people over ${own.length} released commits and ${plug.commits.length} of ${PLUGINS} → ${out}`);
 }
 
