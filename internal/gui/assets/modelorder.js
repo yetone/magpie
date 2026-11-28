@@ -2,13 +2,16 @@
 // on X: 供应商的模型里面应该支持默认按厂商分类，并且按模型里的数字从大到小排序).
 // Each maker's models stand under its name, a plain small label, makers in
 // the order below; one whose maker magpie doesn't know goes under Other,
-// last, in the vendor's order. The maker is the server's (modelJSON.Maker: agent.ModelIcon, the
+// last, by day, else in the vendor's order. The maker is the server's (modelJSON.Maker: agent.ModelIcon, the
 // logo the agents' pickers draw beside it). A list of one maker has no
-// labels. Within a maker the version its name holds decides, compared
-// number by number (5.10 over 5.9, 5 over 4.8): a higher version first,
-// a release before its preview, the alias before its dated snapshots, a
-// later snapshot first, and the vendor's order between the rest. Only the order drawn changes: the 24 a vendor's list
-// serves with none picked are still its first 24.
+// labels. Within a maker the day it came out decides (modelJSON.Released,
+// elis_pina on X: 根据模型的推出时间进行排序), the newest first and an
+// undated one after every dated one; then the version its name holds,
+// compared number by number (5.10 over 5.9, 5 over 4.8): a higher version
+// first, a release before its preview, the alias before its dated
+// snapshots, a later snapshot first; then the vendor's order. Only the order drawn
+// changes: the 24 a vendor's list serves with none picked are still its
+// first 24.
 // advgroups.js imports it as the Providers page first draws, which an
 // editor waits for, and app.js when it draws a provider's models without
 // it (they show in the vendor's order for that moment), and an agent's
@@ -64,14 +67,23 @@ function newer(a, b) {
 
 const makerOf = (m) => (RANK.includes(m.maker) ? m.maker : "");
 
-// byMaker: models by maker, then the newest first
-function byMaker(models) {
+// released: below 0 when a came out after b, one with no day last
+const released = (a, b) => (b.released || "").localeCompare(a.released || "");
+
+// byMaker: models by maker, then the newest first; kept, in the order
+// they come in (an order the user dragged, which is theirs)
+function byMaker(models, kept) {
   const rank = (m) => (makerOf(m) ? RANK.indexOf(m.maker) : RANK.length);
   // the name shown, else its id, where it says a version
   const ver = (m) => { const a = versionOf(m.name || m.id); return a.v.length || !m.name ? a : versionOf(m.id); };
-  // Other stays in the vendor's order: its numbers are different makers'
-  return models.map((m, i) => [m, rank(m), makerOf(m) && ver(m), i]).sort((a, b) => a[1] - b[1] || (a[2] && newer(a[2], b[2])) || a[3] - b[3]).map((x) => x[0]);
+  // Other's numbers are different makers': its versions aren't compared
+  return models.map((m, i) => [m, rank(m), makerOf(m) && ver(m), i]).sort((a, b) => a[1] - b[1] ||
+    (kept ? 0 : released(a[0], b[0]) || (a[2] && newer(a[2], b[2]))) || a[3] - b[3]).map((x) => x[0]);
 }
+
+// newestFirst: models sorted in place, the newest release first, the
+// undated after in the order they came (an agent's list by provider)
+const newestFirst = (models) => models.sort(released);
 
 // modelOrder: models in the order drawn, and put(chip, model), which
 // appends a chip to chips under its maker's label
@@ -113,12 +125,31 @@ window.modelAPIPick = function (c, p, id, apis, apiNow, draw) {
 // a maker, in the editor's order, named and drawn by its logo, its models
 // the newest first, each provider's together where they tie. A group's
 // name is its key, apart from any provider's.
-window.makerGroups = function (models) {
+function makerGroups(models, kept) {
   const out = [];
-  for (const m of byMaker(models)) {
+  for (const m of byMaker(models, kept)) {
     const k = makerOf(m);
     if (out.at(-1)?.key !== k) out.push({ key: k, name: "\0" + k, label: k ? t(MAKERS[k]) : t("Other"), icon: k, models: [] });
     out.at(-1).models.push(m);
   }
   return out;
+}
+window.makerGroups = makerGroups;
+
+// agentGroups: an agent's model list's groups, the routing groups first:
+// by provider, as the list comes (its order), or by maker (makerGroups),
+// each group's models the newest first (elis_pina on X), unless ordered:
+// an order the user dragged stays theirs, in every group
+window.agentGroups = function (models, maker, ordered) {
+  const groups = [];
+  for (const m of models) {
+    if (maker && m.group !== ROUTING_GROUPS) continue;
+    let g = groups.find((x) => x.name === m.group);
+    if (!g) groups.push(g = { name: m.group, icon: m.icon, models: [] });
+    g.models.push(m);
+  }
+  groups.sort((x, y) => (y.name === ROUTING_GROUPS) - (x.name === ROUTING_GROUPS));
+  if (!ordered) for (const g of groups) if (g.name !== ROUTING_GROUPS) newestFirst(g.models);
+  if (maker) groups.push(...makerGroups(models.filter((m) => m.group !== ROUTING_GROUPS), ordered));
+  return groups;
 };

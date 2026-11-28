@@ -412,15 +412,40 @@ imported with advgroups.js as the Providers page first draws (which the
 editor waits for, #7051), puts each maker's models under its
 name (Anthropic, OpenAI, Google, DeepSeek, xAI, Qwen, Moonshot AI, Zhipu,
 MiniMax, Mistral, Xiaomi, StepFun, then Other), a plain small label, and
-none when the list has one maker. Other keeps the vendor's order, since
-its numbers belong to different makers; so does a list magpie can place
-no model of. Within a maker the version in the name
-shown (else the id) decides, read as `catalog.FamilyOf` reads it and
+none when the list has one maker. Within a maker the day the model came
+out decides first, the newest first and an undated one after every dated
+one (`released`: the list's own day, else `catalog.ReleasedOf`, the day
+most models.dev providers give the bare id, a tie to the earlier;
+elis_pina on X). Then the version in the name
+shown (else the id), read as `catalog.FamilyOf` reads it and
 compared number by number (5.10 over 5.9, 5 over 4.8), a release before
 its preview, the alias before its dated snapshots, a later snapshot first,
-the vendor's order between the rest. Only the order drawn changes: with
-none picked the vendor's first 24 are still the ones served, and the
-agents' pickers keep their own order (#2106, #5980). A new logo in
+then the vendor's order. Other compares no versions, since its numbers
+belong to different makers: day, then the vendor's order. Only the order
+drawn changes: with
+none picked the vendor's first 24 are still the ones served.
+
+Every other list a model is picked from puts each provider's models the
+newest first the same way: by day, two of a day by name, and the undated
+after them in the provider's own order (most relays' lists date none of
+their models, and those lists look as they did), each provider's together
+where its first stands and the routing groups in their order
+(`provider.NewestFirst`, `Entry.ReleaseDate`): an agent's model fields
+(`buildVia` through `provider.PickOrder`, so the TUI too) and Codex's
+subagent and compaction pickers (`CodexSubagentPicks`); Settings' vision,
+title, masking, side-job, image and video pickers; an agent's model list
+(`agentGroups` in modelorder.js); and a routing group's member and
+classifier pickers (`newestFirst` in the Routing plugin's client.js, on a
+copy: `groups.models` keeps the catalog's order, which patterns match in).
+Claude Code's `/model` list (`modelPicker`) and Paseo's model list are
+made from the same options, so they follow it too, and the next sync
+writes them once in the new order. An order the user dragged an agent's
+models into (`ModelOrder`, the list's `ordered`) is theirs, and is kept.
+The models an agent is handed keep the catalog's order: `CatalogFor`
+(what fits a menu cap, /v1/models), the model files magpie writes
+(`magpieModels`) and Codex's catalog (#2106, #5980;
+`TestPickersPutTheNewestFirst`, `TestNewestFirst`,
+`model-newest-first.test.cjs`). A new logo in
 `byFamily` needs a maker there (`TestEveryModelMakerIsNamedInTheEditor`;
 `TestProviderModelsSayTheirMaker`, `model-makers.test.cjs`).
 

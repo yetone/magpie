@@ -2547,7 +2547,7 @@ func codexIn(at place) *Agent {
 				},
 				Options: func(map[string]string) []Option {
 					var out, groups []Option
-					for _, e := range provider.CodexSubagentModels() {
+					for _, e := range provider.CodexSubagentPicks() {
 						if e.Group != "" {
 							groups = append(groups, Option{Value: e.ID, Label: e.Name, Note: "routing group · via magpie",
 								Icon: e.Provider.Icon, Icons: e.Icons, Group: RoutingGroups, Ref: e.ID})
@@ -2575,7 +2575,7 @@ func codexIn(at place) *Agent {
 				Set: provider.SetCodexCompactModel,
 				Options: func(map[string]string) []Option {
 					var out, groups []Option
-					for _, e := range provider.CodexSubagentModels() {
+					for _, e := range provider.CodexSubagentPicks() {
 						if e.Group != "" {
 							groups = append(groups, Option{Value: e.ID, Label: e.Name, Note: "routing group · via magpie",
 								Icon: e.Provider.Icon, Icons: e.Icons, Group: RoutingGroups, Ref: e.ID})

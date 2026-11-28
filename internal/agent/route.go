@@ -108,6 +108,11 @@ var builtOptions stampedLists[Option]
 func buildVia(agent, prefix string) []Option {
 	var out, groups []Option
 	shown, _ := provider.CatalogFor(agent)
+	// each provider's models the newest release first, unless the user put
+	// the agent's models in an order of their own (elis_pina on X: a model
+	// added late listed before the newer ones). CatalogFor itself stays in
+	// the catalog's order: what fits an agent's own menu cap comes from it
+	shown = provider.PickOrder(agent, shown)
 	// own: whether a provider is the account the agent is signed in to,
 	// asked once a provider (OwnPaused reads the saved logins); a plugin's
 	// for the agent's own vendor (Grok moved onto its plugin) is when it

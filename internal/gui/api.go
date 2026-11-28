@@ -982,7 +982,10 @@ func settingsState() settingsJSON {
 	s.CheckinAccounts = provider.CheckinAccounts()
 	s.VisionAuto, s.VisionModels, s.VisionMissing = gateway.AutoVision(), []modelRef{}, gateway.VisionMissing()
 	s.VisionEfforts, s.VisionEffortNow = gateway.VisionEfforts(), gateway.VisionEffortNow()
-	for _, e := range provider.Served() {
+	// the pickers below offer each provider's models the newest first
+	// (elis_pina on X)
+	newest := provider.NewestFirst(provider.Served())
+	for _, e := range newest {
 		if e.Images && (e.ImageInput == nil || *e.ImageInput) && (e.Group != "" || e.Provider.Ready()) {
 			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
 			if e.Group != "" {
@@ -1012,7 +1015,7 @@ func settingsState() settingsJSON {
 		}
 		s.DisabledHits[pat] = provider.DisabledHits(pat)
 	}
-	for _, e := range provider.Served() {
+	for _, e := range newest {
 		if e.Group != "" || e.Provider.Ready() && !e.Provider.DecideOnly() {
 			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
 			if e.Group != "" {
@@ -1032,7 +1035,7 @@ func settingsState() settingsJSON {
 		}
 		// those unticked in its editor left out, but the one picked here
 		// (321sssrt on X): a hidden pick still draws, and shows as picked
-		for _, m := range gateway.Drawers(p) {
+		for _, m := range catalog.NewestFirst(gateway.Drawers(p)) {
 			if p.DrawerHidden(m.ID) && gateway.ListedDrawer(s.ImageGen) != p.ID+"/"+m.ID {
 				continue
 			}
@@ -1069,7 +1072,7 @@ func settingsState() settingsJSON {
 			continue
 		}
 		// one unticked in its editor is left out, but the one picked here
-		for _, m := range gateway.Videomakers(p) {
+		for _, m := range catalog.NewestFirst(gateway.Videomakers(p)) {
 			if p.VideomakerHidden(m.ID) && s.VideoGen != p.ID+"/"+m.ID {
 				continue
 			}

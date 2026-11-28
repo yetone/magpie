@@ -6940,6 +6940,16 @@ function routingPage(part) {
   // has them, greyed with why. A group of the user's lists what they put in.
   const offIn = (g) => g.auto ? (g.memberInfo || []).filter((i) => i.providerOff && g.members.includes(i.id)) : [];
   const shownMembers = (g) => { const off = offIn(g).map((i) => i.id); const left = g.members.filter((id) => !off.includes(id)); return left.length ? left : g.members; };
+  // newestFirst: a copy of models as a picker offers them (elis_pina on
+  // X: 根据模型的推出时间进行排序), each provider's together where its first
+  // stands, the newest release first, the undated after in the provider's
+  // own order. A copy: groups.models' own order is the catalog's, which patterns
+  // match members in
+  const newestFirst = (ms) => {
+    const at = new Map();
+    for (const m of ms) if (!at.has(m.provider ?? m.providerName)) at.set(m.provider ?? m.providerName, at.size);
+    return ms.map((m, i) => [m, at.get(m.provider ?? m.providerName), i]).sort(([a, x, i], [b, y, j]) => x - y || (b.released || "").localeCompare(a.released || "") || i - j).map(([m]) => m);
+  };
   const groupIcons = (g) => { const shown = shownMembers(g); return [...new Map((g.memberInfo || []).filter((i) => i.icon && shown.includes(i.id)).map((i) => [i.provider || i.icon, i.icon])).values()]; };
   // offOf: a member whose provider is switched off (groupsState's
   // providerOff), said by its provider's name and model rather than a bare
@@ -8895,7 +8905,7 @@ function routingPage(part) {
       // (visamzh on X: gpt-6.2-sol at high and at xhigh, #189)
       const withHeld = (mk) => (x) => [...d.members.filter((m) => m !== x.id && !subOf(m) && splitMember(m)[0] === x.id)
         .map((m) => { const o = mk(x); return { ...o, value: m, note: [fixedOf(m) && fixedWords(fixedOf(m)), memberAccount(m)?.name, o.note].filter(Boolean).join(" · ") }; }), mk(x)];
-      const options = [...subs, ...(decides ? [] : groups.models.flatMap(withHeld(ref))), ...(decides ? [] : (groups.drawers || []).flatMap(withHeld(drawRef))), ...(chats ? [] : (groups.deciders || []).flatMap(withHeld(ref)))];
+      const options = [...subs, ...(decides ? [] : newestFirst(groups.models).flatMap(withHeld(ref))), ...(decides ? [] : newestFirst(groups.drawers || []).flatMap(withHeld(drawRef))), ...(chats ? [] : newestFirst(groups.deciders || []).flatMap(withHeld(ref)))];
       openPicker({ id: "", name: "", fields: [] }, { key: "member", label: "model", value: "", options, multi: true, picked: (id) => d.members.includes(id), onPick: (id) => {
         if (!id) return;
         if (!d.members.includes(id)) d.members.splice(d.members.findLastIndex((x) => !d.matched.includes(x)) + 1, 0, id); // after the last named
@@ -9973,7 +9983,7 @@ function routingPage(part) {
       const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id, context: x.context, free: x.free, zero: x.zero });
       const subs = groups.groups.filter((x) => !x.hidden && x.id !== g?.id)
         .map((x) => ({ value: "group/" + x.id, label: x.name, note: "group/" + x.id, icons: groupIcons(x), group: ROUTING_GROUPS, ref: "group/" + x.id }));
-      const options = [...deciders.map(opt), ...subs, ...groups.models.map(opt)];
+      const options = [...newestFirst(deciders).map(opt), ...subs, ...newestFirst(groups.models).map(opt)];
       // the classifiers in order, as a rule's models are: the first asked
       // as each turn begins, the next only when one fails or doesn't
       // answer in time (qinzhidaoa on X: the one picked answered 502).

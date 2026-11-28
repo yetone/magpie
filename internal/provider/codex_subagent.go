@@ -47,6 +47,13 @@ func CodexSubagentModels() []Entry {
 	return keptOf("codex-subagent-models", codexSubagentModels)
 }
 
+// CodexSubagentPicks is CodexSubagentModels as its pickers offer them
+// (PickOrder), kept as CodexSubagentModels is: asked on every poll of
+// Codex's fields.
+func CodexSubagentPicks() []Entry {
+	return keptOf("codex-subagent-picks", func() []Entry { return PickOrder("codex", codexSubagentModels()) })
+}
+
 func codexSubagentModels() []Entry {
 	var chatgpt, rest []Entry
 	for _, e := range catalogKept("codex").shown {

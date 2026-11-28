@@ -627,6 +627,9 @@ var (
 	// names are the models' names, by bare id, as most of the providers
 	// serving them give it
 	names map[string]string
+	// dates are the models' release dates (YYYY-MM-DD), by bare id, as
+	// most of the providers serving them give it (ReleasedOf)
+	dates map[string]string
 	// listed are the bare ids of every model models.dev lists, whatever it
 	// says of them: an id listed is never taken for another (renamed)
 	listed map[string]bool
@@ -703,6 +706,7 @@ func loadGen() (map[string]mdProvider, int) {
 					mdev = m
 					votes, reasons := map[string]int{}, map[string]int{}
 					named := map[string]map[string]int{}
+					dated := map[string]map[string]int{}
 					sizes, outs := map[string]map[int]int{}, map[string]map[int]int{}
 					whole := map[string]map[int]map[int]int{}
 					levels := map[string]map[string]int{}
@@ -728,6 +732,12 @@ func loadGen() (map[string]mdProvider, int) {
 								named[who] = map[string]int{}
 							}
 							named[who][x.Name]++
+						}
+						if x.ReleaseDate != "" {
+							if dated[who] == nil {
+								dated[who] = map[string]int{}
+							}
+							dated[who][x.ReleaseDate]++
 						}
 						// This vote answers what the catalog lists for the
 						// model across providers. A verified provider's toggle
@@ -872,6 +882,10 @@ func loadGen() (map[string]mdProvider, int) {
 					for id, by := range named {
 						names[id] = mostNamed(by)
 					}
+					dates = map[string]string{}
+					for id, by := range dated {
+						dates[id] = mostDated(by)
+					}
 					thinks = map[string]bool{}
 					for id, v := range reasons {
 						if v > 0 {
@@ -904,7 +918,7 @@ func Reset() {
 	gen++
 	resets.Add(1)
 	mdev, images, inputs, windows, outputs, efforts, thinks, names, listed, canonical, labs, normal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
-	wholes = nil
+	wholes, dates = nil, nil
 	loadMu.Unlock()
 	if Forget != nil {
 		Forget()
@@ -1675,6 +1689,17 @@ func SeesImages(id string) bool {
 	return v
 }
 
+// ReleasedOf is the day models.dev says a model of this id came out
+// (YYYY-MM-DD), as most of the providers it lists serving it give it,
+// found as SeesImages finds it: a relay's or a plugin's model that its
+// own list gives no date is dated as models.dev dates it. "" when it
+// doesn't know the model or gives no date.
+func ReleasedOf(id string) string {
+	load()
+	v, _ := lookup(id, dates)
+	return v
+}
+
 // InputsOf is what models.dev says a model of this id takes (text, image,
 // audio, video, pdf), as most of the providers it lists serving it do,
 // found as SeesImages finds it; nil when it doesn't know the model. The
@@ -2377,6 +2402,18 @@ func mostNamed(by map[string]int) string {
 	for s, c := range by {
 		if c > n || c == n && (len(s) < len(best) || len(s) == len(best) && s < best) {
 			best, n = s, c
+		}
+	}
+	return best
+}
+
+// mostDated is the release date most providers give; a tie goes to the
+// earlier, the day the first of them served it.
+func mostDated(by map[string]int) string {
+	best, n := "", 0
+	for d, c := range by {
+		if c > n || c == n && d < best {
+			best, n = d, c
 		}
 	}
 	return best

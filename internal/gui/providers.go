@@ -77,6 +77,10 @@ type modelJSON struct {
 	// for one magpie doesn't know: the editor draws its models by maker
 	// (modelorder.js; WJaunita45604 on X)
 	Maker string `json:"maker,omitempty"`
+	// Released is the day it came out, its list's or else models.dev's
+	// (catalog.ReleasedOf): a maker's models are drawn the newest first
+	// (elis_pina on X); "" when neither dates it
+	Released string `json:"released,omitempty"`
 	// Headers are the request headers the user gave the model, sent after
 	// the provider's (provider.SetModelHeaders)
 	Headers map[string]string `json:"headers,omitempty"`
@@ -1321,7 +1325,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 		window := p.WindowIn(m, set)
 		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), ListedOutput: provider.OutputWithin(provider.ListedWindow(m), p.ReplyLimitIn(m, settings.Settings{})), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID], Inputs: mediaInputs(provider.InputsOf(m))}
-		j.Maker = modelMaker(m.ID, m.Name)
+		j.Maker, j.Released = modelMaker(m.ID, m.Name), cmp.Or(m.Released, catalog.ReleasedOf(m.ID))
 		list, listed, free := pricer.Prices(set, m.ID)
 		j.Zero = !m.Free && free
 		if j.Keys, j.KeyCount = keysApart(m.Keys, onKeys, keyAt); j.KeyCount == len(j.Keys) {

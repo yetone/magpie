@@ -60,10 +60,11 @@ func readDistill() (*distillView, error) {
 
 // servedModels are the models a side job can be sent to through the
 // gateway: a ready subscription's (not one that only decides) and each
-// routing group's, the group named in place of a provider
+// routing group's, the group named in place of a provider; each
+// provider's the newest first (elis_pina on X)
 func servedModels() []modelRef {
 	ms := []modelRef{}
-	for _, e := range provider.Served() {
+	for _, e := range provider.NewestFirst(provider.Served()) {
 		if e.Group != "" || e.Provider.Ready() && !e.Provider.DecideOnly() {
 			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context}
 			if e.Group != "" {

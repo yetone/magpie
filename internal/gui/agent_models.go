@@ -87,7 +87,11 @@ type agentModelJSON struct {
 	// on X); "" for a group and a maker magpie doesn't know
 	Maker   string `json:"maker,omitempty"`
 	Context int    `json:"context,omitempty"`
-	Hidden  bool   `json:"hidden,omitempty"`
+	// Released is the day it came out (provider.Entry.ReleaseDate), which
+	// the list puts each provider's or maker's newest first by unless the
+	// user dragged an order (elis_pina on X); "" for a group and an undated one
+	Released string `json:"released,omitempty"`
+	Hidden   bool   `json:"hidden,omitempty"`
 	// InUse: the agent is set to it, so it can't be taken out
 	InUse bool `json:"inUse,omitempty"`
 	// Own: one of Codex's own, a ChatGPT account's, which Codex lists
@@ -310,7 +314,7 @@ func agentModelList(a *agent.Agent) []agentModelJSON {
 			m.Name = e.Model
 		}
 		m.Maker = modelMaker(e.Model, e.Name)
-		m.Logo = m.Maker
+		m.Logo, m.Released = m.Maker, e.ReleaseDate()
 		if e.Group != "" {
 			// a group shows its providers' icons, as it does everywhere else
 			m.Group, m.Icons, m.Logo, m.Maker = agent.RoutingGroups, e.Icons, "", ""

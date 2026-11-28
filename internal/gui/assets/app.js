@@ -3500,21 +3500,11 @@ async function openAgentModels(a, anchor, ev) {
   // takes back a first click on Hide all or Show all (twice, below)
   let disarm = () => {};
   foot.append(onlyBox, el("span", "sp"), hideAll, el("span", "am-dot", "·"), reset, joinBox);
-  // groups as the catalog has them, routing groups first; a long one
-  // starts folded, unless the agent is set to a model in it. By maker,
-  // the routing groups stay first, a group of their own
+  // groups by provider or maker, routing groups first, each the newest
+  // first unless dragged (agentGroups, modelorder.js); a long one starts
+  // folded, unless the agent is set to a model in it
   const groups = [];
-  const regroup = () => {
-    groups.length = 0;
-    for (const m of models) {
-      if (byMaker && m.group !== ROUTING_GROUPS) continue;
-      let g = groups.find((x) => x.name === m.group);
-      if (!g) groups.push(g = { name: m.group, icon: m.icon, models: [] });
-      g.models.push(m);
-    }
-    groups.sort((x, y) => (y.name === ROUTING_GROUPS) - (x.name === ROUTING_GROUPS));
-    if (byMaker) groups.push(...makerGroups(models.filter((m) => m.group !== ROUTING_GROUPS)));
-  };
+  const regroup = () => groups.splice(0, groups.length, ...self.agentGroups?.(models, byMaker, ordered) || [{ name: "", models }]);
   const gname = (g) => g.label || (g.name === ROUTING_GROUPS ? t(g.name) : g.name);
   regroup();
   // folding is for telling providers (or makers) apart: routing groups

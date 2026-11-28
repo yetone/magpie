@@ -12,6 +12,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/groupshare"
 	"github.com/yetone/magpie/internal/middleware"
@@ -265,11 +266,15 @@ type modelRef struct {
 	// says free by either (jiangguochao666 on X)
 	Free bool `json:"free,omitempty"`
 	Zero bool `json:"zero,omitempty"`
+	// Released is the day it came out (provider.Entry.ReleaseDate): the
+	// Routing page's pickers offer each provider's newest first (elis_pina
+	// on X); "" when nothing dates it
+	Released string `json:"released,omitempty"`
 }
 
 // servedRef is a served model as the Routing page lists it
 func servedRef(e provider.Entry, s settings.Settings) modelRef {
-	return modelRef{Free: e.Free, Zero: !e.Free && e.Provider.PricedFree(s, e.Model), ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(*e.Provider, e.Model), OwnFast: provider.OwnFast(*e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e), Sub: e.Provider.Account != nil}
+	return modelRef{Free: e.Free, Zero: !e.Free && e.Provider.PricedFree(s, e.Model), ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(*e.Provider, e.Model), OwnFast: provider.OwnFast(*e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e), Sub: e.Provider.Account != nil, Released: e.ReleaseDate()}
 }
 
 type poolJSON struct {
@@ -432,7 +437,7 @@ func groupsState() groupsJSON {
 		}
 	}
 	for _, e := range provider.OfferedDeciders(func(id string) bool { return named[id] }) {
-		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Sub: e.Provider.Account != nil, ModelTest: testWhyOf(*e.Provider, e.Model)})
+		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Sub: e.Provider.Account != nil, ModelTest: testWhyOf(*e.Provider, e.Model), Released: e.ReleaseDate()})
 	}
 	out.Accounts = groupAccounts(all)
 	out.GatewayKeys = groupKeys()
@@ -464,7 +469,7 @@ func groupsState() groupsJSON {
 			if chat[ref] || p.DrawerHidden(m.ID) && !named[ref] {
 				continue
 			}
-			out.Drawers = append(out.Drawers, modelRef{ID: ref, Name: cmp.Or(m.Name, m.ID), Provider: p.ID, PName: p.Name, Icon: p.Icon, VendorPicks: gateway.VendorPicksDrawer(p), ModelTest: testWhy(p)})
+			out.Drawers = append(out.Drawers, modelRef{ID: ref, Name: cmp.Or(m.Name, m.ID), Provider: p.ID, PName: p.Name, Icon: p.Icon, VendorPicks: gateway.VendorPicksDrawer(p), ModelTest: testWhy(p), Released: cmp.Or(m.Released, catalog.ReleasedOf(m.ID))})
 		}
 	}
 	// every provider's models read once for the groups, not once a group
