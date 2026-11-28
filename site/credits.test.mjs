@@ -162,6 +162,20 @@ test("a platform after a \"by @\" handle is where, and none leaves it a GitHub l
   assert.deepEqual(parse("provider: a key's own model list never bars the vendor's decision model (bunnybit0121 on X, #7788)"), { names: [{ name: "bunnybit0121", via: "X", sure: true }], refs: [{ repo: "yetone/magpie", n: 7788 }] });
 });
 
+test("a bracket written in quotes is quoted text, not a credit", () => {
+  // 9e9332164 (v0.1.5005) put the form it reads in its own subject
+  assert.deepEqual(names('credits: a body paragraph that opens "NAME on X:" credits NAME, as does a bracket of handles "(@A, @B on X)" (ZhouYimingsjtu on X)'), ["ZhouYimingsjtu"]);
+  assert.deepEqual(names("credits: “(lc on Discord)” is a form, and 「(lc on Discord)」 too"), []);
+  assert.deepEqual(parseBody('the form "(@A, @B on X)" is read'), []);
+  // a quote on one side only is no quoting
+  assert.deepEqual(names('gui: the title says "Done" (lc on Discord)'), ["lc"]);
+  assert.deepEqual(names("gui: the list keeps the order (lc on Discord)'s report asked for"), ["lc"]);
+  assert.deepEqual(names("gui: a thing (by @someone)"), ["someone"]);
+  // and the row's text keeps it
+  assert.equal(what('credits: "(reported by @duanckham on X)" credits an X account, and is read after a subject\'s " — " too'), 'credits: "(reported by @duanckham on X)" credits an X account, and is read after a subject\'s "');
+  assert.equal(what('credits: a bracket of handles "(@A, @B on X)" (ZhouYimingsjtu on X)'), 'credits: a bracket of handles "(@A, @B on X)"');
+});
+
 test("a body paragraph that opens with who said it, or a bracket of their handles, credits them", () => {
   // be400389b (v0.1.4541)
   assert.deepEqual(body("provider: Antigravity counts Gemini 4 Carbon and Argon at their original price, $4 / $20 / $0.20",

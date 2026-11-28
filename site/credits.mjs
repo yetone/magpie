@@ -60,6 +60,14 @@ function handle(w) {
 }
 
 // someone named in front of a platform, "Benjie Zhou on Discord"
+// a bracket written in quotes is the text quoted, not who it credits: a
+// subject about the credits' own forms, "(@A, @B on X)"
+const QUOTES = { '"': '"', "“": "”", "'": "'", "`": "`", "「": "」" };
+function quoted(text, m) {
+  const open = text[m.index - 1], close = text[m.index + m[0].length];
+  return Object.hasOwn(QUOTES, open) && QUOTES[open] === close;
+}
+
 function personName(s) {
   s = s.trim().replace(/^@/, "");
   if (!s || s.length > 40 || /[#()\[\]{}<>"“”]/.test(s) || s.split(/\s+/).length > 3) return "";
@@ -164,6 +172,7 @@ export function parseBody(text) {
   }
   // a bracket of handles and nothing else: "(@ZhouYimingsjtu, @Lmohn39 on X)"
   for (const m of flat.matchAll(/\((@[\w.-]+(?:(?:,\s*|\s+(?:and|&)\s+)@[\w.-]+)*)\s+on\s+([^\s()]+)\)/gu)) {
+    if (quoted(flat, m)) continue;
     const via = PLATFORMS[lower(m[2])];
     if (via) for (const n of m[1].split(/,\s*|\s+(?:and|&)\s+/)) out.push({ name: n.slice(1), via, sure: true });
   }
@@ -176,10 +185,11 @@ export function parse(subject) {
   // older subjects carry their whole body after " — "; credits come before
   const [head, ...rest] = String(subject).split(" — ");
   const out = { names: [], refs: [] };
-  for (const m of head.matchAll(/\(([^()]*)\)/g)) group(m[1], out);
+  for (const m of head.matchAll(/\(([^()]*)\)/g)) if (!quoted(head, m)) group(m[1], out);
   // but a bracket there that says who reported it is one: "(reported by
   // @duanckham on X)", "(spotted by @hezhizhen in #103)"
-  for (const m of rest.join(" — ").matchAll(/\(((?:reported|requested|suggested|asked|spotted)\s+by\s+@[^()]*)\)/gi)) group(m[1], out);
+  const tail = rest.join(" — ");
+  for (const m of tail.matchAll(/\(((?:reported|requested|suggested|asked|spotted)\s+by\s+@[^()]*)\)/gi)) if (!quoted(tail, m)) group(m[1], out);
   return out;
 }
 
@@ -376,7 +386,9 @@ export function thanks(people, lang) {
 // that only credit or number it.
 export function what(subject) {
   let s = String(subject).split(" — ")[0];
-  s = s.replace(/\s*\(([^()]*)\)/g, (all, inner) => {
+  s = s.replace(/\s*\(([^()]*)\)/g, (all, inner, at, text) => {
+    const m = { index: at + all.indexOf("("), 0: all.slice(all.indexOf("(")) };
+    if (quoted(text, m)) return all;
     const one = { names: [], refs: [] };
     group(inner, one);
     return one.names.length || one.refs.length ? "" : all;
