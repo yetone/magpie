@@ -2,7 +2,7 @@
 // one from yetone/magpie's own history, word for word.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS, checkedX, avatar, replay, cards } from "./credits.mjs";
+import { parse, parseBody, bodyRefs, commitRefs, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS, checkedX, avatar, replay, cards } from "./credits.mjs";
 import { authors, excluded, xAccounts, aliases, toLookUp, honoured, xOfLink } from "./credits-cli.mjs";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -143,6 +143,43 @@ test("issue and PR numbers are kept for their authors, in either repository", ()
   // a name and an issue in one bracket: both
   assert.deepEqual(names("provider: a Max output kept for a model no longer listed doesn't block the editor's Save (#3305, LoKi)", { issueAuthors: { "yetone/magpie#3305": "LoKi" } }), ["LoKi"]);
   assert.deepEqual(names("sessions: Terminal is opened through proc.Command, as every command magpie runs is (spotted by @hezhizhen in #103)"), ["hezhizhen"]);
+});
+
+test("an issue a body calls the same report credits its author, and nobody else the sentence names", () => {
+  // b10ae36e3 (v0.1.4910), word for word as wrapped
+  const b10 = {
+    subject: "davsync: an unchanged preview lists its parts as [] (#7855)",
+    body: "When nothing changed on either side, syncOnce returns before the plan's\nParts are filled, so Settings > Sync's Preview got {\"parts\": null} and\nsyncfiles.js's plan.parts.filter threw \"Cannot read properties of null\n(reading 'filter')\" instead of showing \"Nothing to sync\".\n\nLanded as qq01-hub wrote it (fix/davsync-preview-empty-parts,\n4eeb0ef30).\n\n#7078 (Caho1, 11-18) is the same report, on S3, and 6westboy9 met it on\nGitHub sync. yhdhaidong's patch there, which ggbdpq verified, took the\nsame server-side direction; this one guards the GUI as well.\n\nFixes #7855. Fixes #7078.\n\nCo-authored-by: hqq-hqq <220284859+hqq-hqq@users.noreply.github.com>\nCo-Authored-By: Claude Code <noreply@anthropic.com>\n",
+    author: "Q", email: "3126197382@qq.com", v: "0.1.4910",
+  };
+  assert.deepEqual(bodyRefs(b10.body), [{ repo: "yetone/magpie", n: 7078 }]);
+  assert.deepEqual(commitRefs(b10), [{ repo: "yetone/magpie", n: 7855 }, { repo: "yetone/magpie", n: 7078 }]);
+  const issueAuthors = { "yetone/magpie#7855": "qq01-hub", "yetone/magpie#7078": "Caho1" };
+  assert.deepEqual(credit([b10], { issueAuthors })[0].map((p) => `${p.name}/${p.via.join("+")}/${p.github}`).sort(), ["Caho1/GitHub/Caho1", "Q/GitHub/", "qq01-hub/GitHub/qq01-hub"]);
+  assert.deepEqual(wall([b10], { issueAuthors }).find((p) => p.github === "Caho1").releases, [{ v: "0.1.4910", what: ["davsync: an unchanged preview lists its parts as []"] }]);
+  // the bracket's name is how the body wrote the author, not a credit of its
+  // own: a lookup that fails names nobody
+  assert.deepEqual(credit([b10], { issueAuthors: { "yetone/magpie#7855": "qq01-hub" } })[0].map((p) => p.name).sort(), ["Q", "qq01-hub"]);
+  // d0d8e02c2: "The same report is #N"; the fork branch's author is not its reporter
+  const d0d = "dolacmeo on X: hiding a sidebar page works when it is set, then the page\nshows again. The same report is #7335 (Beyfish), with eisen0419's fork\nbranch 9997313c.\n\nNot taken from 9997313c: the change to plugin page keys for duplicate\npackages (pluginpage.go), which #7335's reporter asked to keep separate.";
+  assert.deepEqual(bodyRefs(d0d), [{ repo: "yetone/magpie", n: 7335 }]);
+  assert.deepEqual(credit([{ subject: "gui: a plugin's page left out of the sidebar stays out after a reload (dolacmeo on X)", body: d0d, author: "yetone" }], { issueAuthors: { "yetone/magpie#7335": "Beyfish" } })[0].map((p) => `${p.name}/${p.via.join("+")}`), ["dolacmeo/X", "Beyfish/GitHub"]);
+  // 398f8469b, d47c0fea0: a bug or a failure is a report too
+  assert.deepEqual(bodyRefs("while Codex pointed straight at the same relay compacted fine, and a new\nconversation worked. #1523 (jswysnemc, anyrouter) is the same failure."), [{ repo: "yetone/magpie", n: 1523 }]);
+  assert.deepEqual(bodyRefs("#1513 (sunxwei, native Windows 0.1.1157, CODEX_HOME=F:\\codex-home) is the\nsame bug. Windows has no shell to borrow from"), [{ repo: "yetone/magpie", n: 1513 }]);
+  // a plugin commit's bare #N is the plugins repository's
+  assert.deepEqual(bodyRefs("#12 and yetone/magpie#34 are the same report.", "magpie-community/plugins"), [{ repo: "magpie-community/plugins", n: 12 }, { repo: "yetone/magpie", n: 34 }]);
+  // the same test, class, change or code is no report (0f81c0b35, 2f2a0afa5,
+  // e2114780a, d052fec0e, 3b8bcc365, 398f8469b); nor is a number mid-sentence
+  for (const t of [
+    "it ends the turn. #6100 is the same on a Chat provider: a thread started in Plan keeps Plan in",
+    "(TestPluginToldWhereTheAgentWorks red under load; #6423 is the same red)",
+    "the gateway reads it now; #2949 and #4360 are the same class.",
+    "the same rule. ggbdpq's port on #5542 (0d7e18d1e) is the same change.",
+    "the hint is shown. #2973 is the same 401 on the request path.",
+    "A pass-through option (#1523) wouldn't help: Codex compacts a custom",
+    "which is the same report as #7078.",
+  ]) assert.deepEqual(bodyRefs(t), [], t);
 });
 
 test("a platform after a \"by @\" handle is where, and none leaves it a GitHub login", () => {

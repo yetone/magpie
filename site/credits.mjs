@@ -15,7 +15,11 @@
 //     ggggggggggz and track23; …", and a Reported-by: trailer
 //     ("Reported-by: gua2100 (Discord)"). Only the names right after the
 //     verb count: not who diagnosed or patched it, not an alias in
-//     brackets, not a name anywhere else in the body.
+//     brackets, not a name anywhere else in the body;
+//   - the author of an issue a body's sentence calls the same report:
+//     "#7078 (Caho1, 11-18) is the same report, on S3", "The same report
+//     is #7335 (Beyfish), …" (bodyRefs; looked up as a subject's "(#N)").
+//     The bracket's name and anyone else the sentence names are not read.
 //
 // An X credit is the GitHub person's when that GitHub user's public profile
 // names the X account (its twitter_username or an X link among its social
@@ -228,6 +232,56 @@ export function parseBody(text) {
   return out;
 }
 
+// "#12", "plugins#12", "plugins #12", "magpie-community/plugins#12": the
+// issue or PR, in magpie or the plugins repository; home is a bare "#N"'s
+const REF = /(?:\b(plugins)\s+|([\w.-]+\/)?([\w.-]+))?#(\d+)\b/g;
+function refOf([, spaced, owner, repo, n], home) {
+  const r = spaced || (!repo ? home : `${owner || ""}${repo}`);
+  const known = { [MAGPIE]: MAGPIE, magpie: MAGPIE, plugins: PLUGINS, [PLUGINS]: PLUGINS }[r];
+  return known ? { repo: known, n: +n } : null;
+}
+
+// A sentence in a commit's body that says another issue is the same report
+// as the one fixed: "#7078 (Caho1, 11-18) is the same report, on S3, and
+// 6westboy9 met it on GitHub sync.", "#1513 (sunxwei, native Windows …) is
+// the same bug.", "The same report is #7335 (Beyfish), with eisen0419's fork
+// branch …". Like BODY_BY it starts a paragraph or follows a sentence's end
+// or a semicolon. Only these nouns: "#6423 is the same red", "#2949 and
+// #4360 are the same class" and "#5542's port is the same change" are about
+// tests, code or a fix, not who reported it.
+const ISSUE = String.raw`(?:(?:plugins\s+|[\w.-]+\/)?[\w.-]*#\d+)`;
+const SAME = String.raw`the\s+same\s+(?:report|bug|failure|problem|issue|crash)\b`;
+const SAME_AFTER = new RegExp(String.raw`(?:^|(?<=[.;!?]\s))(?:[-*]\s+)?(${ISSUE}(?:\s*\([^()]*\))?(?:(?:,\s*|\s+(?:and|&)\s+)${ISSUE}(?:\s*\([^()]*\))?)*)\s+(?:is|was|are|were)\s+(?:also\s+)?${SAME}`, "gimu");
+const SAME_BEFORE = new RegExp(String.raw`(?:^|(?<=[.;!?]\s))(?:[-*]\s+)?${SAME}\s+(?:is|was)\s+(${ISSUE})`, "gimu");
+
+// The issues a commit's body (and an older subject's text after " — ")
+// calls the same report, as [{ repo, n }]: their authors reported it too.
+// Only the issue numbers count, never a name in the bracket beside them.
+export function bodyRefs(text, home = MAGPIE) {
+  const flat = String(text || "").split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, " ").trim()).join("\n");
+  const out = [];
+  for (const re of [SAME_AFTER, SAME_BEFORE]) {
+    for (const m of flat.matchAll(re)) {
+      for (const r of m[1].replace(/\([^()]*\)/g, " ").matchAll(REF)) {
+        const ref = refOf(r, home);
+        if (ref && !out.some((o) => refKey(o) === refKey(ref))) out.push(ref);
+      }
+    }
+  }
+  return out;
+}
+
+// Every issue or PR a commit credits the author of: its subject's brackets
+// and the same reports its body names.
+export function commitRefs(c) {
+  const home = c.repo || MAGPIE;
+  const refs = parse(c.subject, home).refs;
+  for (const r of bodyRefs(String(c.subject).split(" — ").slice(1).join(" — ") + "\n\n" + (c.body || ""), home)) {
+    if (!refs.some((o) => refKey(o) === refKey(r))) refs.push(r);
+  }
+  return refs;
+}
+
 // The credits in one subject: names (sure, or to be taken only if seen
 // elsewhere) and the issues or PRs its brackets name. repo is the one a bare
 // "#N" is in: the commit's own (magpie-community/plugins for a plugin's).
@@ -264,11 +318,9 @@ function group(text, out, home = MAGPIE) {
       const atVia = at && at[2] ? PLATFORMS[lower(at[2])] || null : null;
       const by = at && (atVia || /^[A-Za-z0-9-]+$/.test(at[1])) ? at : null;
       if (by) { out.names.push({ name: by[1], via: atVia || "GitHub", sure: true }); context = true; }
-      // "#12", "plugins#12", "plugins #12", "magpie-community/plugins#12"
-      p = p.replace(/(?:\b(plugins)\s+|([\w.-]+\/)?([\w.-]+))?#(\d+)\b/g, (_, spaced, owner, repo, n) => {
-        const r = spaced || (!repo ? home : `${owner || ""}${repo}`);
-        const known = { [MAGPIE]: MAGPIE, magpie: MAGPIE, plugins: PLUGINS, [PLUGINS]: PLUGINS }[r];
-        if (known) out.refs.push({ repo: known, n: +n });
+      p = p.replace(REF, (...m) => {
+        const r = refOf(m, home);
+        if (r) out.refs.push(r);
         context = true;
         return " ";
       }).trim();
@@ -334,6 +386,7 @@ export function credit(commits, { issueAuthors = {}, exclude = [], xAccounts = {
   const parsed = commits.map((c) => {
     const p = parse(c.subject, c.repo || MAGPIE);
     p.names.push(...parseBody(String(c.subject).split(" — ").slice(1).join(" — ") + "\n\n" + (c.body || "")));
+    p.refs = commitRefs(c);
     return p;
   });
   // names credited plainly anywhere, so a lone bracketed one can be trusted

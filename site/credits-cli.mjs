@@ -21,8 +21,9 @@
 // The reporters a commit's body names ("Reported on X by @…") are credited
 // beside its subject's (credits.mjs parseBody).
 //
-// The issue and PR authors a subject's "(#N)" names are asked of GitHub's
-// GraphQL API with GH_TOKEN, GITHUB_TOKEN or `gh auth token`. When that
+// The issue and PR authors a subject's "(#N)" names, and those of the
+// issues a body calls the same report (credits.mjs bodyRefs), are asked of
+// GitHub's GraphQL API with GH_TOKEN, GITHUB_TOKEN or `gh auth token`. When that
 // can't be read, those people are left out (and `wall` keeps the authors
 // its last output knew); the rest still goes out. The same API gives each
 // credited GitHub user's public X accounts (twitter_username and the X
@@ -36,7 +37,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins, handlesOf, checkedX, replay, cards, anchors, PLUGINS, MAGPIE } from "./credits.mjs";
+import { credit, everyone, thanks, wall, refKey, commitRefs, renderWall, logins, handlesOf, checkedX, replay, cards, anchors, PLUGINS } from "./credits.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const warn = (m) => process.stderr.write(`credits: ${m}\n`);
@@ -353,7 +354,7 @@ export async function xAccounts(users, { known = {}, fetchImpl = globalThis.fetc
 async function cmdThanks(range) {
   if (!range) throw new Error("usage: credits-cli.mjs thanks <from>..<to>");
   const commits = log(["--no-merges", range]);
-  const refs = commits.flatMap((c) => parse(c.subject).refs);
+  const refs = commits.flatMap(commitRefs);
   const issueAuthors = await authors(refs);
   const exclude = excluded();
   const credited = logins(credit(commits, { issueAuthors, exclude }));
@@ -395,7 +396,7 @@ async function cmdWall(out = join(here, "public", "contributors.json")) {
     warn(`${PLUGINS} not read (${String(e.message).split("\n")[0]}); only magpie's history is listed`);
   }
   const released = [...own, ...plug.commits];
-  const refs = released.flatMap((c) => parse(c.subject, c.repo || MAGPIE).refs);
+  const refs = released.flatMap(commitRefs);
   const issueAuthors = await authors(refs, { known: before.issueAuthors || {} });
   const exclude = excluded();
   const credited = logins(credit(released, { issueAuthors, exclude }));
