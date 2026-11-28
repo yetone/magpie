@@ -3706,7 +3706,6 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// weren't tried for that, not for being held too (#2517)
 			msg, back = checkpointCappedError(call.Model, *checkpoint, sealer, time.Now())
 			record = checkpointCappedRecord(sealer)
-			held = sealer
 		} else {
 			msg, back = cappedError(call.Model, held, time.Now())
 			if strictHeld != nil {
