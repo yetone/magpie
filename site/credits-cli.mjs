@@ -10,7 +10,10 @@
 //     public/contributors.json (or out) from every tag's commits, and the
 //     contributors page's table in each language beside it
 //     (public/contributors/en.html, zh, ja), which worker.js puts into the
-//     page. wrangler.jsonc's build runs it at each deploy.
+//     page, and the replay's data (public/contributors/replay.json, read by
+//     public/contributors-replay.js). wrangler.jsonc's build runs it at each
+//     deploy. An X credit links to its account only when the account is in
+//     contributors-x.txt.
 //
 // The reporters a commit's body names ("Reported on X by @…") are credited
 // beside its subject's (credits.mjs parseBody).
@@ -30,18 +33,18 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins, handlesOf } from "./credits.mjs";
+import { credit, everyone, thanks, wall, refKey, parse, renderWall, logins, handlesOf, checkedX, replay, anchors } from "./credits.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const warn = (m) => process.stderr.write(`credits: ${m}\n`);
 
 const SEP = "\x1f", END = "\x1e";
 function log(args) {
-  const out = execFileSync("git", ["log", `--format=%H${SEP}%P${SEP}%an${SEP}%ae${SEP}%s${SEP}%(trailers:key=Co-authored-by,valueonly,separator=%x1d)${SEP}%D${SEP}%b${END}`, ...args], { encoding: "utf8", maxBuffer: 1 << 30 });
+  const out = execFileSync("git", ["log", `--format=%H${SEP}%P${SEP}%an${SEP}%ae${SEP}%s${SEP}%(trailers:key=Co-authored-by,valueonly,separator=%x1d)${SEP}%D${SEP}%ct${SEP}%b${END}`, ...args], { encoding: "utf8", maxBuffer: 1 << 30 });
   return out.split(END).map((r) => r.replace(/^\n/, "")).filter(Boolean).map((r) => {
-    const [sha, parents, author, email, subject, co, refs, body] = r.split(SEP);
+    const [sha, parents, author, email, subject, co, refs, time, body] = r.split(SEP);
     return {
-      sha, author, email, subject, body: body || "",
+      sha, author, email, subject, body: body || "", time: Number(time) || 0,
       parents: parents.trim() ? parents.trim().split(" ").length : 0,
       // the address only tells an agent from a person; it is never written out
       coauthors: (co || "").split("\x1d").map((s) => s.trim()).filter(Boolean).map((s) => {
@@ -238,13 +241,18 @@ async function cmdWall(out = join(here, "public", "contributors.json")) {
   const credited = logins(credit(released, { issueAuthors, exclude }));
   const al = aliases();
   const x = honoured(await xAccounts(toLookUp(credited, al), { known: before.xAccounts || {} }), credited, al);
-  const people = wall(released, { issueAuthors, exclude, xAccounts: x });
+  let checked = new Map();
+  try { checked = checkedX(readFileSync(join(here, "contributors-x.txt"), "utf8")); } catch (e) { warn(`contributors-x.txt not read (${e.message}); no X links`); }
+  const people = wall(released, { issueAuthors, exclude, xAccounts: x, checkedX: checked });
   const data = { generated: new Date().toISOString(), head: commits.length ? commits.at(-1).sha : "", issueAuthors, xAccounts: x, people };
+  // each release's time: its tagged commit's
+  const tags = commits.flatMap((c) => c.tags.map((t) => ({ v: t.slice(1), t: c.time })));
   const put = (file, text) => { writeFileSync(file + ".tmp", text); renameSync(file + ".tmp", file); };
   put(out, JSON.stringify(data) + "\n");
   const dir = join(dirname(out), "contributors");
   mkdirSync(dir, { recursive: true });
   for (const lang of ["en", "zh", "ja"]) put(join(dir, `${lang}.html`), renderWall(data, lang) + "\n");
+  put(join(dir, "replay.json"), JSON.stringify(replay(people, tags)) + "\n");
   warn(`${people.length} people over ${released.length} released commits → ${out}`);
 }
 

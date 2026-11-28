@@ -2,7 +2,7 @@
 // one from yetone/magpie's own history, word for word.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS } from "./credits.mjs";
+import { parse, parseBody, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS, checkedX, avatar, replay } from "./credits.mjs";
 import { authors, excluded, xAccounts, aliases, toLookUp, honoured, xOfLink } from "./credits-cli.mjs";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -259,6 +259,63 @@ test("the page shows what each person's reports led to, newest first", () => {
   assert.match(many, /<summary>2 more<\/summary>/);
 });
 
+test("an X name links to its account only when contributors-x.txt has it", () => {
+  const checked = checkedX("# a comment\nqikamatata 2048404033933905920/AmUEXX_C_normal.jpg\nJohnRee97129809\nnot-a-handle x/y.jpg\nWing8Aqua ../../evil\n");
+  assert.deepEqual([...checked.keys()], ["qikamatata", "johnree97129809", "wing8aqua"]);
+  assert.equal(checked.get("wing8aqua").pic, "");
+  const commits = [
+    // 9b1a3c4d0 (v0.1.2131), a name written as the X handle
+    { subject: "gateway: a HEIC photo goes to the vendor as JPEG, or PNG with alpha (qikamatata on X)", v: "0.1.2131" },
+    // 6f64956f2: "Chen" is a display name; x.com/Chen is a stranger
+    { subject: "sessions: a long title wraps instead of widening the page (Chen on X)", v: "0.1.2200" },
+    { subject: "gui: the Add sheet keeps its place (JohnRee97129809 on X)", v: "0.1.2201" },
+    { subject: "redact: a decimal's digits are not masked as a number of their own (qikamatata on Discord)", v: "0.1.2202" },
+  ];
+  const people = wall(commits.slice(0, 3), { checkedX: checked });
+  const by = Object.fromEntries(people.map((p) => [p.name, p]));
+  assert.equal(by.qikamatata.x, "qikamatata");
+  assert.equal(by.qikamatata.xpic, "2048404033933905920/AmUEXX_C_normal.jpg");
+  assert.equal(by.Chen.x, undefined);
+  assert.equal(by.JohnRee97129809.x, "JohnRee97129809");
+  assert.equal(by.JohnRee97129809.xpic, undefined);
+  // the same name credited only on Discord is not that X account
+  assert.equal(wall(commits.slice(3), { checkedX: checked })[0].x, undefined);
+  // without the list, no X name links
+  assert.equal(wall(commits.slice(0, 1))[0].x, undefined);
+
+  const html = renderWall({ people }, "en");
+  assert.match(html, /<a href="https:\/\/x\.com\/qikamatata">qikamatata<\/a>/);
+  assert.match(html, /src="https:\/\/pbs\.twimg\.com\/profile_images\/2048404033933905920\/AmUEXX_C_normal\.jpg"[^>]*referrerpolicy="no-referrer"/);
+  assert.doesNotMatch(html, /x\.com\/Chen/);
+  // no picture: the name's first letter
+  assert.match(html, /<span class="cw-av" aria-hidden="true">C<\/span><div><b>Chen<\/b>/);
+});
+
+test("a picture is the GitHub account's, else the checked X account's", () => {
+  assert.equal(avatar({ github: "yetone", xpic: "1/a_normal.jpg" }), "https://avatars.githubusercontent.com/yetone?s=64");
+  assert.equal(avatar({ xpic: "1/a_normal.jpg" }, 48), "https://pbs.twimg.com/profile_images/1/a_normal.jpg");
+  assert.equal(avatar({ xpic: "1/a_normal.jpg" }, 96), "https://pbs.twimg.com/profile_images/1/a_bigger.jpg");
+  // 629409ddd's picture has no extension
+  assert.equal(avatar({ xpic: "1725706586/Chi8v4Cc_normal" }, 96), "https://pbs.twimg.com/profile_images/1725706586/Chi8v4Cc_bigger");
+  assert.equal(avatar({ name: "Chen" }), "");
+});
+
+test("the replay gives each release's time and who it credited", () => {
+  const people = [
+    { name: "b", releases: [{ v: "0.1.3" }, { v: "0.1.1" }], github: "b" },
+    { name: "a", releases: [{ v: "0.1.3" }, { v: "9.9.9" }] },
+  ];
+  // out of order, a tag twice, one release never tagged
+  const r = replay(people, [{ v: "0.1.3", t: 1000 + 7200 }, { v: "0.1.1", t: 1000 }, { v: "0.1.2", t: 1000 + 60 }, { v: "0.1.1", t: 5 }]);
+  assert.deepEqual(r.v, ["0.1.1", "0.1.2", "0.1.3"]);
+  assert.equal(r.t0, 1000);
+  assert.deepEqual(r.t, [0, 1, 120]);
+  // each with the id of their row in the table, which a click on them goes to
+  assert.deepEqual(r.p, [["b", "https://avatars.githubusercontent.com/b?s=96", "b"], ["a", "", "a"]]);
+  assert.deepEqual(r.e, [[0, 0], [2, 0, 1]]);
+  assert.deepEqual(replay([], []), { t0: 0, v: [], t: [], p: [], e: [] });
+});
+
 test("issue authors GitHub can't give are left out, not guessed", async () => {
   const refs = [{ repo: "yetone/magpie", n: 1 }, { repo: "yetone/magpie", n: 2 }];
   const ok = async () => ({ ok: true, json: async () => ({ data: { repository: { i1: { author: { login: "alice", __typename: "User" } }, i2: { author: { login: "dependabot", __typename: "Bot" } } } } }) });
@@ -459,7 +516,7 @@ test("the list carries its finder and each row's id, in each language", () => {
     // hidden until the script shows it: with script off the list is whole
     assert.ok(html.startsWith(`<div class="cw-find" hidden data-one="`), lang);
     assert.ok(html.includes(`data-many="${many}"><input id="cw-q" type="search" placeholder="${ph}"`), lang);
-    assert.match(html, /<tr id="lijiho96940561"><td><b>lijiho96940561<\/b>/);
+    assert.match(html, /<tr id="lijiho96940561"><td><div class="cw-who"><span class="cw-av" aria-hidden="true">L<\/span><div><b>lijiho96940561<\/b>/);
     // what else finds a row: its login when that isn't its name, its X account
     assert.match(html, /<tr id="lemonawa" data-k="reallemonawa">/);
     assert.match(html, /<tr id="bjz" data-k="bjz">/);

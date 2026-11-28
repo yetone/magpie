@@ -407,13 +407,37 @@ const WORDS = {
 const SHOWN = 3;
 const RELEASE = (v) => `https://github.com/yetone/magpie-releases/releases/tag/v${encodeURIComponent(v)}`;
 
+// contributors-x.txt: lowercased handle → { sn, pic }, the X accounts
+// checked to be the people credited under those names (pic: the small
+// profile picture's path under pbs.twimg.com/profile_images/, "" for X's
+// default one)
+export function checkedX(text) {
+  const out = new Map();
+  for (const l of String(text || "").split("\n")) {
+    const [sn, pic = ""] = l.replace(/#.*/, "").trim().split(/\s+/);
+    if (!sn || !X_HANDLE.test(sn)) continue;
+    out.set(lower(sn), { sn, pic: /^[\w.\-]+\/[\w.\-]+$/.test(pic) ? pic : "" });
+  }
+  return out;
+}
+
+// a person's picture: their GitHub one, their checked X account's, or ""
+export function avatar(p, size = 64) {
+  if (p.github) return `https://avatars.githubusercontent.com/${encodeURIComponent(p.github)}?s=${size}`;
+  // X's small picture is 48px; "_bigger" is the same at 73px
+  if (p.xpic) return `https://pbs.twimg.com/profile_images/${p.xpic.split("/").map(encodeURIComponent).join("/").replace(/_normal(?=\.\w+$|$)/, size > 48 ? "_bigger" : "_normal")}`;
+  return "";
+}
+
+const initial = (name) => (String(name).match(/[\p{L}\p{N}]/u) || ["?"])[0].toUpperCase();
+
 // Each person's row id, so /docs/zh/contributors#lijiho96940561 lands on
 // it: their key (GitHub login, else the name as credited), lowercased, any
 // run of what isn't a letter, digit, "_", "." or "-" made one "-". Two keys
 // that come out the same, or one that is the page's own id ("list"), are
 // told apart ("-2"): a key that is its own slug first, then in key order,
 // so a row keeps its id while the list grows and reorders. A key with nothing left is "p-" and its hash.
-export const PAGE_IDS = ["overview", "list", "how", "leave", "wall", "langs", "toc", "sx-list", "cw-q"];
+export const PAGE_IDS = ["overview", "list", "how", "leave", "wall", "langs", "toc", "sx-list", "cw-q", "replay"];
 export function slug(key) {
   const s = String(key || "").normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}_.-]+/gu, "-").replace(/^-+|-+$/g, "");
   if (s) return s;
@@ -448,16 +472,21 @@ export function renderWall(data, lang) {
   const ids = anchors(people);
   const line = (r) => r.what.map((t) => `<li><a href="${RELEASE(r.v)}"><code>v${esc(r.v)}</code></a> ${esc(t)}</li>`).join("");
   const rows = people.map((p, i) => {
-    const name = p.github ? `<a href="https://github.com/${encodeURIComponent(p.github)}">${esc(p.name)}</a>` : esc(p.name);
+    const href = p.github ? `https://github.com/${encodeURIComponent(p.github)}` : p.x ? `https://x.com/${encodeURIComponent(p.x)}` : "";
+    const name = href ? `<a href="${href}">${esc(p.name)}</a>` : esc(p.name);
     const via = (p.via || []).length ? `<br><span class="cw-via">${p.via.map(esc).join(" · ")}</span>` : "";
     const also = [];
     for (const k of [p.github, ...((p.github && xOf.get(lower(p.github))) || [])]) if (k && lower(k) !== lower(p.name) && !also.includes(lower(k))) also.push(lower(k));
+    const src = avatar(p, 48);
+    const pic = src
+      ? `<img class="cw-av" src="${esc(src)}" alt="" width="24" height="24" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-i="${esc(initial(p.name))}">`
+      : `<span class="cw-av" aria-hidden="true">${esc(initial(p.name))}</span>`;
     const items = [];
     for (const r of p.releases || []) for (const t of r.what || []) items.push({ v: r.v, what: [t] });
     const head = items.slice(0, SHOWN).map(line).join("");
     const rest = items.slice(SHOWN);
     const more = rest.length ? `<details><summary>${esc(w.more(rest.length))}</summary><ul>${rest.map(line).join("")}</ul></details>` : "";
-    return `<tr id="${esc(ids[i])}"${also.length ? ` data-k="${esc(also.join(" "))}"` : ""}><td><b>${name}</b>${via}</td><td><ul>${head}</ul>${more}</td></tr>`;
+    return `<tr id="${esc(ids[i])}"${also.length ? ` data-k="${esc(also.join(" "))}"` : ""}><td><div class="cw-who">${pic}<div><b>${name}</b>${via}</div></div></td><td><ul>${head}</ul>${more}</td></tr>`;
   }).join("");
   const find = `<div class="cw-find" hidden data-one="${esc(w.one)}" data-many="${esc(w.many)}"><input id="cw-q" type="search" placeholder="${esc(w.find)}" aria-label="${esc(w.find)}" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="cw-n" aria-live="polite"></span></div>`;
   return `${find}<div class="table-wrap"><table class="cw"><thead><tr><th>${esc(w.name)}</th><th>${esc(w.led)}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -472,7 +501,10 @@ export function newer(a, b) {
 
 // contributors.json's people from released commits ({ ...commit, v }):
 // each person with the versions their reports led to, newest first.
-export function wall(commits, opts) {
+// opts.checkedX (checkedX()): an X credit whose name is a checked handle
+// gets that account (x, and xpic for its picture); any other X name stays
+// a name.
+export function wall(commits, opts = {}) {
   const per = credit(commits, opts);
   const all = new Map();
   commits.forEach((c, i) => {
@@ -491,8 +523,40 @@ export function wall(commits, opts) {
     const releases = [...e.byV.entries()].map(([v, w]) => ({ v, what: w })).sort((a, b) => (newer(a.v, b.v) ? -1 : newer(b.v, a.v) ? 1 : 0));
     const out = { name: e.name, via: e.via, releases };
     if (e.github) out.github = e.github;
+    const x = !e.github && e.via.includes("X") && opts.checkedX && opts.checkedX.get(lower(e.name.replace(/^@/, "")));
+    if (x) { out.x = x.sn; if (x.pic) out.xpic = x.pic; }
     return out;
   });
   people.sort((a, b) => (newer(a.releases[0].v, b.releases[0].v) ? -1 : newer(b.releases[0].v, a.releases[0].v) ? 1 : lower(a.name) < lower(b.name) ? -1 : 1));
   return people;
+}
+
+// The replay above the table: when each person was credited, by release.
+// people: contributors.json's; tags: [{ v, t }] with t in Unix seconds.
+// Gives { t0, v: versions oldest first, t: each one's minutes after t0,
+// p: [[name, picture URL, row id]] in people's order, e: [[version index, person
+// index, …]] for the versions that credit someone }.
+export function replay(people, tags) {
+  const seen = new Set();
+  const list = [...tags].filter((g) => g && g.v && Number.isFinite(g.t) && !seen.has(g.v) && seen.add(g.v))
+    .sort((a, b) => a.t - b.t || (newer(a.v, b.v) ? 1 : newer(b.v, a.v) ? -1 : 0));
+  const t0 = list.length ? list[0].t : 0;
+  const at = new Map(list.map((g, i) => [g.v, i]));
+  const ids = anchors(people);
+  const by = new Map();
+  people.forEach((p, i) => {
+    for (const r of p.releases || []) {
+      const vi = at.get(r.v);
+      if (vi == null) continue;
+      if (!by.has(vi)) by.set(vi, []);
+      by.get(vi).push(i);
+    }
+  });
+  return {
+    t0,
+    v: list.map((g) => g.v),
+    t: list.map((g) => Math.round((g.t - t0) / 60)),
+    p: people.map((p, i) => [p.name, avatar(p, 96), ids[i]]),
+    e: [...by.entries()].sort((a, b) => a[0] - b[0]).map(([vi, ps]) => [vi, ...ps]),
+  };
 }
