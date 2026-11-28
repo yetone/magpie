@@ -344,7 +344,8 @@ func modelFits(s string, a, b int, kind string, args bool) bool {
 		}
 		return strings.Trim(v, digits) != "" || cued(s, a, accountCues)
 	case "PHONE":
-		if !numberLike(v) || countDigits(v) < 7 || epochNumber(v) || decimalRe.MatchString(v) || unicode.IsLetter(rune(v[0])) {
+		if !numberLike(v) || countDigits(v) < 7 || epochNumber(v) || decimalRe.MatchString(v) || unicode.IsLetter(rune(v[0])) ||
+			notOnePhone(s, a, v) || amountOrCount(s, a, b) || idWordBefore(s, a, false) {
 			return false
 		}
 		return strings.Trim(v, digits) != "" || v[0] == '0' || cued(s, a, phoneCues)
@@ -989,6 +990,36 @@ func epochNumber(v string) bool {
 	return strings.Trim(v, digits) == ""
 }
 
+// notOnePhone says v, which the model took for a phone number, is
+// numbers of another kind, by its shape alone:
+//   - more digits than one phone number has (E.164's 15, after a +, 00 or
+//     011 to dial out): a list of ports, pids or Unix times the model
+//     took in whole (3000 3425 8080 13912);
+//   - a date at its start, a version's or a file's (2026-11-28,
+//     2026.11.28.1391234);
+//   - decimals only (39.9042 116.4074, a coordinate);
+//   - a negative number (a Telegram chat's -1001391234567).
+func notOnePhone(s string, a int, v string) bool {
+	d := strings.TrimLeft(v, "+ ")
+	for _, p := range []string{"00", "011"} {
+		if strings.HasPrefix(d, p) {
+			d = d[len(p):]
+		}
+	}
+	if countDigits(d) > 15 || dateLead.MatchString(v) {
+		return true
+	}
+	if f := strings.Fields(v); len(f) > 1 && !slices.ContainsFunc(f, func(w string) bool { return !decimalRe.MatchString(w) }) {
+		return true
+	}
+	if v[0] == '-' {
+		return true
+	}
+	// the model's span may leave the minus out: a '-' with no digit or
+	// letter before it is a sign, not a group's dash (010-12345678)
+	return a > 0 && s[a-1] == '-' && (a == 1 || !wordByte(s[a-2]))
+}
+
 func countDigits(v string) int {
 	n := 0
 	for i := 0; i < len(v); i++ {
@@ -1023,6 +1054,8 @@ var (
 	// mixed (EIP-55's checksum)
 	evmRe     = lazyre.New(`^0[xX][0-9a-fA-F]{40}$`)
 	decimalRe = lazyre.New(`^\d+\.\d+$`)
+	// a date at the start of a value: 2026-11-28, 2026/11/28, 2026.11.28
+	dateLead = lazyre.New(`^(?:19|20)\d\d([-/.])(?:0?[1-9]|1[0-2])([-/.])(?:0?[1-9]|[12]\d|3[01])(?:$|[^0-9])`)
 	// a number written in hex as code and notes write one, of 64 bits at
 	// most: a memory address (0x004EA5E0), a constant, a flag. The model
 	// took such an address in reverse-engineering notes for a secret, and

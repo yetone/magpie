@@ -2,6 +2,7 @@ package redact
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -33,8 +34,26 @@ var phoneWords = []string{"phone", "phones", "mobile", "mobiles", "tel", "teleph
 // phoneMarks, in a field's name in Chinese, make its value a phone.
 var phoneMarks = []string{"手机", "电话", "電話", "联系", "聯繫", "联络"}
 
-// idWords, right before a number in prose, make it an id.
-var idWords = []string{"order", "id", "uid", "no", "no.", "#", "number", "ticket", "invoice", "订单", "订单号", "单号", "编号", "流水号", "工单", "工单号", "运单号", "快递单号", "订单编号", "交易号", "序号", "账单号", "id号"}
+// idWords, right before a number in prose, make it an id: an order's, a
+// ticket's, and a log's own (trace 13912345678 failed, [req 15012345678],
+// build 13912345678 passed, session-15012345678).
+var idWords = []string{"order", "id", "uid", "no", "no.", "#", "number", "ticket", "invoice",
+	"trace", "span", "req", "request", "build", "run", "job", "task", "commit", "session", "inode", "offset", "seq", "pid", "tweet", "item", "sku", "tx", "txn", "block", "isbn", "nonce", "seed",
+	"订单", "订单号", "单号", "编号", "流水号", "工单", "工单号", "运单号", "快递单号", "订单编号", "交易号", "序号", "账单号", "id号", "批次号", "批号"}
+
+// countUnits, right after a number, make it a count, a size or a time: no
+// phone is followed by one (15012345678 bytes, 13912345678 ns/op,
+// 共 13912345678 条). A unit against the number (13912345678ns) is the
+// rule's bound already.
+var countUnits = []string{"ns", "ns/op", "us", "µs", "ms", "s", "sec", "secs", "second", "seconds", "min", "mins", "minutes", "hours", "hrs",
+	"b", "b/op", "byte", "bytes", "kb", "kib", "mb", "mib", "gb", "gib", "tb", "tib", "bit", "bits",
+	"token", "tokens", "row", "rows", "line", "lines", "item", "items", "record", "records", "entries", "ops", "allocs/op"}
+
+// cjkUnits are countUnits in Chinese: what follows a count or an amount.
+var cjkUnits = []string{"条", "个", "次", "元", "字节", "毫秒", "纳秒", "微秒", "秒", "行", "笔", "万", "亿"}
+
+// currencies, right before a number, make it an amount ($15012345678).
+var currencies = []string{"$", "¥", "￥", "€", "£", "usd", "cny", "rmb", "eur", "gbp"}
 
 // phoneAt says the PHONE rule's s[a:b] is a phone, not an id of the same
 // form.
@@ -48,7 +67,26 @@ func phoneAt(s string, a, b int) bool {
 	if a > 0 && s[a-1] == '#' {
 		return false // #13912345678
 	}
-	before := strings.ToLower(strings.TrimRight(s[max(0, a-32):a], " \t(\"'“「"))
+	if amountOrCount(s, a, b) {
+		return false
+	}
+	if seg, ok := pathSegment(s, a); ok {
+		// a path's piece is named by the piece before it, as a field's
+		// value by its name: /api/users/15012345678/profile is a user's
+		// id, item.jd.com/13912345678.html an item's, /phone/13800138000
+		// a phone
+		return phoneName(seg)
+	}
+	return !idWordBefore(s, a, true)
+}
+
+// idWordBefore says one of idWords is right before s[a] in prose, as a
+// whole word, with a space, a bracket, a quote, _ or - between: order
+// 13800138101, id_13912345678, trace-13912345678, 订单号是 13912345673.
+// A phone's number (phone no. 13800138000) is not an id's; with numbers
+// false, no., # and number are no id's words at all (my number is …).
+func idWordBefore(s string, a int, numbers bool) bool {
+	before := strings.ToLower(strings.TrimRight(s[max(0, a-32):a], " \t(\"'“「_-"))
 	for _, c := range []string{"是", "为", "為"} {
 		before = strings.TrimRight(strings.TrimSuffix(before, c), " \t")
 	}
@@ -63,15 +101,83 @@ func phoneAt(s string, a, b int) bool {
 			continue
 		}
 		// but a phone's number: phone no. 13800138000
-		if w == "no" || w == "no." || w == "number" {
+		if w == "no" || w == "no." || w == "number" || w == "#" {
+			if !numbers {
+				continue
+			}
 			rest = strings.TrimRight(rest, " ")
 			if phoneName(rest[nameStart(rest, len(rest)):]) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// amountOrCount says the number at s[a:b] is an amount or a count by
+// what is around it: a currency before it, a unit or a % after it.
+func amountOrCount(s string, a, b int) bool {
+	if b < len(s) && s[b] == '%' {
+		return true
+	}
+	j := b
+	if j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+		j++
+	}
+	rest := s[j:]
+	for _, u := range cjkUnits {
+		if strings.HasPrefix(rest, u) {
+			return true
+		}
+	}
+	k := 0
+	for k < len(rest) && k < 12 && (rest[k] >= 'a' && rest[k] <= 'z' || rest[k] >= 'A' && rest[k] <= 'Z' || rest[k] == '/' || strings.HasPrefix(rest[k:], "µ")) {
+		if rest[k] == 0xc2 {
+			k++
+		}
+		k++
+	}
+	if k > 0 && (k == len(rest) || !(rest[k] >= 'a' && rest[k] <= 'z' || rest[k] >= 'A' && rest[k] <= 'Z' || rest[k] >= '0' && rest[k] <= '9' || rest[k] == '_')) {
+		u := strings.ToLower(strings.TrimRight(rest[:k], "/"))
+		for _, c := range countUnits {
+			if u == c {
 				return true
 			}
 		}
-		return false
 	}
-	return true
+	before := strings.ToLower(strings.TrimRight(s[max(0, a-8):a], " \t"))
+	for _, c := range currencies {
+		if !strings.HasSuffix(before, c) {
+			continue
+		}
+		if r, _ := utf8.DecodeLastRuneInString(before[:len(before)-len(c)]); c[0] < 0x80 && c[0] >= 'a' && r >= 'a' && r <= 'z' {
+			continue // a word's end: "abusd"
+		}
+		return true
+	}
+	return false
+}
+
+// pathSegment is the piece of a path or a link right before s[a], when a
+// '/' is right before it and that piece has a letter in it:
+// "users" in /api/users/15012345678/profile, "item.jd.com" in
+// https://item.jd.com/13912345678.html. A piece of digits only (1/139…,
+// 13800138000/13800138001, two phones as Chinese contacts write them) is
+// no name.
+func pathSegment(s string, a int) (string, bool) {
+	if a < 2 || s[a-1] != '/' {
+		return "", false
+	}
+	j := a - 1
+	for j > 0 && !isSpace(s[j-1]) && strings.IndexByte("/\"'(<[=?&,;", s[j-1]) < 0 {
+		j--
+	}
+	seg := s[j : a-1]
+	if strings.IndexFunc(seg, func(r rune) bool { return r < 0x80 && unicode.IsLetter(r) }) < 0 {
+		return "", false
+	}
+	return seg, true
 }
 
 // phoneName says a field's name is a phone's: one of its words is one of
