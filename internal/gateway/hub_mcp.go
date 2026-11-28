@@ -884,6 +884,15 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 			say += "\n" + held
 		}
 		say = hubAbout(ss, here, say)
+		// the Library's skills, for an agent on another computer
+		// (hub_skills.go): a line of their own, past hubSayMax
+		if give, why := hubSkillsFor(r); give {
+			if line := hubSkillsLineFor(hubSkillsOfAgent(agent)); line != "" {
+				say += "\n" + line
+			}
+		} else if why != "" {
+			say += "\n" + why
+		}
 		if MCPHub == nil || !MCPHub.On() {
 			say = errHubOff
 		}
@@ -923,6 +932,9 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		if hubCodeOn(len(ts)) {
 			list = append(list, hubCodeSpec(where, onDemand, hubSkillsOf(agent), hubCodeBudget(ts)))
 		}
+		if give, _ := hubSkillsFor(r); give && len(hubSkillsOfAgent(agent)) > 0 {
+			list = append(list, hubSkillSpec(where))
+		}
 		return map[string]any{"tools": list}, nil
 	case "tools/call":
 		var p struct {
@@ -935,6 +947,13 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		}
 		if MCPHub == nil || !MCPHub.On() {
 			return toolResult(errHubOff, true), nil
+		}
+		if p.Name == hubSkillTool {
+			if give, why := hubSkillsFor(r); give {
+				return hubSkillGet(agent, p.Arguments), nil
+			} else if why != "" {
+				return toolResult(why, true), nil
+			}
 		}
 		ts := hubTools(r.Context(), agent)
 		// the two tools an agent given its tools on demand calls them by
