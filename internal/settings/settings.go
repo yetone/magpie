@@ -1960,6 +1960,25 @@ func (s Settings) Compact() int {
 	return WorkingWindow
 }
 
+// Redaction is what the gateway masks on the way to a vendor, and what the
+// request archive and the OTLP bodies take out of what they keep.
+func (s Settings) Redaction() redact.Options {
+	return redact.Options{Secrets: s.Redact, Personal: s.RedactPersonal, Kinds: s.RedactKinds, Words: s.RedactWords, Rules: s.RedactRules}
+}
+
+// Scrubbing is what is taken out of what magpie keeps rather than sends — the
+// request archive, the OTLP bodies (#195): every secret as Scrub takes them,
+// the user's words and personal data by their own switches, and their rules
+// only where masking is on (Redact), since a rule is a masking rule.
+func (s Settings) Scrubbing() redact.Options {
+	o := redact.Options{Secrets: true, Personal: s.RedactPersonal, Kinds: s.RedactKinds,
+		Words: s.RedactWords, WordsAnyCase: s.RedactWordsAnyCase, WordsWhole: s.RedactWordsWhole}
+	if s.Redact {
+		o.Rules = s.RedactRules
+	}
+	return o
+}
+
 // KeepOwn puts back cur's settings that are this computer's own, which a
 // sync or a restored backup never brings from another: the window's size,
 // place and whether it was maximised, the proxy (and plugin downloads'), the gateway's port, whether it

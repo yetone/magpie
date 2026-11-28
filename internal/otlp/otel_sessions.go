@@ -76,7 +76,7 @@ func sessionBody(body string, config settings.OTel) string {
 	if !config.Bodies {
 		return ""
 	}
-	body = string(redact.ScrubJSON([]byte(body)))
+	body = string(redact.ScrubJSONWith([]byte(body), settings.Shared().Scrubbing()))
 	cut := false
 	if !config.BodiesWhole && len(body) > 256<<10 {
 		body = body[:256<<10]

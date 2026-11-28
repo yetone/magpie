@@ -2,6 +2,7 @@ package redact
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -9,16 +10,53 @@ import (
 	"github.com/yetone/magpie/internal/lazyre"
 )
 
-// Scrubbing is for what is kept rather than sent — the request archive: a
-// secret goes for good, as [REDACTED:KIND], with no placeholder made and
-// nothing held to put it back. Everything Mask finds as a secret goes,
-// and whatever is in a field or header named for one (Authorization,
-// x-api-key, Cookie, access_token, client_secret…), whatever it looks like.
+// Scrubbing is for what is kept rather than sent — the request archive, the
+// OTLP bodies, gateway conversations: a value goes for good, as
+// [REDACTED:KIND], with no placeholder made and nothing held to put it back.
+// Everything Mask finds as a secret goes, and whatever is in a field or
+// header named for one (Authorization, x-api-key, Cookie, access_token,
+// client_secret…), whatever it looks like.
 
 // Scrubbed is what a field or header named for a secret holds once scrubbed.
 const Scrubbed = "[REDACTED]"
 
 func scrubbed(kind, _ string) string { return "[REDACTED:" + kind + "]" }
+
+type scrubOptionsKey struct {
+	Secrets      bool              `json:"secrets"`
+	Personal     bool              `json:"personal"`
+	Words        []string          `json:"words"`
+	WordsAnyCase bool              `json:"wordsAnyCase"`
+	WordsWhole   bool              `json:"wordsWhole"`
+	Rules        []Rule            `json:"rules"`
+	Kinds        map[string]bool   `json:"kinds"`
+	Shape        bool              `json:"shape"`
+	Actions      map[string]string `json:"actions"`
+	Allow        []string          `json:"allow"`
+}
+
+// scrubKey is the memo key for s under o, and false when o's answer can't be
+// reused: a model, a callback, or a request's own state can change it.
+func scrubKey(s string, o Options) ([32]byte, bool) {
+	if o.Model != nil || o.Seen != nil || o.args || o.sent || o.found != nil {
+		return [32]byte{}, false
+	}
+	b, err := json.Marshal(scrubOptionsKey{
+		Secrets: o.Secrets, Personal: o.Personal, Words: o.Words,
+		WordsAnyCase: o.WordsAnyCase, WordsWhole: o.WordsWhole, Rules: o.Rules,
+		Kinds: o.Kinds, Shape: o.Shape, Actions: o.Actions, Allow: o.Allow,
+	})
+	if err != nil {
+		return [32]byte{}, false
+	}
+	h := sha256.New()
+	h.Write(b)
+	h.Write([]byte{0})
+	h.Write([]byte(s))
+	var out [32]byte
+	copy(out[:], h.Sum(nil))
+	return out, true
+}
 
 // secretName is a field's or header's name that says its value is a secret.
 // A name that ends in pass (a db_pass) is one too (#2946); a name that only
@@ -33,28 +71,36 @@ func SecretName(name string) bool {
 }
 
 // Scrub takes the secrets Mask finds out of s.
-func Scrub(s string) string {
+func Scrub(s string) string { return ScrubWith(s, Options{Secrets: true}) }
+
+// ScrubWith takes what o covers out of s, as Scrub takes the secrets. What
+// the request archive and OTLP bodies keep uses it: a secret goes for good,
+// with the user's rules, words and personal data that masking covers.
+func ScrubWith(s string, o Options) string {
 	if len(s) < scrubMemoMin {
-		return scrub(s)
+		return scrub(s, o)
 	}
-	// What Scrub makes of s depends on s and on the values known (known.go)
-	// alone: a result is kept under the knownGen it was made at, and none
-	// made before a value became known is used again.
+	k, ok := scrubKey(s, o)
+	if !ok {
+		return scrub(s, o)
+	}
+	// What Scrub makes of s depends on s, o and the values known (known.go):
+	// a result is kept under the knownGen it was made at, and none made before
+	// a value became known is used again.
 	gen := knownGen.Load()
-	k := sha256.Sum256([]byte(s))
 	if out, ok := scrubMemo.get(k, gen, s); ok {
 		return out
 	}
-	out := scrub(s)
+	out := scrub(s, o)
 	scrubMemo.put(k, gen, s, out)
 	return out
 }
 
-func scrub(s string) string {
+func scrub(s string, o Options) string {
 	if len(s) >= 256 {
 		scrubRuns.Add(1)
 	}
-	out, _ := mask(s, Options{Secrets: true}, scrubbed, false)
+	out, _ := mask(s, o, scrubbed, false)
 	return out
 }
 
@@ -141,11 +187,17 @@ func (m *memo) add(k [32]byte, e scrubEntry) {
 // for a header named for one or a credential (Bearer, Basic), else what
 // Scrub finds in it.
 func ScrubHeader(name, value string) string {
+	return ScrubHeaderWith(name, value, Options{Secrets: true})
+}
+
+// ScrubHeaderWith is ScrubHeader with what o covers taken out of a value
+// whose name says nothing about it.
+func ScrubHeaderWith(name, value string, o Options) string {
 	v := strings.ToLower(strings.TrimSpace(value))
 	if SecretHeader(name) || strings.HasPrefix(v, "bearer ") || strings.HasPrefix(v, "basic ") {
 		return Scrubbed
 	}
-	return Scrub(value)
+	return ScrubWith(value, o)
 }
 
 // SecretHeader says a header called name carries a credential, by the
@@ -192,25 +244,28 @@ var headerKeyNotSecret = map[string]bool{"idempotency": true, "cache": true, "pu
 // string, a field named for a secret wholly; a stream's events each as
 // JSON, line by line; anything else as text. A picture's data is left as
 // it is.
-func ScrubJSON(body []byte) []byte {
-	if out, ok := scrubJSON(body); ok {
+func ScrubJSON(body []byte) []byte { return ScrubJSONWith(body, Options{Secrets: true}) }
+
+// ScrubJSONWith is ScrubJSON with what o covers taken out.
+func ScrubJSONWith(body []byte, o Options) []byte {
+	if out, ok := scrubJSON(body, o); ok {
 		return out
 	}
 	lines := strings.SplitAfter(string(body), "\n")
 	for i, l := range lines {
 		if rest, ok := strings.CutPrefix(l, "data:"); ok {
 			trimmed := strings.TrimSpace(rest)
-			if out, ok := scrubJSON([]byte(trimmed)); ok && trimmed != "" {
+			if out, ok := scrubJSON([]byte(trimmed), o); ok && trimmed != "" {
 				lines[i] = "data: " + string(out) + l[len(strings.TrimRight(l, "\r\n")):]
 				continue
 			}
 		}
-		lines[i] = Scrub(l)
+		lines[i] = ScrubWith(l, o)
 	}
 	return []byte(strings.Join(lines, ""))
 }
 
-func scrubJSON(b []byte) ([]byte, bool) {
+func scrubJSON(b []byte, o Options) ([]byte, bool) {
 	return walk(b, func(_, key, s string) string {
 		switch {
 		case strings.HasPrefix(s, "data:"):
@@ -218,6 +273,6 @@ func scrubJSON(b []byte) ([]byte, bool) {
 		case key != "" && SecretName(key):
 			return Scrubbed
 		}
-		return Scrub(s)
+		return ScrubWith(s, o)
 	})
 }

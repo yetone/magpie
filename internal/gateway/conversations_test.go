@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
@@ -191,5 +192,21 @@ func TestGatewayConversationScrubsAndMarksIncomplete(t *testing.T) {
 	b, _ := json.Marshal(turn)
 	if !turn.Cut || strings.Contains(string(b), "private-value") || !strings.Contains(string(b), "partial") {
 		t.Fatalf("scrub or incomplete failed: %s", b)
+	}
+}
+
+func TestConversationTurnKeepsTheUsersRules(t *testing.T) {
+	const key = "rz_TurnKey6677889900"
+	input := []byte(`{"messages":[{"role":"user","content":"send it to ` + key + `"}]}`)
+	output := []byte(`{"choices":[{"message":{"role":"assistant","content":"sent to ` + key + `"}}]}`)
+	o := redact.Options{Secrets: true, Rules: []redact.Rule{{Kind: "RELAY", Prefix: "rz_"}}}
+	b, _ := json.Marshal(conversationTurnWith(provider.Chat, input, output, o))
+	if strings.Contains(string(b), key) || !strings.Contains(string(b), "[REDACTED:RELAY]") {
+		t.Fatalf("turn with masking on: %s", b)
+	}
+	// A rule is the user's own masking, not a secret magpie always knows:
+	// the plain reader keeps what the rule would match.
+	if b, _ := json.Marshal(conversationTurn(provider.Chat, input, output)); !strings.Contains(string(b), key) {
+		t.Fatalf("plain turn took the rule's match out: %s", b)
 	}
 }

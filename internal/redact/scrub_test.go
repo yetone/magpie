@@ -90,3 +90,42 @@ func TestSecretHeaderRealNames(t *testing.T) {
 		t.Errorf("a count of tokens: %q", got)
 	}
 }
+
+// Scrubbing a kept body can carry the user's own masking options without
+// changing what the old secrets-only entry points do.
+func TestScrubWithOptions(t *testing.T) {
+	Forget()
+	const relay = "rz_ScrubOptions1234567"
+	o := Options{Secrets: true, Rules: []Rule{{Kind: "RELAY", Prefix: "rz_"}}}
+	body := `{"prompt":"send it to ` + relay + `","note":"keep this"}`
+
+	if got := string(ScrubJSON([]byte(body))); !strings.Contains(got, relay) {
+		t.Errorf("secrets-only ScrubJSON: %s", got)
+	}
+	if got := Scrub("send it to " + relay); !strings.Contains(got, relay) {
+		t.Errorf("secrets-only Scrub: %q", got)
+	}
+	if got := ScrubHeader("X-Note", "key "+relay); !strings.Contains(got, relay) {
+		t.Errorf("secrets-only ScrubHeader: %q", got)
+	}
+
+	kept := string(ScrubJSONWith([]byte(body), o))
+	if strings.Contains(kept, relay) || !strings.Contains(kept, "[REDACTED:RELAY]") || !strings.Contains(kept, `"note":"keep this"`) {
+		t.Errorf("ScrubJSONWith: %s", kept)
+	}
+	if strings.Contains(kept, "{{") {
+		t.Errorf("a placeholder made: %s", kept)
+	}
+	if got := ScrubWith("send it to "+relay, o); got != "send it to [REDACTED:RELAY]" {
+		t.Errorf("ScrubWith: %q", got)
+	}
+	if got := ScrubHeaderWith("X-Note", "key "+relay, o); got != "key [REDACTED:RELAY]" {
+		t.Errorf("ScrubHeaderWith: %q", got)
+	}
+	if got := ScrubWith("Project Nightjar ships", Options{Secrets: true, Words: []string{"Nightjar"}}); got != "Project [REDACTED:TERM] ships" {
+		t.Errorf("words: %q", got)
+	}
+	if got := ScrubWith("write to agent@relay.acme-corp.dev", Options{Secrets: true, Personal: true}); got != "write to [REDACTED:EMAIL]" {
+		t.Errorf("personal: %q", got)
+	}
+}

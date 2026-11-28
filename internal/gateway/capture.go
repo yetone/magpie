@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/yetone/magpie/internal/redact"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -146,11 +147,10 @@ func (w *captureResponseWriter) Flush() {
 
 // withBodies hands a call's captured request and reply to its usage
 // record while an observer wants them (the OTLP export's bodies, #538) —
-// their secrets scrubbed as the request archive's are, on top of the
-// placeholders Mask secrets puts in — and leaves the record without them
-// otherwise. A call captured whole (usage.WholeBodies) carries them in
-// wholeIn/wholeOut; otherwise the first 256 KiB Recent calls keeps is what
-// goes.
+// scrubbed as the request archive's are, with every secret and what the
+// user's masking covers — and leaves the record without them otherwise. A
+// call captured whole (usage.WholeBodies) carries them in wholeIn/wholeOut;
+// otherwise the first 256 KiB Recent calls keeps is what goes.
 func withBodies(rec *usage.Record, c *Call) {
 	if usage.ObservedBodies() == usage.NoBodies {
 		return
@@ -170,15 +170,27 @@ func withBodies(rec *usage.Record, c *Call) {
 	if c.wholeOut != nil {
 		out, outCut = string(c.wholeOut), c.wholeOutCut
 	}
-	rec.BodyIn = bodyForExport(in, inCut)
-	rec.BodyOut = bodyForExport(out, outCut)
+	o := c.scrub
+	if !c.scrubOn {
+		o = settings.Shared().Scrubbing()
+	}
+	rec.BodyIn = bodyForExportWith(in, inCut, o)
+	rec.BodyOut = bodyForExportWith(out, outCut, o)
 }
 
+// bodyForExport is a body with magpie's own secrets taken out and nothing of
+// the user's rules: an OTLP export outlives no masking decision, so their rule
+// stays where the vendor side left it (#195). withBodies passes the request's
+// own options, which do carry it while masking is on.
 func bodyForExport(body string, cut bool) string {
+	return bodyForExportWith(body, cut, redact.Options{Secrets: true})
+}
+
+func bodyForExportWith(body string, cut bool, o redact.Options) string {
 	if body == "" {
 		return ""
 	}
-	body = string(redact.ScrubJSON([]byte(body)))
+	body = string(redact.ScrubJSONWith([]byte(body), o))
 	if cut {
 		body += usage.BodyCut
 	}

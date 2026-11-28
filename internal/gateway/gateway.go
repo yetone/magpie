@@ -538,6 +538,10 @@ type Call struct {
 	// a burst, so it tells no speed
 	Flow  int64  `json:"flow,omitempty"`
 	Error string `json:"error,omitempty"`
+	// scrub is what this request's kept bodies take out, fixed when it began:
+	// the settings and the calling key's masking choice at that moment. unexported.
+	scrub   redact.Options
+	scrubOn bool
 	// Canceled: the agent canceled the call before it was answered
 	// (usage.CanceledBy), which the page shows as no failure
 	Canceled          bool   `json:"canceled,omitempty"`
@@ -2932,8 +2936,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	metadata := requestSessionMetadata(r.Header, body)
 	r = r.WithContext(withCodexPluginSubagent(r.Context(), codexPluginSubagent(cmp.Or(who.agent, agent), r.Header, body)))
 	var clientResponseID string // only a reply released to the client owns this ID
+	scrub := scrubOptionsFor(r.Context())
 	call := Call{Time: start, From: from, Model: unprefixed(modelOf(body)), Agent: who.agent, Via: who.via, Kind: requestCallKind(r.Header, metadata),
-		wire: archiving(r, capture, start, nil), headers: headerLogOf(r.Context())}
+		wire: archiving(r, capture, start, nil), headers: headerLogOf(r.Context()), scrub: scrub, scrubOn: true}
 	// an agent compacting its conversation is recorded as the compaction
 	// it is, as Codex's are by their header: Claude Code's compaction is a
 	// call its transcript never records (skipTranscript), so this row is
@@ -5111,7 +5116,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				TTFT: try.TTFT, FirstText: try.FirstText, FirstReasoning: try.FirstReasoning, ReasoningHidden: try.ReasoningHidden, Flow: try.Flow, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 				RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To, c.p, c.model), Archive: call.archiveName(), HandedOn: true}
 			failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
-			failed := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody()), maskIn: call.maskIn}
+			failed := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody()), maskIn: call.maskIn,
+				scrub: call.scrub, scrubOn: call.scrubOn}
 			if call.wholeIn != nil {
 				failed.wholeIn, failed.wholeOut = call.wholeIn, hw.errBody()
 			}
@@ -5425,7 +5431,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 				// what this account answered is its refusal, the reply
 				// captured so far being no one's yet
-				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody()), maskIn: call.maskIn}
+				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody()), maskIn: call.maskIn,
+					scrub: call.scrub, scrubOn: call.scrubOn}
 				if call.wholeIn != nil {
 					refusal.wholeIn, refusal.wholeOut = call.wholeIn, hw.errBody()
 				}
@@ -5470,7 +5477,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 				// what this account answered is its refusal, the reply
 				// captured so far being no one's yet
-				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody()), maskIn: call.maskIn}
+				refusal := &Call{RequestBody: call.RequestBody, RequestTruncated: call.RequestTruncated, ResponseBody: string(hw.errBody()), maskIn: call.maskIn,
+					scrub: call.scrub, scrubOn: call.scrubOn}
 				if call.wholeIn != nil {
 					refusal.wholeIn, refusal.wholeOut = call.wholeIn, hw.errBody()
 				}

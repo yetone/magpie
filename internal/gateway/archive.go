@@ -2,10 +2,11 @@ package gateway
 
 // The request archive: with it on (settings' RequestArchive), each call the
 // gateway serves is kept — the headers and bodies both ways, every secret
-// taken out first — in the user's own S3 bucket, the one sync keeps its
-// backup in, at <prefix>/magpie/archive/<date>/<id>.json, or, while sync
-// has no bucket and RequestArchiveLocal is on, in the same file on this
-// computer (archive_local.go): the call's date,
+// and whatever the user's masking covers taken out first — in the user's
+// own S3 bucket, the one sync keeps its backup in, at
+// <prefix>/magpie/archive/<date>/<id>.json, or, while sync has no bucket and
+// RequestArchiveLocal is on, in the same file on this computer
+// (archive_local.go): the call's date,
 // in UTC, and an id of its own, sent back on the response as
 // X-Magpie-Archive-Id. The call, and its rows in the usage log, carry
 // "<date>/<id>", for the Gateway and Usage pages to read it back by.
@@ -77,6 +78,7 @@ type wire struct {
 	reqFull      *spool
 	res          *captureResponseWriter
 	to           Putter
+	o            redact.Options // what its secrets and the user's masking are taken out with
 }
 
 // archiveDest is where a call is archived, and false when it isn't: the S3
@@ -112,7 +114,8 @@ func archiving(r *http.Request, res *captureResponseWriter, start time.Time, bod
 	res.Header().Set(ArchiveHeader, id)
 	res.full = &spool{limit: archiveLimit()}
 	return &wire{name: name, method: r.Method, path: r.URL.Path,
-		query: r.URL.RawQuery, req: r.Header.Clone(), body: body, res: res, to: to}
+		query: r.URL.RawQuery, req: r.Header.Clone(), body: body, res: res, to: to,
+		o: scrubOptionsFor(r.Context())}
 }
 
 // archiveID is a new call's name in the archive, "<date>/<id>", and its
@@ -137,7 +140,8 @@ func archiveOwn(c Call, sent *http.Request, body []byte, status int, head http.H
 	}
 	name, _ := archiveID(c.Time)
 	c.Archive, c.Status, c.wire = name, status, nil
-	w := &wire{name: name, method: sent.Method, path: sent.URL.Path, query: sent.URL.RawQuery, req: sent.Header.Clone(), to: to}
+	w := &wire{name: name, method: sent.Method, path: sent.URL.Path, query: sent.URL.RawQuery,
+		req: sent.Header.Clone(), to: to, o: scrubOptionsFor(sent.Context())}
 	req, res := &spool{limit: archiveLimit()}, &spool{limit: archiveLimit()}
 	req.add(body)
 	res.add(answer)
@@ -275,22 +279,23 @@ func upload(j archiveJob) {
 	c := j.c
 	c.wire = nil
 	c.RequestBody, c.ResponseBody = "", ""
+	o := j.w.o
 	reqBody, err1 := j.req.read()
 	resBody, err2 := j.res.read()
 	if err := errors.Join(err1, err2); err != nil {
 		archiveFailed(j.w.name, err)
 		return
 	}
-	c.Error, c.Fallback = redact.Scrub(c.Error), redact.Scrub(c.Fallback)
+	c.Error, c.Fallback = redact.ScrubWith(c.Error, o), redact.ScrubWith(c.Fallback, o)
 	path := j.w.path
 	if j.w.query != "" {
-		path += "?" + scrubQuery(j.w.query)
+		path += "?" + scrubQueryWith(j.w.query, o)
 	}
 	a := Archived{ID: j.w.name, Call: c,
-		Request: ArchivePart{Method: j.w.method, Path: path, Headers: scrubHeaders(j.w.req),
-			Body: string(redact.ScrubJSON(reqBody)), Size: j.req.size, Truncated: j.req.cut()},
-		Response: ArchivePart{Status: c.Status, Headers: scrubHeaders(j.resHead),
-			Body: string(redact.ScrubJSON(resBody)), Size: j.res.size, Truncated: j.res.cut()},
+		Request: ArchivePart{Method: j.w.method, Path: path, Headers: scrubHeadersWith(j.w.req, o),
+			Body: string(redact.ScrubJSONWith(reqBody, o)), Size: j.req.size, Truncated: j.req.cut()},
+		Response: ArchivePart{Status: c.Status, Headers: scrubHeadersWith(j.resHead, o),
+			Body: string(redact.ScrubJSONWith(resBody, o)), Size: j.res.size, Truncated: j.res.cut()},
 	}
 	if h := j.c.headers.masked(); h != nil {
 		a.Upstream, a.UpstreamMore = h.Upstream, h.More
@@ -335,11 +340,15 @@ func ArchiveError() (string, time.Time) {
 }
 
 func scrubHeaders(h http.Header) map[string][]string {
+	return scrubHeadersWith(h, settings.Shared().Scrubbing())
+}
+
+func scrubHeadersWith(h http.Header, o redact.Options) map[string][]string {
 	out := make(map[string][]string, len(h))
 	for k, vs := range h {
 		s := make([]string, len(vs))
 		for i, v := range vs {
-			s[i] = redact.ScrubHeader(k, v)
+			s[i] = redact.ScrubHeaderWith(k, v, o)
 		}
 		out[k] = s
 	}
@@ -349,16 +358,20 @@ func scrubHeaders(h http.Header) map[string][]string {
 // scrubQuery is a query string with the values of secret-named fields
 // (key=, access_token=) and any secret in the others taken out.
 func scrubQuery(q string) string {
+	return scrubQueryWith(q, settings.Shared().Scrubbing())
+}
+
+func scrubQueryWith(q string, o redact.Options) string {
 	vs, err := url.ParseQuery(q)
 	if err != nil {
-		return redact.Scrub(q)
+		return redact.ScrubWith(q, o)
 	}
 	for k, v := range vs {
 		for i := range v {
 			if redact.SecretName(k) {
 				v[i] = redact.Scrubbed
 			} else {
-				v[i] = redact.Scrub(v[i])
+				v[i] = redact.ScrubWith(v[i], o)
 			}
 		}
 	}
