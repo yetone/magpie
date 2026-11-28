@@ -73,6 +73,9 @@ type message struct {
 	Title    string `json:"title"`
 	Variant  string `json:"variant"`
 	Count    int    `json:"count"`
+	// Again is an "auth" event's account signed in already and only
+	// saved again: a token renewed, a field its plugin keeps beside it
+	Again bool `json:"again"`
 	// Loads is a "load" event's models and how busy each is, a percent;
 	// -1 clears one (magpie.load in host.js)
 	Loads map[string]float64 `json:"loads"`
@@ -810,8 +813,33 @@ func listed() {
 	}
 }
 
-func changed() {
-	forgetProviders()
+func changed() { changedBy(false) }
+
+// changedBy is changed, told by the host (a sign-in a plugin or its
+// sign-in saved) or by magpie itself: what the host tells starts a
+// listing again only at the pace relistWait allows (forgetProvidersBy).
+func changedBy(host bool) {
+	forgetProvidersBy(host)
+	tellChanged()
+}
+
+// savedAgain is told of the sign-in at account, of the plugin provider
+// named, saved again by the host: a token renewed, a field the plugin
+// keeps beside it. The sign-ins are read again and what is built on them
+// follows (OnChange), but the plugins are not asked their lists again
+// for it, unless that account's last list failed, when the sign-in just
+// saved may be what it lacked. Every plugin was asked again for each
+// such save, and a models hook that saves its sign-in as it is asked
+// then had every plugin listed again at once, over and over: 5 GB of
+// model lists and catalogs in minutes (JackChen on Discord).
+func savedAgain(provider, account string) {
+	if listFailed(provider, account) {
+		forgetProvidersBy(true)
+	}
+	tellChanged()
+}
+
+func tellChanged() {
 	changedNow()
 	onChangeMu.Lock()
 	fs := append([]func(){}, onChange...)
@@ -1459,7 +1487,11 @@ func (h *host) dispatch(m message) {
 	if m.ID == 0 {
 		switch m.Event {
 		case "auth":
-			changed()
+			if m.Again {
+				savedAgain(m.Provider, m.Account)
+			} else {
+				changedBy(true)
+			}
 		case "recovered":
 			// the host read plugin-auth.json from its last good
 			// generation (#1505): the GUI says so

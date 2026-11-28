@@ -11,8 +11,9 @@
 // magpie gave it and sends no more than that ahead of its reader, so a slow
 // reader pauses its upstream instead of the host buffering without bound.
 // host → magpie, unasked: {event: "log", level, message} and {event:
-// "toast", ...} (what a plugin logs or shows), {event: "auth", provider}
-// (a sign-in the host saved or refreshed).
+// "toast", ...} (what a plugin logs or shows), {event: "auth", provider,
+// account, again} (a sign-in the host saved or refreshed; again when the
+// account was signed in already and only saved again).
 //
 // The plugins get what OpenCode hands them (PluginInput): a client whose
 // auth.set saves to magpie's plugin-auth.json in OpenCode's auth.json shape,
@@ -1423,15 +1424,23 @@ function makeClient() {
           const key = keyFor(id)
           const s = scope.getStore()
           const had = s?.provider === id && s.had
+          let again = false
           const kept = await changeAuth((all) => {
             // signed out while the hook ran: it stays signed out
             if (had && !(key in all)) return false
             if (JSON.stringify(all[key]) === JSON.stringify(body)) return false
+            again = key in all
             all[key] = body
           })
           if (kept !== false) {
             forgetAccount(key)
-            send({ event: "auth", provider: providerOf(key), account: key })
+            // again: an account signed in already, saved again (a token
+            // renewed, a field the plugin keeps beside it). Its plugin's
+            // list is not asked again for it: a models hook that saves
+            // its sign-in each time it is asked had every plugin listed
+            // again at once, over and over (JackChen on Discord: 5 GB in
+            // minutes, zen-free's catalog among them)
+            send({ event: "auth", provider: providerOf(key), account: key, ...(again ? { again: true } : {}) })
           }
         }
         return { data: true }
@@ -3353,7 +3362,7 @@ async function renewLocked(provider, key, a, was) {
   if (kept === false) return
   unrenewed.delete(key)
   forgetAccount(key)
-  send({ event: "auth", provider, account: key })
+  send({ event: "auth", provider, account: key, again: true })
   send({ event: "signIn", provider, account: key, said: "renewed" })
 }
 

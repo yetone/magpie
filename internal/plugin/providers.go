@@ -313,7 +313,56 @@ var (
 	// provSettling is set while Settle runs: no refresh starts, nor goes
 	// on to a newer invalidation, to start a host in a folder going away.
 	provSettling bool
+	// provOwn is set by an invalidation of magpie's own (a plugin added,
+	// an account signed in from magpie) since the last listing began,
+	// which is listed at once; one the host told (forgetProvidersBy)
+	// waits its turn (relistWait). provEnd is when the last listing
+	// ended, and provStreak how many began, each this soon after the one
+	// before, for what the host told alone. provWaiting is set while a
+	// listing waits its turn.
+	provOwn     bool
+	provEnd     time.Time
+	provStreak  int
+	provWaiting bool
 )
+
+// What the host tells (a plugin saving a sign-in) starts listings again
+// at this pace at most: the first relistFree of a streak at once, then
+// relistStep, doubled each time, up to relistMost. A listing that begins
+// within relistGap of the last one's end is in its streak. Each listing
+// asks every plugin its models, and a plugin's models hook may download
+// its vendor's whole catalog: a host telling of a save as each listing
+// ran had every plugin listed again at once, without end (JackChen on
+// Discord: 5 GB in minutes).
+var (
+	relistGap  = 10 * time.Second
+	relistFree = 2
+	relistStep = time.Second
+	relistMost = 10 * time.Minute
+)
+
+// relistWait is how long the listing about to begin waits, under
+// provMu: none for magpie's own invalidation, else its place in the
+// streak of listings the host's events began.
+func relistWait() time.Duration {
+	if provOwn {
+		provOwn, provStreak = false, 0
+		return 0
+	}
+	if !provEnd.IsZero() && time.Since(provEnd) < relistGap {
+		provStreak++
+	} else {
+		provStreak = 0
+	}
+	if provStreak < relistFree {
+		return 0
+	}
+	d := relistStep
+	for i := relistFree; i < provStreak && d < relistMost; i++ {
+		d *= 2
+	}
+	return min(d, relistMost)
+}
 
 func providersPath() string { return filepath.Join(settings.Dir(), "plugin-providers.json") }
 
@@ -327,15 +376,45 @@ func ListedAt() (time.Time, bool) {
 	return st.ModTime(), true
 }
 
-func forgetProviders() {
+func forgetProviders() { forgetProvidersBy(false) }
+
+// forgetProvidersBy has the plugins listed again. One magpie made
+// stops a listing under way and is listed at once; one the host told
+// lets the listing under way end, and the next waits its turn
+// (relistWait): a save a plugin made as it was being listed stopped that
+// listing and began the next, which saved again.
+func forgetProvidersBy(host bool) {
 	provMu.Lock()
 	provGood = false
 	provTried = false
 	provEpoch++
-	if provCancel != nil {
-		provCancel()
+	if !host {
+		provOwn = true
+		if provCancel != nil {
+			provCancel()
+		}
 	}
 	provMu.Unlock()
+}
+
+// listFailed is whether the plugins' last list said the provider's
+// account at key fell back to its defaults or failed: a sign-in saved
+// again may be what it lacked.
+func listFailed(provider, key string) bool {
+	provMu.Lock()
+	defer provMu.Unlock()
+	for _, p := range provCache {
+		if p.ID != provider {
+			continue
+		}
+		for _, a := range p.Accounts {
+			if a.Key == key && (a.FellBack || a.ListError != "") {
+				return true
+			}
+		}
+		return p.FellBack || p.ListError != ""
+	}
+	return false
 }
 
 // Providers asks the plugins for their providers, starting the host if
@@ -455,10 +534,26 @@ func refreshProvidersWithRetry(ctx context.Context, epoch uint64) {
 func refreshProvidersInBackground(ctx context.Context, epoch uint64) {
 	defer refreshing.Done()
 	for {
-		if Running() || HasBun() {
+		provMu.Lock()
+		wait := relistWait()
+		provWaiting = wait > 0
+		provMu.Unlock()
+		if wait > 0 {
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				// magpie's own change (listed at once) or Settle: the
+				// loop below goes on to it, or ends
+			}
+			provMu.Lock()
+			provWaiting = false
+			provMu.Unlock()
+		}
+		if ctx.Err() == nil && (Running() || HasBun()) {
 			refreshProvidersWithRetry(ctx, epoch)
 		}
 		provMu.Lock()
+		provEnd = time.Now()
 		provCancel()
 		if provEpoch != epoch && !provGood && !provTried && !provSettling {
 			epoch = provEpoch
@@ -679,10 +774,15 @@ func Answered() bool {
 func Settle() {
 	provMu.Lock()
 	provSettling = true
+	// a listing waiting its turn (relistWait) is not waited for
+	if provWaiting && provCancel != nil {
+		provCancel()
+	}
 	provMu.Unlock()
 	defer func() {
 		provMu.Lock()
 		provSettling = false
+		provEnd, provStreak, provOwn = time.Time{}, 0, false
 		provMu.Unlock()
 	}()
 	refreshing.Wait()
