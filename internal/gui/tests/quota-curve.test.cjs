@@ -177,6 +177,51 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-quota-history.png`) });
       }
     });
+
+    // agy-cli's windows are a pool's ("Gemini · 5 hours"), kept in history
+    // under the pool and the window's own name: a past cycle's rows said
+    // "No readings in this cycle" under a curve that drew every one of them
+    // (tmr11235 on X)
+    test(`${engine} ${lang}: a pool's rows in a past cycle show that cycle's readings`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width: 440, height: 760 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      const now = Date.now(), D = 24 * H;
+      const win = (pool, name, used, reset) => ({ name, pool, used, resetsAt: iso(reset) });
+      const data = { quotas: [{ provider: "agy-cli", name: "Antigravity (local agy CLI)", plan: "Google AI Ultra", user: "u@x.com", readAt: iso(now), windows: [
+        { name: "Gemini 3 Pro", family: "Gemini", pool: "Gemini", used: 50, resetsAt: iso(now + 3 * H) },
+        win("Gemini", "5 hours", 50, now + 3 * H), win("Gemini", "7 days", 30, now + 5 * D), win("Claude & GPT", "7 days", 20, now + 5 * D),
+      ] }] };
+      const pt = (at, left, start, reset) => ({ at: iso(at), left, start: iso(start), resetsAt: iso(reset) });
+      const week = (past, cur) => [
+        pt(now - 8 * D, past[0], now - 9 * D, now - 2 * D), pt(now - 3 * D, past[1], now - 9 * D, now - 2 * D),
+        pt(now - D, cur[0], now - 2 * D, now + 5 * D), pt(now - H, cur[1], now - 2 * D, now + 5 * D),
+      ];
+      data.history = [{ provider: "agy-cli", user: "u@x.com", lines: [
+        { name: "Gemini · 5 hours", points: [pt(now - 3 * D - 2 * H, 65, now - 3 * D - 4 * H, now - 3 * D + H), pt(now - H, 50, now - 2 * H, now + 3 * H)] },
+        { name: "Gemini · 7 days", points: week([90, 32], [80, 70]) },
+        { name: "Claude & GPT · 7 days", points: week([95, 87], [85, 80]) },
+      ] }];
+      await page.route("**/*", serve(lang, "light", false, data));
+      await page.goto("http://magpie.test/?view=usage");
+      const card = page.locator('.subscription-card[data-key="agy-cli"]');
+      const meters = card.locator(".quota-windows").first();
+      await card.locator(".quota-curve").waitFor();
+      await card.getByRole("button", { name: w.choose }).click();
+      await page.locator(".sess-menu .pm-item").nth(1).click();
+      await page.waitForFunction((past) => document.querySelector('.subscription-card[data-key="agy-cli"] button.qc-range')?.textContent === past, w.past);
+      const texts = await meters.locator(".quota-n").allTextContents();
+      assert.equal(texts.length, 3, texts.join(" | "));
+      assert.ok(!texts.includes(w.missing), "a window the curve drew has readings in this cycle: " + texts.join(" | "));
+      // used, as the card says by default: the cycle's last reading of each
+      for (const [i, used] of [[0, 35], [1, 68], [2, 13]]) assert.match(texts[i], new RegExp("\\b" + used + "%"), texts.join(" | "));
+      assert.deepEqual(await card.locator(".qc-key b").allTextContents(), ["65%", "32%", "87%"]);
+      assert.deepEqual(errors, []);
+    });
   }
 }
 

@@ -17132,7 +17132,11 @@ function quotaHistoryView(sub, lines = quotaLines(sub), now = Date.now()) {
 function quotaHistoryCard(sub, { picked, shown }) {
   const estimates = quotaCycleHoldsOf(sub, picked);
   const windows = familyWindows(sub.windows).map((w) => {
-    const name = w.pool ? w.pool + " · " + w.name : w.name;
+    // a pool's row is named "Gemini · 5 hours" already (poolWindows), its
+    // own name kept as window: history keeps it under pool and own name,
+    // so the row looked for "Gemini · Gemini · 5 hours" and said no
+    // reading in a cycle the curve drew (tmr11235 on X)
+    const name = w.pool ? w.pool + " · " + (w.window ?? w.name) : w.name;
     const last = shown.find((l) => l.name === name)?.points.at(-1);
     const base = { name: w.name, pool: w.pool, historyMissing: !last };
     if (!last) return base;
