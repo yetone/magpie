@@ -203,7 +203,7 @@ magpie opencode tencent-cloud/kimi-k3</pre></div>
     <p>個人版は以前 <code>api.lkeap.cloud.tencent.com</code> にありましたが、Tencent が TokenHub に移しました。旧ホストで保存されたプロバイダーは新しいホストに移されます。</p>
 
     <h2 id="models"><a class="anchor" href="#models">プランのモデル</a></h2>
-    <p>プランは自分のモデル一覧を返さず、公開カタログにもプランの Hy モデルしかないため、magpie は Tencent のプラン資料にあるモデルを使います：tc-code-latest, auto, glm-5.3, glm-5.3-flash, kimi-k3, kimi-k2.7-code, deepseek-v4-pro, deepseek-v4.1-flash, minimax-m3, hy4-preview, hy3, mimo-v2.6-pro など。tc-code-latest はコンソールで選ばれているモデルです。従量課金キーは TokenHub の <code>/v1/models</code> を読み、Qwen などほかのメーカーのモデルもあります。</p>
+    <p>magpie はまずプラン自身のモデル一覧を求めます。一覧が返らないときは、公開カタログにもプランの Hy モデルしかないため、Tencent のプラン資料（2026-11-25 更新）にあるモデルを使います：tc-code-latest, auto, hy4, hy4-flash, hy3, glm-5.4, glm-5.3, glm-5.3-flash, kimi-k3.1-pro, kimi-k3, kimi-k2.7-code, deepseek-v4-pro, deepseek-v4.1-flash, minimax-m3.1-flash, minimax-m3, mimo-v2.6-pro など。tc-code-latest はコンソールで選ばれているモデルです。従量課金キーは TokenHub の <code>/v1/models</code> を読み、Qwen などほかのメーカーのモデルもあります。</p>
 
     <h2 id="agents"><a class="anchor" href="#agents">各エージェントで</a></h2>
     <ul>

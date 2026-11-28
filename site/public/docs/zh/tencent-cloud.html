@@ -203,7 +203,7 @@ magpie opencode tencent-cloud/kimi-k3</pre></div>
     <p>个人版以前在 <code>api.lkeap.cloud.tencent.com</code>，腾讯已把它迁到 TokenHub。存在旧地址上的供应商，magpie 会自动改到新地址。</p>
 
     <h2 id="models"><a class="anchor" href="#models">套餐里的模型</a></h2>
-    <p>套餐不返回自己的模型列表，公共目录也只列出套餐里的混元模型，所以 magpie 按腾讯云套餐文档给出模型：tc-code-latest, auto, glm-5.3, glm-5.3-flash, kimi-k3, kimi-k2.7-code, deepseek-v4-pro, deepseek-v4.1-flash, minimax-m3, hy4-preview, hy3, mimo-v2.6-pro 等。tc-code-latest 是控制台当前选定的模型。按量付费的 Key 读取 TokenHub 的 <code>/v1/models</code>，那里还有通义千问等其他厂商的模型。</p>
+    <p>magpie 先向套餐要它自己的模型列表。套餐没有返回时，由于公共目录也只列出套餐里的混元模型，magpie 按腾讯云套餐文档（2026-11-25 更新）给出模型：tc-code-latest, auto, hy4, hy4-flash, hy3, glm-5.4, glm-5.3, glm-5.3-flash, kimi-k3.1-pro, kimi-k3, kimi-k2.7-code, deepseek-v4-pro, deepseek-v4.1-flash, minimax-m3.1-flash, minimax-m3, mimo-v2.6-pro 等。tc-code-latest 是控制台当前选定的模型。按量付费的 Key 读取 TokenHub 的 <code>/v1/models</code>，那里还有通义千问等其他厂商的模型。</p>
 
     <h2 id="agents"><a class="anchor" href="#agents">在各个工具里用</a></h2>
     <ul>

@@ -371,7 +371,15 @@ var presets = []PresetDef{
 	// plan. China's is one region for both, so its models are the two
 	// plans' together; 企业版 alone is sold in Singapore too. models.dev
 	// lists just the plans' Hy models, so they are given here, and none of
-	// its catalogs names them. 个人版 was at api.lkeap.cloud.tencent.com
+	// its catalogs names them. magpie asks the plan's /models first, and
+	// these are what an editor shows when it lists none, as it did for
+	// big_yooooo on X (11-28). They are the model tables of 130060 (通用
+	// and Hy) and 130659 (广州, 新加坡), both updated 2026-11-25, read on
+	// 11-28: each model's first id, without the dashed aliases (glm-5-3,
+	// minimax-m-3-0) or the 原厂直供 deepseek/… ids, and without a model
+	// taken off or going within two weeks (minimax-m2.7 off 11-17,
+	// hy4-preview 12-07, deepseek-v4-flash-202605 12-10).
+	// 个人版 was at api.lkeap.cloud.tencent.com
 	// until Tencent moved it (ysm119 on Discord, 11-02): a provider saved
 	// there is moved (movedEndpoints).
 	//
@@ -390,18 +398,22 @@ var presets = []PresetDef{
 		KeyPlans: true, Regions: []Region{
 			{ID: "plan", Name: "Plan · China", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Responses: "https://tokenhub.tencentmaas.com/plan/v3", Anthropic: "https://tokenhub.tencentmaas.com/plan/anthropic",
 				Website: "https://cloud.tencent.com/document/product/1823/130060", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
-				Models: []string{"tc-code-latest", "auto", "glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6",
-					"deepseek-v4-pro-202606", "deepseek-v4-flash-202605", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-flash-0731",
-					"minimax-m3", "minimax-m2.7", "hy4-preview", "hy3", "mimo-v2.6-pro", "mimo-v2.6-flash"}},
+				Models: []string{"tc-code-latest", "auto", "hy4", "hy4-flash", "hy3",
+					"glm-5.4", "glm-5.3", "glm-5.3-flash", "glm-5.3-flashx", "glm-5.2",
+					"kimi-k3.1-pro", "kimi-k3.1-pro-highspeed", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6",
+					"deepseek-v4.1-flash-1017", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-pro-202606",
+					"minimax-m3.1-flash", "minimax-m3", "mimo-v2.6-pro", "mimo-v2.6-flash"}},
 			{ID: "cn", Name: "Pay as you go · China", Chat: "https://tokenhub.tencentmaas.com/v1", Responses: "https://tokenhub.tencentmaas.com/v1", Anthropic: "https://tokenhub.tencentmaas.com",
 				Website: "https://cloud.tencent.com/document/product/1823/130078", KeysURL: "https://console.cloud.tencent.com/tokenhub/apikey", Catalog: "tencent-tokenhub"},
 			{ID: "intl", Name: "Pay as you go · Global", Chat: "https://tokenhub-intl.tencentmaas.com/v1", Responses: "https://tokenhub-intl.tencentmaas.com/v1", Anthropic: "https://tokenhub-intl.tencentmaas.com",
 				Website: "https://www.tencentcloud.com/document/product/1300/78939", KeysURL: "https://console.tencentcloud.com/tokenhub/apikey", Catalog: "tencent-tokenhub"},
 			{ID: "enterprise-intl", Name: "Enterprise plan · Global", Chat: "https://tokenhub-intl.tencentmaas.com/plan/v3", Responses: "https://tokenhub-intl.tencentmaas.com/plan/v3", Anthropic: "https://tokenhub-intl.tencentmaas.com/plan/anthropic",
 				Website: "https://cloud.tencent.com/document/product/1823/130659", KeysURL: "https://console.tencentcloud.com/tokenhub/tokenplan",
-				Models: []string{"auto", "hy4-preview", "glm-5.3", "glm-5.3-flash", "glm-5.2", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed",
-					"minimax-m3", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-flash-0731",
-					"deepseek-v4-pro-202606", "deepseek-v4-flash-202605", "mimo-v2.6-pro", "mimo-v2.6-flash"}},
+				Models: []string{"auto", "hy4", "hy4-flash",
+					"glm-5.3", "glm-5.3-flash", "glm-5.3-flashx", "glm-5.2",
+					"kimi-k3.1-pro", "kimi-k3.1-pro-highspeed", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed",
+					"deepseek-v4.1-flash-1017", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-pro-202606",
+					"minimax-m3.1-flash", "minimax-m3", "mimo-v2.6-pro", "mimo-v2.6-flash"}},
 		}},
 	// Huawei Cloud MaaS's Token Plan: personal accounts in 西南-贵阳一, its
 	// quota spent only at the plan's own endpoints under /plan (v2 for chat

@@ -390,3 +390,91 @@ func TestTencentPlanMovedFromLkeap(t *testing.T) {
 		}
 	}
 }
+
+// The plans' models are Tencent's model tables (big_yooooo on X, 11-28:
+// the list was out of date): 130060's 通用 and Hy tables and 130659's
+// 广州 one for China, 130659's 新加坡 one for Singapore, as updated
+// 2026-11-25. A model Tencent took off (minimax-m2.7, 11-17) or takes off
+// within two weeks (hy4-preview, deepseek-v4-flash-202605) is left out,
+// and so are ids no table has any more.
+func TestTencentPlanModelsAsDocumented(t *testing.T) {
+	pr := Preset("tencent-cloud")
+	want := map[string][]string{
+		"plan": {"tc-code-latest", "auto", "hy4", "hy4-flash", "hy3",
+			"glm-5.4", "glm-5.3", "glm-5.3-flash", "glm-5.3-flashx", "glm-5.2",
+			"kimi-k3.1-pro", "kimi-k3.1-pro-highspeed", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6",
+			"deepseek-v4.1-flash-1017", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-pro-202606",
+			"minimax-m3.1-flash", "minimax-m3", "mimo-v2.6-pro", "mimo-v2.6-flash"},
+		"enterprise-intl": {"auto", "hy4", "hy4-flash",
+			"glm-5.3", "glm-5.3-flash", "glm-5.3-flashx", "glm-5.2",
+			"kimi-k3.1-pro", "kimi-k3.1-pro-highspeed", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed",
+			"deepseek-v4.1-flash-1017", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-pro-202606",
+			"minimax-m3.1-flash", "minimax-m3", "mimo-v2.6-pro", "mimo-v2.6-flash"},
+	}
+	gone := []string{"hy4-preview", "minimax-m2.7", "deepseek-v4-flash-202605", "deepseek-v4-flash-0731", "glm-5.1", "glm-5"}
+	got := map[string][]string{}
+	for _, r := range pr.Regions {
+		if r.Models != nil {
+			got[r.ID] = r.Models
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("regions with models: %v", got)
+	}
+	for id, w := range want {
+		if !slices.Equal(got[id], w) {
+			t.Errorf("%s:\n got %q\nwant %q", id, got[id], w)
+		}
+		for _, g := range gone {
+			if slices.Contains(got[id], g) {
+				t.Errorf("%s still gives %s", id, g)
+			}
+		}
+	}
+	// Singapore sells less than China, never a model China hasn't
+	for _, m := range got["enterprise-intl"] {
+		if !slices.Contains(got["plan"], m) {
+			t.Errorf("Singapore's %s isn't China's", m)
+		}
+	}
+}
+
+// The plan's own /models comes first: a list it answers is the
+// provider's, whole, and the documented models stand in only when it
+// answers none.
+func TestTencentPlanListBeforeDocumented(t *testing.T) {
+	azureHome(t)
+	var lists bool
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/plan/v3/models" || !lists {
+			http.NotFound(rw, r)
+			return
+		}
+		rw.Write([]byte(`{"object":"list","data":[{"id":"glm-5.4","object":"model"},{"id":"hy5","object":"model"}]}`))
+	}))
+	defer srv.Close()
+	p := Provider{ID: "tc", Name: "Tencent Cloud", Preset: "tencent-cloud", Key: "sk-tp-x",
+		Chat: srv.URL + "/plan/v3", Responses: srv.URL + "/plan/v3", Anthropic: srv.URL + "/plan/anthropic"}
+	if r := p.regionOf(Preset("tencent-cloud")); r == nil || r.ID != "plan" {
+		t.Fatalf("at %+v", r)
+	}
+	ids := func(ms []catalog.Model) (out []string) {
+		for _, m := range ms {
+			out = append(out, m.ID)
+		}
+		return out
+	}
+	// none listed (a 404): the fetch fails, and the plan's documented
+	// models stand in
+	if ms, err := p.Fetch(context.Background()); err == nil {
+		t.Logf("no list: fetch gave %v", ids(ms))
+	}
+	if got := ids(p.planModels(nil)); len(got) == 0 || got[0] != "tc-code-latest" || !slices.Contains(got, "glm-5.4") || slices.Contains(got, "hy4-preview") {
+		t.Fatalf("documented: %v", got)
+	}
+	lists = true
+	ms, err := p.Fetch(context.Background())
+	if err != nil || !slices.Equal(ids(catalog.Chat(ms)), []string{"glm-5.4", "hy5"}) {
+		t.Fatalf("listed: %v %v", ids(ms), err)
+	}
+}

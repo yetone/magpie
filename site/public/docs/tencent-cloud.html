@@ -203,7 +203,7 @@ magpie opencode tencent-cloud/kimi-k3</pre></div>
     <p>The personal plan used to be at <code>api.lkeap.cloud.tencent.com</code> until Tencent moved it to TokenHub. A provider saved at the old host is moved to the new one.</p>
 
     <h2 id="models"><a class="anchor" href="#models">The plans' models</a></h2>
-    <p>The plans give no model list of their own, and the public catalog names only their Hy models, so magpie gives the models from Tencent's plan docs: tc-code-latest, auto, glm-5.3, glm-5.3-flash, kimi-k3, kimi-k2.7-code, deepseek-v4-pro, deepseek-v4.1-flash, minimax-m3, hy4-preview, hy3, mimo-v2.6-pro, among others. tc-code-latest is whichever model the console has picked. A pay-as-you-go key reads TokenHub's <code>/v1/models</code>, which has other makers' models such as Qwen too.</p>
+    <p>magpie asks the plan for its model list first. When it gives none, and since the public catalog names only the plans' Hy models, magpie gives the models from Tencent's plan docs (updated 2026-11-25): tc-code-latest, auto, hy4, hy4-flash, hy3, glm-5.4, glm-5.3, glm-5.3-flash, kimi-k3.1-pro, kimi-k3, kimi-k2.7-code, deepseek-v4-pro, deepseek-v4.1-flash, minimax-m3.1-flash, minimax-m3, mimo-v2.6-pro, among others. tc-code-latest is whichever model the console has picked. A pay-as-you-go key reads TokenHub's <code>/v1/models</code>, which has other makers' models such as Qwen too.</p>
 
     <h2 id="agents"><a class="anchor" href="#agents">In each agent</a></h2>
     <ul>
