@@ -1242,6 +1242,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	}
 	mux := http.NewServeMux()
 	page := devPage(revalidated(http.FileServer(http.FS(staticFS()))))
+	markRoutes(mux, page)
 	mux.Handle("/", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if warmsSessions(r) {
 			warmSessions()
@@ -1379,6 +1380,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			t, _ := json.Marshal(n + " · magpie")
 			out = append(append(append(out, "document.title = "...), t...), ";\n"...)
 		}
+		// and the icons and window colours in the accent (webappmark.go)
+		out = append(out, markBoot(markOf(s))...)
 		if css := lookCSS(s); css != "" {
 			c, _ := json.Marshal(css)
 			out = append(out, `(function(){var e=document.createElement("style");e.id="lookCSS";e.textContent=`...)

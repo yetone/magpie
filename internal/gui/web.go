@@ -419,8 +419,9 @@ func webGuard(cookie, key, where string, box boxSignIn, next http.Handler) http.
 // webAppFiles are the files webGuard serves without the key: the web app
 // manifest and the icons it and index.html name, so "Add to Home Screen"
 // gets them whether or not the browser sends its cookie with them. Each is
-// a file of the build, the same for every magpie; nothing in it is the
-// user's.
+// a file of the build, the same for every magpie, but for the accent
+// colour of the user's own the icons are drawn in (markRoutes), a colour
+// Settings offers and nothing more; nothing else in them is the user's.
 var webAppFiles = map[string]bool{
 	"/manifest.json":              true,
 	"/icons/apple-touch-icon.png": true,

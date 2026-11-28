@@ -372,7 +372,7 @@ func popVar(c rgb) string {
 func appearanceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/appearance/css", func(rw http.ResponseWriter, r *http.Request) {
 		s := settings.Load()
-		writeJSON(rw, map[string]string{"css": lookCSS(s), "key": lookKey(s)})
+		writeJSON(rw, map[string]any{"css": lookCSS(s), "key": lookKey(s), "mark": markOf(s)})
 	})
 	mux.HandleFunc("GET /api/appearance/wallpaper", func(rw http.ResponseWriter, r *http.Request) {
 		b, err := os.ReadFile(settings.WallpaperPath())
