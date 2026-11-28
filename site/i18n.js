@@ -139,7 +139,7 @@ const zh = {
   "comm.h": "加入 magpie 社区",
   "comm.p": "提问、分享你的配置、告诉我们下一步做什么——都在 Discord。",
 
-  "fin.h2": "每个 Agent，每个模型。",
+  "fin.h2": "买过的套餐，每个 Agent 都能用。",
   "fin.sub": "免费、开源、原生。支持 macOS、Windows 和 Linux。",
   "fin.gh": "在 GitHub 上查看",
   "plat.mac": "12 及以上",
@@ -299,7 +299,7 @@ const ja = {
   "comm.h": "magpie コミュニティに参加",
   "comm.p": "質問、設定の共有、次に作ってほしいもの——Discord でどうぞ。",
 
-  "fin.h2": "すべてのエージェント。すべてのモデル。",
+  "fin.h2": "契約したプランを、<wbr>どのエージェントでも。",
   "fin.sub": "無料、オープンソース、ネイティブ。macOS、Windows、Linux に対応。",
   "fin.gh": "GitHub で見る",
   "plat.mac": "12 以降",
@@ -459,7 +459,7 @@ const de = {
   "comm.h": "Werden Sie Teil der magpie-Community",
   "comm.p": "Fragen stellen, Ihr Setup zeigen, uns sagen, was wir als Nächstes bauen sollen – auf Discord.",
 
-  "fin.h2": "Jeder Agent. Jedes Modell.",
+  "fin.h2": "Jedes Abo, das Sie zahlen, in jedem Agenten.",
   "fin.sub": "Kostenlos, Open Source, nativ. Für macOS, Windows und Linux.",
   "fin.gh": "Auf GitHub ansehen",
   "plat.mac": "12 oder neuer",
@@ -607,7 +607,7 @@ const zhTW = {
   "cli.c.tui": "# 在終端機裡用完整的應用程式",
   "comm.h": "加入 magpie 社群",
   "comm.p": "提問、分享你的設定、告訴我們下一步做什麼——都在 Discord。",
-  "fin.h2": "每個 Agent，每個模型。",
+  "fin.h2": "買過的方案，每個 Agent 都能用。",
   "fin.sub": "免費、開源、原生。支援 macOS、Windows 和 Linux。",
   "fin.gh": "在 GitHub 上檢視",
   "plat.mac": "12 及以上",
