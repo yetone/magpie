@@ -131,10 +131,13 @@ func TestChatGPTAPIRowShowsTheSameAccountsCodexWindows(t *testing.T) {
 	CodexBase = apps.URL + "/backend-api/codex"
 	t.Cleanup(func() { CodexBase = oldBase })
 
-	reset := time.Now().Add(3 * time.Hour)
+	reset, paid := time.Now().Add(3*time.Hour), time.Now().Add(20*24*time.Hour)
 	dee := SubscriptionQuota{Provider: "codex", Name: "Codex", User: "Dee@Example.com", Plan: "plus",
 		Windows: []QuotaWindow{{Name: "5 hours", Used: 30, ResetsAt: &reset}, {Name: "Weekly", Used: 40}},
-		Resets:  &ResetCredits{Count: 1}, Held: true}
+		Resets:  &ResetCredits{Count: 1}, Held: true, Balance: "12 credits", Until: &paid}
+	if err := noteResetUsed("Dee@Example.com", "by hand", ResetOutcome{Code: "reset", Windows: 2}); err != nil {
+		t.Fatal(err)
+	}
 	team := SubscriptionQuota{Provider: "codex", User: "team@example.com · Team", Windows: []QuotaWindow{{Name: "Weekly", Used: 90}}}
 	loginUsageCache.Lock()
 	old := loginUsageCache.m
@@ -157,8 +160,17 @@ func TestChatGPTAPIRowShowsTheSameAccountsCodexWindows(t *testing.T) {
 	if q.SamePlan != "Dee@Example.com" || q.Provider != ChatGPTAPIID || q.SeeAt != "" {
 		t.Fatalf("the row is told as %q of %q (seeAt %q), want the Codex account named on chatgpt-api's row", q.SamePlan, q.Provider, q.SeeAt)
 	}
-	if q.Resets != nil || q.Held {
-		t.Fatalf("Codex's own resets or hold went on the chatgpt-api row: %+v", q)
+	// the plan's resets, the ones magpie spent, its credits and its end are
+	// the plan's, shown here as on the Codex row (tmr11235 on X: 补一下套餐
+	// 重置卡); the Codex app's hold is the Codex app's
+	if q.Resets == nil || q.Resets.Count != 1 || len(q.ResetsUsed) != 1 || q.ResetsUsed[0].Windows != 2 {
+		t.Fatalf("the plan's resets aren't on the chatgpt-api row: resets %+v, used %+v", q.Resets, q.ResetsUsed)
+	}
+	if q.Balance != "12 credits" || q.Until == nil || !q.Until.Equal(paid) {
+		t.Fatalf("the plan's credits or end aren't on the chatgpt-api row: balance %q, until %v", q.Balance, q.Until)
+	}
+	if q.Held {
+		t.Fatalf("the Codex app's hold went on the chatgpt-api row: %+v", q)
 	}
 	if q := got["team@example.com"]; q.Error != siwcNoUsage || len(q.Windows) != 0 || q.SamePlan != "" {
 		t.Fatalf("a personal account took the Team seat's reading of one email: %+v", q)

@@ -289,8 +289,11 @@ func siwcQuota(ctx context.Context, l Login) SubscriptionQuota {
 	if err != nil {
 		return SubscriptionQuota{Provider: l.Agent, Plan: l.Plan, Windows: []QuotaWindow{}, Error: err.Error()}
 	}
-	plan, ws, _, _, _, _, err := codexWindowsLeft(ctx, tok, acct)
-	q := SubscriptionQuota{Provider: l.Agent, Plan: cmp.Or(plan, l.Plan), Windows: ws}
+	// the plan's resets, credits and end too, as the Codex row reads them
+	// (tmr11235 on X); its resets come in the same read, nothing more is
+	// asked, and the Codex app's hold is the Codex app's
+	plan, ws, resets, credits, _, _, err := codexWindowsLeft(ctx, tok, acct)
+	q := SubscriptionQuota{Provider: l.Agent, Plan: cmp.Or(plan, l.Plan), Windows: ws, Resets: resets, Balance: credits, Until: codexUntil(twin.auth, time.Now())}
 	if err != nil {
 		q.Error = err.Error()
 	}

@@ -6897,8 +6897,9 @@ function accountPlan(a) {
   // the one it was signed in on, and a Claude reading is the plan after
   // its run (CoderMaurice on X: an upgraded account read its old plan in
   // the editor only). Another's reading names its plan in words of its
-  // own; with none read, the sign-in's.
-  const agent = a.builtin || a.agent, q = /^(claude|codex)$/.test(agent) && !a.lapsed && loginUsage[agent]?.data?.[a.user], plan = (q && !q.error && q.plan) || a.plan;
+  // own; with none read, the sign-in's. A ChatGPT API account's reading is
+  // its Codex twin's (samePlanReadings), the plan now as on the Codex row.
+  const agent = a.builtin || a.agent, q = /^(claude|codex|chatgpt-api)$/.test(agent) && !a.lapsed && loginUsage[agent]?.data?.[a.user], plan = (q && !q.error && q.plan) || a.plan;
   const cap = (s) => s[0].toUpperCase() + s.slice(1);
   // "Xiaomi MiMo" and "MiMo 高阶" overlap in "MiMo": said once
   const named = (name, plan) => {
@@ -14012,8 +14013,10 @@ function renderAccounts(a, p) {
     }
     if (quota && !l.lapsed) line.querySelector(".plan").after(accountRefresh(a.agent, p, l.user));
     const aq = accountQuota(l.lapsed ? { [l.user]: { error: t(l.lapsed) } } : quota, l.user, capFor, p ? (m, w) => windowCapMeter(m, p, l.user, w) : null, a.agent);
-    // its plan's end, under its line (danzi002)
-    if (l.until) aq.append(Object.assign(planSpan({ until: l.until }), { className: "aq-until" }));
+    // its plan's end, under its line (danzi002); a ChatGPT API sign-in
+    // tells none, its Codex twin's reading does (tmr11235 on X)
+    const until = l.until || !l.lapsed && quota?.[l.user]?.until;
+    if (until) aq.append(Object.assign(planSpan({ until }), { className: "aq-until" }));
     // Check in now (xwoffice_91592)
     const ci = !l.lapsed && quota?.[l.user];
     if (ci?.checkinKey && checkinDue(ci)) {
@@ -14567,14 +14570,16 @@ function accountQuota(data, user, capFor = () => 0, settable = null, prov) {
     line.append(el("span", "aq-asof", asOfText(q)));
   }
   if (q?.resets?.count && !q.error) {
-    // Codex's are used from here too, as on Usage (roamlog on X)
-    const words = resetsWords(q.resets), use = prov == "codex" && !q.resets.byWindow;
+    // Codex's are used from here too, as on Usage (roamlog on X), and from
+    // a ChatGPT API row read through its Codex twin: the same plan's
+    // (samePlan, tmr11235 on X), spent with that Codex account
+    const twin = q.samePlan, words = resetsWords(q.resets), use = (prov == "codex" || twin) && !q.resets.byWindow;
     const resets = el("span", "aq-w aq-resets" + (use ? " aq-set" : ""));
     resets.title = tipLines(words.textContent, words.title, use && "\n" + resetUseTitle(q));
     resets.append(words.querySelector(".resets-n"));
     if (use) {
       spanBtn(resets).setAttribute("aria-haspopup", "dialog");
-      resets.onclick = (e) => { e.stopPropagation(); askReset({ ...q, provider: prov, user }); };
+      resets.onclick = (e) => { e.stopPropagation(); askReset({ ...q, provider: "codex", user: twin || user }); };
     }
     line.append(resets);
   }

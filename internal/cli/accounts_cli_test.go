@@ -238,3 +238,31 @@ func TestAccountRowsPlanFromReading(t *testing.T) {
 		t.Fatalf("%+v", rows)
 	}
 }
+
+// A ChatGPT API account read through its Codex twin (samePlanReadings)
+// says the plan, resets and credits that reading names, as the Codex row
+// does (tmr11235 on X: 补一下套餐重置卡); one with no twin keeps its
+// sign-in's plan and why it has no usage.
+func TestAccountRowsChatGPTAPIPlanFromItsTwin(t *testing.T) {
+	now := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	provider.LoginUsageVia(func(_ context.Context, agent string) map[string]provider.SubscriptionQuota {
+		if agent != provider.ChatGPTAPIID {
+			return nil
+		}
+		return map[string]provider.SubscriptionQuota{
+			"dee@example.com":  {Provider: provider.ChatGPTAPIID, User: "dee@example.com", Plan: "pro", SamePlan: "Dee@Example.com", Balance: "12 credits", Resets: &provider.ResetCredits{Count: 2}, Windows: []provider.QuotaWindow{{Name: "5 hours", Used: 30}}},
+			"solo@example.com": {Provider: provider.ChatGPTAPIID, User: "solo@example.com", Plan: "", Error: "no usage told here"},
+		}
+	})
+	t.Cleanup(func() { provider.LoginUsageVia(nil) })
+	rows := accountRows([]provider.Login{
+		{Agent: provider.ChatGPTAPIID, User: "dee@example.com", Plan: "plus", Active: true, On: true},
+		{Agent: provider.ChatGPTAPIID, User: "solo@example.com", Plan: "plus", On: true},
+	}, now)
+	if len(rows) != 2 || rows[0].Plan != "pro" || rows[0].Resets == nil || rows[0].Resets.Count != 2 || rows[0].Balance != "12 credits" {
+		t.Fatalf("the twin's row: %+v", rows)
+	}
+	if rows[1].Plan != "plus" || rows[1].Resets != nil {
+		t.Fatalf("the lone row: %+v", rows[1])
+	}
+}

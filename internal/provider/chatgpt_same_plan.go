@@ -148,8 +148,11 @@ func samePlanAllowances(own map[string]Allowance) map[string]Allowance {
 // with ChatGPT app's requests against the plan's included ChatGPT Work
 // and Codex allowance, the one pool /wham/usage reads. The reading is the
 // Codex account's own, through its cache (someLoginUsage), so nothing is
-// asked that its own row wouldn't ask; Codex's resets and hold stay on
-// the Codex row, and SamePlan names the Codex account. An account with no
+// asked that its own row wouldn't ask. The plan's resets, the ones magpie
+// spent, its credits and the plan's end go with it (tmr11235 on X: "补一下
+// 套餐重置卡什么的"), since they are the plan's and a reset used from either
+// row resets both; only the Codex app's hold stays on the Codex row, being
+// the Codex app's. SamePlan names the Codex account. An account with no
 // Codex twin, or whose twin has nothing read, keeps its own (siwcNoUsage
 // or "not read yet"), and a switched-off one says so. own is not changed.
 func samePlanReadings(ctx context.Context, own map[string]SubscriptionQuota) map[string]SubscriptionQuota {
@@ -207,7 +210,7 @@ func samePlanReadings(ctx context.Context, own map[string]SubscriptionQuota) map
 		q.Provider, q.Name, q.Icon, q.User = mine.Provider, mine.Name, mine.Icon, mine.User
 		q.Plan = cmp.Or(q.Plan, mine.Plan)
 		q.SeeAt = ""
-		q.Resets, q.ResetsUsed, q.Held = nil, nil, false
+		q.Held = false
 		q.SamePlan = l.User
 		out[user] = q
 	}

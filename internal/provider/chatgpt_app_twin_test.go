@@ -20,6 +20,8 @@ type siwcTwinFake struct {
 	mu    sync.Mutex
 	asked map[string]int
 	apps  []string
+	// plan is whether /wham/usage tells the plan's resets and credits too
+	plan bool
 }
 
 func (f *siwcTwinFake) count(path string) int {
@@ -48,7 +50,8 @@ func siwcTwinHome(t *testing.T, apps ...string) *siwcTwinFake {
 		"auth_mode": "chatgpt",
 		"tokens": map[string]any{
 			"id_token": fakeJWT(map[string]any{"sub": "auth0|u1", "email": "Tmr@Example.com", "https://api.openai.com/auth": map[string]any{
-				"chatgpt_plan_type": "plus", "chatgpt_account_id": "acct-1", "chatgpt_user_id": "user-1"}}),
+				"chatgpt_plan_type": "plus", "chatgpt_account_id": "acct-1", "chatgpt_user_id": "user-1",
+				"chatgpt_subscription_active_until": siwcTwinPaid.Format(time.RFC3339)}}),
 			"access_token": codexAccess, "refresh_token": "r", "account_id": "acct-1",
 		},
 	})
@@ -70,9 +73,20 @@ func siwcTwinHome(t *testing.T, apps ...string) *siwcTwinFake {
 		}
 		switch r.URL.Path {
 		case "/backend-api/wham/usage":
-			json.NewEncoder(w).Encode(map[string]any{"plan_type": "plus", "rate_limit": map[string]any{
+			u := map[string]any{"plan_type": "plus", "rate_limit": map[string]any{
 				"primary_window":   map[string]any{"used_percent": 30, "limit_window_seconds": 18000, "reset_after_seconds": 3600},
-				"secondary_window": map[string]any{"used_percent": 40, "limit_window_seconds": 604800, "reset_after_seconds": 86400}}})
+				"secondary_window": map[string]any{"used_percent": 40, "limit_window_seconds": 604800, "reset_after_seconds": 86400}}}
+			f.mu.Lock()
+			if f.plan {
+				u["credits"] = map[string]any{"has_credits": true, "unlimited": false, "balance": "12"}
+				u["rate_limit_reset_credits"] = map[string]any{"available_count": 2}
+			}
+			f.mu.Unlock()
+			json.NewEncoder(w).Encode(u)
+		case "/backend-api/wham/rate-limit-reset-credits":
+			json.NewEncoder(w).Encode(map[string]any{"available_count": 2, "credits": []any{
+				map[string]any{"id": "rc_1", "reset_type": "full", "status": "available", "expires_at": siwcTwinPaid.Format(time.RFC3339)},
+				map[string]any{"id": "rc_2", "reset_type": "full", "status": "available"}}})
 		case "/backend-api/wham/usage/chatpass/apps":
 			items := []any{}
 			for _, a := range f.apps {
@@ -89,6 +103,43 @@ func siwcTwinHome(t *testing.T, apps ...string) *siwcTwinFake {
 	CodexBase = srv.URL + "/backend-api/codex"
 	t.Cleanup(func() { CodexBase = old })
 	return f
+}
+
+// siwcTwinPaid is when the fake Codex sign-in's plan is paid until.
+var siwcTwinPaid = time.Now().Add(20 * 24 * time.Hour).UTC().Truncate(time.Second)
+
+// tmr11235 on X, after the row showed the plan's windows: "补一下套餐重置卡
+// 什么的". Read through Codex's own sign-in (the Codex provider removed),
+// the ChatGPT API row shows the plan's resets, credits and paid-until as
+// the Codex row would, from the same read: /wham/usage and the resets'
+// list, nothing more.
+func TestChatGPTAPIRowReadsThePlansResetsThroughCodexsSignIn(t *testing.T) {
+	f := siwcTwinHome(t, "oaiapp_mine")
+	f.plan = true
+	if err := Delete("codex"); err != nil {
+		t.Fatal(err)
+	}
+	q := LoginUsageShown(context.Background(), ChatGPTAPIID)["tmr@example.com"]
+	if q.Error != "" || len(q.Windows) != 2 {
+		t.Fatalf("the ChatGPT API row reads %+v, want the plan's two windows", q)
+	}
+	if q.Resets == nil || q.Resets.Count != 2 || len(q.Resets.Each) != 2 || q.Resets.Until == nil || !q.Resets.Until.Equal(siwcTwinPaid) {
+		t.Fatalf("the plan's resets on the ChatGPT API row: %+v, want the 2 Codex's sign-in holds, the first till %v", q.Resets, siwcTwinPaid)
+	}
+	if q.Balance != "12 credits" {
+		t.Fatalf("the plan's credits on the ChatGPT API row: %q, want 12 credits", q.Balance)
+	}
+	if q.Until == nil || !q.Until.Equal(siwcTwinPaid) {
+		t.Fatalf("the plan is paid until %v on the ChatGPT API row, want %v", q.Until, siwcTwinPaid)
+	}
+	if q.Held || q.SamePlan != "" {
+		t.Fatalf("held %v, samePlan %q: no Codex row is read here, so nothing is used from it", q.Held, q.SamePlan)
+	}
+	for _, p := range []string{"/backend-api/wham/usage", "/backend-api/wham/rate-limit-reset-credits"} {
+		if n := f.count(p); n != 1 {
+			t.Fatalf("%s asked %d times, want once", p, n)
+		}
+	}
 }
 
 // The reporter's case: only the ChatGPT API account in magpie, the

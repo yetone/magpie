@@ -84,6 +84,8 @@ window.askResetSheet = function (q) {
       // and resets on their own, kept a minute: read again, as Usage is
       // (#1491); asked from the editor, closing goes back to it
       delete loginUsage.codex;
+      // a ChatGPT API account showing the same plan (samePlan) reads it again too
+      delete loginUsage["chatgpt-api"];
       closeConfirmAsk();
       status(who + ": " + resetOutcome(out), out.code === "reset" ? "ok" : "err");
       if (editing && view === "providers") renderProviders();

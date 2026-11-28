@@ -384,8 +384,10 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 			}
 			// a Claude or Codex account's plan as its reading says, as the
 			// GUI names it: Codex's sign-in says the plan it was signed in
-			// on, not one upgraded since (CoderMaurice on X)
-			if r.Plan == "" || q.Plan != "" && q.Error == "" && (l.Agent == "claude" || l.Agent == "codex") {
+			// on, not one upgraded since (CoderMaurice on X); a ChatGPT API
+			// account's reading is its Codex twin's, the plan's now too
+			// (tmr11235 on X)
+			if r.Plan == "" || q.Plan != "" && q.Error == "" && (l.Agent == "claude" || l.Agent == "codex" || l.Agent == provider.ChatGPTAPIID) {
 				r.Plan = cmp.Or(q.Plan, r.Plan)
 			}
 			r.Error, r.Resets, r.AsOf, r.ReadAt, r.Balance = q.Error, q.Resets, q.AsOf, q.ReadAt, q.Balance
