@@ -3446,7 +3446,7 @@ async function openAgentModels(a, anchor, ev) {
   // by provider, or by maker as a provider's editor has its models
   // (elis_pina on X), kept for the next time
   let byMaker = !!window.makerGroups && kept("agentModelsBy", "") === "maker";
-  const segBy = el("div", "am-seg am-by"), byP = el("button", "", t("By provider")), byM = el("button", "", t("By maker"));
+  const segBy = el("div", "am-by"), byP = el("button", "", t("By provider")), byM = el("button", "", t("By maker"));
   byP.type = byM.type = "button";
   segBy.append(byP, byM);
   segBy.hidden = !window.makerGroups;
