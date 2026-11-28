@@ -9206,7 +9206,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 					r := *req
 					r.OffLevel, req = l, &r
 				}
-			} else if e := fitEffort(req.Effort, levels); slices.Contains(gemini3Levels, req.Effort) && e != req.Effort {
+			} else if e := fitEffort(req.Effort, levels); (slices.Contains(gemini4Levels, req.Effort) || req.Effort == "max") && e != req.Effort {
 				r := *req
 				r.Effort, req = e, &r
 			}
@@ -11713,8 +11713,8 @@ func onEffort(p provider.Provider, model string) string {
 
 // geminiLevels are the thinking levels model is asked at on Gemini's
 // OpenAI-compatible API, less those it turned away before (turnedAway):
-// its own, or Gemini 3's where they aren't known or none of its own is
-// left.
+// its own, or Gemini 3's / Gemini 4's where they aren't known or none of
+// its own is left.
 func (s *Server) geminiLevels(p provider.Provider, model string, to provider.Protocol) []string {
 	left := func(levels []string) []string {
 		return slices.DeleteFunc(slices.Clone(levels), func(l string) bool {
@@ -11723,6 +11723,9 @@ func (s *Server) geminiLevels(p provider.Provider, model string, to provider.Pro
 	}
 	if levels := left(p.Efforts(model)); len(levels) > 0 {
 		return levels
+	}
+	if geminiGeneration(strings.ToLower(model)) >= 4 {
+		return left(gemini4Levels)
 	}
 	return left(gemini3Levels)
 }

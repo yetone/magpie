@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -34,8 +36,14 @@ func TestAIStudioThinking(t *testing.T) {
 	}{
 		{"high", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, Thinking: true, Effort: "high"}, want{"", `{"include_thoughts":true,"thinking_level":"high"}`}},
 		{"xhigh", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, Thinking: true, Effort: "xhigh"}, want{"", `{"include_thoughts":true,"thinking_level":"high"}`}},
+		{"max", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, Thinking: true, Effort: "max"}, want{"", `{"include_thoughts":true,"thinking_level":"high"}`}},
+		{"gemini 4 xhigh", aiStudioHost, "gemini-4-neon", Request{GeminiCompat: true, Thinking: true, Effort: "xhigh"}, want{"", `{"include_thoughts":true,"thinking_level":"xhigh"}`}},
+		{"gemini 4 hydrogen xhigh", aiStudioHost, "gemini-4-hydrogen", Request{GeminiCompat: true, Thinking: true, Effort: "xhigh"}, want{"", `{"include_thoughts":true,"thinking_level":"xhigh"}`}},
+		{"gemini 4 prefixed xhigh", aiStudioHost, "google/gemini-4-neon", Request{GeminiCompat: true, Thinking: true, Effort: "xhigh"}, want{"", `{"include_thoughts":true,"thinking_level":"xhigh"}`}},
+		{"gemini 4 max", aiStudioHost, "gemini-4-neon", Request{GeminiCompat: true, Thinking: true, Effort: "max"}, want{"", `{"include_thoughts":true,"thinking_level":"xhigh"}`}},
 		{"low", aiStudioHost, "gemini-3.1-pro", Request{GeminiCompat: true, Thinking: true, Effort: "low"}, want{"", `{"include_thoughts":true,"thinking_level":"low"}`}},
 		{"2.5 budget", aiStudioHost, "gemini-2.5-flash", Request{GeminiCompat: true, Thinking: true, Effort: "medium"}, want{"", `{"include_thoughts":true,"thinking_budget":8192}`}},
+		{"2.5 xhigh budget", aiStudioHost, "gemini-2.5-flash", Request{GeminiCompat: true, Thinking: true, Effort: "xhigh"}, want{"", `{"include_thoughts":true,"thinking_budget":24576}`}},
 		{"no effort", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, Thinking: true}, want{"", `{"include_thoughts":true}`}},
 		{"off", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, ThinkOff: true}, want{"minimal", ""}},
 		{"off at its lowest", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, ThinkOff: true, OffLevel: "low"}, want{"low", ""}},
@@ -286,7 +294,9 @@ func TestGeminiRefusedLevel(t *testing.T) {
 	for _, c := range []struct{ body, want string }{
 		{aiStudioRefusal("minimal"), "minimal"},
 		{aiStudioRefusal("medium"), "medium"},
+		{aiStudioRefusal("xhigh"), "xhigh"},
 		{vertexRefusal, "minimal"},
+		{`{"error":{"code":400,"message":"Thinking level is unsupported: THINKING_LEVEL_XHIGH","status":"INVALID_ARGUMENT"}}`, "xhigh"},
 		// gemini-3.1-pro-preview's message for thinking_level minimal at
 		// Vertex AI, as captured 2026-10-06 up to its "Learn more" link
 		{`{"error":{"code":400,"message":"Unable to submit request because thinking_level MINIMAL is not supported by this model.","status":"INVALID_ARGUMENT"}}`, "minimal"},
@@ -822,4 +832,98 @@ func TestGeminiGoogleFieldRefusedOnLocalRouter(t *testing.T) {
 		t.Fatalf("ai-studio lost thinking_config after Google 400: %v", bodies[len(bodies)-1])
 	}
 	mu.Unlock()
+}
+
+// #7652: on Gemini's OpenAI-compatible Chat route (GeminiCompat), a Gemini 4
+// model whose catalog lists xhigh goes up with thinking_level "xhigh" (and is
+// logged at xhigh), a Gemini 4 without xhigh or a Gemini 3 stays at "high",
+// and an uncataloged Gemini 4 that turns xhigh away is retried at "high" and
+// remembered.
+func TestAIStudioGemini4XHigh(t *testing.T) {
+	fresh(t)
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	os.WriteFile(catalog.CachePath(), []byte(`{"google-vertex":{"models":{
+	"gemini-4-neon":{"id":"gemini-4-neon","reasoning_options":[{"type":"effort","values":["low","medium","high","xhigh"]}]},
+	"gemini-4-argon":{"id":"gemini-4-argon","reasoning_options":[{"type":"effort","values":["low","medium","high"]}]},
+	"gemini-3.8-flash":{"id":"gemini-3.8-flash","reasoning_options":[{"type":"effort","values":["low","medium","high"]}]}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+
+	var mu sync.Mutex
+	var levels []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		json.NewDecoder(r.Body).Decode(&b)
+		model, _ := b["model"].(string)
+		lv := geminiLevel(b)
+		mu.Lock()
+		levels = append(levels, lv)
+		mu.Unlock()
+		if model == "gemini-4-refuses-xhigh" && lv == "xhigh" {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, aiStudioRefusal("xhigh"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "data: "+`{"id":"x","model":`+strconv.Quote(model)+`,"choices":[{"index":0,"delta":{"role":"assistant","content":"ok"}}]}`+"\n\n")
+		io.WriteString(w, "data: "+`{"id":"x","model":`+strconv.Quote(model)+`,"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3}}`+"\n\n")
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(up.Close)
+
+	if err := provider.Save(provider.Provider{
+		ID:      "gc",
+		Name:    "Gemini",
+		Key:     "k",
+		Catalog: "google-vertex",
+		Chat:    up.URL + "/v1",
+		Models:  []string{"gemini-4-neon", "gemini-4-argon", "gemini-3.8-flash", "gemini-4-refuses-xhigh"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	ask := func(model, effort string) (int, []string) {
+		mu.Lock()
+		levels = nil
+		mu.Unlock()
+		code, out := postTo(t, s, "/v1/responses", `{"model":"gc/`+model+`","stream":true,"reasoning":{"effort":"`+effort+`","summary":"auto"},"input":[{"role":"user","content":"hi"}]}`)
+		if code != 200 {
+			t.Fatalf("%s at %s: status %d: %s", model, effort, code, out)
+		}
+		mu.Lock()
+		got := slices.Clone(levels)
+		mu.Unlock()
+		return code, got
+	}
+
+	// gemini-4-neon (catalog has xhigh): xhigh and max both go as xhigh.
+	for _, effort := range []string{"xhigh", "max"} {
+		_, got := ask("gemini-4-neon", effort)
+		if !slices.Equal(got, []string{"xhigh"}) {
+			t.Errorf("gemini-4-neon at %s: sent levels %v, want [xhigh]", effort, got)
+		}
+		loggedAt(t, s, "gemini-4-neon at "+effort, "xhigh")
+	}
+
+	// gemini-4-argon (catalog caps at high) and gemini-3.8-flash: stay at high.
+	for _, model := range []string{"gemini-4-argon", "gemini-3.8-flash"} {
+		_, got := ask(model, "xhigh")
+		if !slices.Equal(got, []string{"high"}) {
+			t.Errorf("%s at xhigh: sent levels %v, want [high]", model, got)
+		}
+		loggedAt(t, s, model+" at xhigh", "high")
+	}
+
+	// Uncataloged Gemini 4 that turns xhigh away: retried at high, then straight to high.
+	_, got := ask("gemini-4-refuses-xhigh", "xhigh")
+	if !slices.Equal(got, []string{"xhigh", "high"}) {
+		t.Errorf("gemini-4-refuses-xhigh turn 1: sent levels %v, want [xhigh high]", got)
+	}
+	loggedAt(t, s, "gemini-4-refuses-xhigh turn 1", "high")
+
+	_, got = ask("gemini-4-refuses-xhigh", "xhigh")
+	if !slices.Equal(got, []string{"high"}) {
+		t.Errorf("gemini-4-refuses-xhigh turn 2: sent levels %v, want [high]", got)
+	}
+	loggedAt(t, s, "gemini-4-refuses-xhigh turn 2", "high")
 }

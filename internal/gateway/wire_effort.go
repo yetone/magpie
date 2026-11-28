@@ -82,7 +82,7 @@ func geminiBound(to provider.Protocol, model string) bool {
 // the thinking level the body of a try to a Gemini model names as it goes
 // out (#7400). Gemini's builders say a level of their own — a Gemini 3
 // Pro asked medium thinks at high, none and minimal at low, xhigh on
-// Gemini's OpenAI-compatible API goes as high — and a Gemini on an
+// Gemini 3's OpenAI-compatible API goes as high — and a Gemini on an
 // Anthropic or Chat relay is fitted to its levels (geminiLevelBody); the
 // log said the effort asked while another went. Read after the user's own
 // fields are in (WithExtraBody), so what the log says is what left. A

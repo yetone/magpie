@@ -1148,6 +1148,11 @@ func thinkingConfigRefused(model string) string { return "thinking_config\x00" +
 // where its own aren't known.
 var gemini3Levels = []string{"minimal", "low", "medium", "high"}
 
+// gemini4Levels are the levels Gemini 4 and later think at where a model's
+// own aren't known (Google's thinking reference lists MINIMAL, LOW, MEDIUM,
+// HIGH, XHIGH).
+var gemini4Levels = []string{"minimal", "low", "medium", "high", "xhigh"}
+
 // geminiLevelRefused is Gemini turning away a thinking level the model
 // hasn't, which names thinking but isn't thinking_config turned away
 // (refusesThinkingConfig): gemini-3.8-flash's 400 "Thinking level MINIMAL
@@ -1157,7 +1162,7 @@ var gemini3Levels = []string{"minimal", "low", "medium", "high"}
 // thinking_level minimal alike; and gemini-3.1-pro-preview's
 // "thinking_level MINIMAL is not supported by this model" at its
 // generateContent.
-var geminiLevelRefused = lazyre.New(`(?i)thinking[ _]level\W+(?:(minimal|low|medium|high)\W+is not supported|is unsupported\W+thinking_level_(minimal|low|medium|high))`)
+var geminiLevelRefused = lazyre.New(`(?i)thinking[ _]level\W+(?:(minimal|low|medium|high|xhigh)\W+is not supported|is unsupported\W+thinking_level_(minimal|low|medium|high|xhigh))`)
 
 // geminiRefusedLevel is the thinking level Gemini turned away in body
 // (geminiLevelRefused), or "".
@@ -1190,22 +1195,28 @@ func refusesThinkingConfig(status int, body []byte) bool {
 
 // aiStudioThinking is the thinking_config asking Gemini for its thoughts at
 // the effort the client asked, for a client that asked to see them: a level
-// for Gemini 3 and later, a budget for 2.x (the steps Google maps
-// reasoning_effort to).
+// for Gemini 3 and later (xhigh from Gemini 4, matching generateContent's
+// thinkingConfig), a budget for 2.x (the steps Google maps reasoning_effort
+// to).
 func aiStudioThinking(r *Request, model string) map[string]any {
 	if !r.Thinking || r.ThinkOff || r.Effort == "none" {
 		return nil
 	}
 	tc := map[string]any{"include_thoughts": true}
+	m := strings.ToLower(model)
 	level := r.Effort
 	switch level {
 	case "xhigh", "max":
-		level = "high"
+		if geminiGeneration(m) >= 4 {
+			level = "xhigh"
+		} else {
+			level = "high"
+		}
 	case "minimal", "low", "medium", "high":
 	default:
 		return tc // the model's own
 	}
-	if strings.Contains(strings.ToLower(model), "gemini-2") {
+	if strings.Contains(m, "gemini-2") {
 		tc["thinking_budget"] = map[string]int{"minimal": 1024, "low": 1024, "medium": 8192, "high": 24576}[level]
 	} else {
 		tc["thinking_level"] = level
