@@ -1221,7 +1221,30 @@ then calls `beginHandover` instead of the relaunch-after-exit. The steps:
    for its requests in flight to finish (at most `fallbackWait`, 15
    minutes), since the restart was let go without waiting for them. A
    second restart click while a handover is under way does nothing
-   (`pending`).
+   (`pending`). When neither the new version nor the relaunch can be
+   started, this one stays up, and Updates says the new version is
+   installed but couldn't be started (`notRestarted`,
+   `TestHandoverNeitherStartsStaysUpAndSaysSo`).
+
+On a Mac the install never deletes the app the old magpie runs from
+(#4983, #2362). macOS 13 ends every program a process whose program file
+is gone starts, before its first instruction, while `fork` and `exec`
+still report success. So the handover's `open -n` and the relaunch's
+shell died unseen, the hello wait ran out, relaunch.log was never written,
+and magpie quit with nothing to bring it back. `update.Install` and
+`InstallAsAdmin` move the old app to `.magpie-old/<pid>-<random>` beside
+it. That folder is on the app's own volume, and Stage doesn't clear it.
+Its name isn't an app's (#3965). A copy goes once lsof finds no process
+running a program in its `Contents/MacOS` (`RemoveRetired`, at start and
+every 30 minutes, `KeepRetiredClear`). A `magpie web` started from the
+app runs on as the old version after the app updates. The admin install
+removes the unused copies in its own script, since they are root's. Each
+shell `OpenBeside` and `Relaunch` start writes a byte to fd 3 before
+anything else (`startShell`). A shell that ends first, or says nothing in
+10s, is an error, so the restart stays up instead (see
+`TestInstallKeepsTheAppItRunsFrom`, `TestRetiredKeptWhileRunFrom` and
+`TestRelaunchShellThatNeverRanIsAnError` in
+[`retire_test.go`](../../internal/update/retire_test.go)).
 
 Once handed over, the old one does nothing beside the new one but finish
 its requests (#4938): its loops end with its backend (`backendCtx`):

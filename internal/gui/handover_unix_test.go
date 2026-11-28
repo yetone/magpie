@@ -359,3 +359,36 @@ func TestHandedOverQuitsByItsDeadline(t *testing.T) {
 		t.Fatal("the magpie that handed over never exited")
 	}
 }
+
+// #4983: on macOS 13 neither the new version beside this one nor the
+// relaunch after it could be started (every program a magpie whose app
+// was deleted starts is ended before it runs), and magpie quit with
+// nothing to bring it back. When neither starts, this one stays up and
+// says why, as a restart without a handover does.
+func TestHandoverNeitherStartsStaysUpAndSaysSo(t *testing.T) {
+	gw := handoverSandbox(t, "http://127.0.0.1:1")
+	o := updates
+	updates = &updater{state: "ready"}
+	defer func() { updates = o }()
+	startBeside = func(string, bool, string) error { return errors.New("the shell that opens the new version didn't run") }
+	relaunchBinary = func(string, string, bool, string) error {
+		return errors.New("the shell that opens the new version didn't run")
+	}
+	if !beginHandover("", startExe, false, "", false) {
+		t.Fatal("the restart didn't try to hand over")
+	}
+	quit := make(chan struct{})
+	leave(func() { close(quit) })
+	eventually2(t, 10*time.Second, "the restart never gave up", func() bool { return pending.Load() == nil })
+	select {
+	case <-quit:
+		t.Fatal("quit with nothing started to come back")
+	case <-time.After(200 * time.Millisecond):
+	}
+	if servedByPid(gw.Addr()) != os.Getpid() {
+		t.Error("the gateway isn't this one's any more")
+	}
+	if j := updates.json(); !strings.Contains(j.Error, "couldn't be started") {
+		t.Errorf("nothing says why: %+v", j)
+	}
+}

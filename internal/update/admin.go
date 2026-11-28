@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -86,10 +87,11 @@ func AsAdmin(why, script string) error {
 }
 
 // swapScript moves bundle aside to old and staged into its place, putting
-// bundle back if the second move fails.
+// bundle back if the second move fails. old is kept: the magpie running
+// from it still starts programs (Install).
 func swapScript(staged, bundle, old string) string {
-	s, b, o := shellQuote(staged), shellQuote(bundle), shellQuote(old)
-	return "rm -rf " + o + " && mv " + b + " " + o + " && if mv " + s + " " + b + "; then rm -rf " + o + "; else mv " + o + " " + b + "; exit 1; fi"
+	s, b, o, d := shellQuote(staged), shellQuote(bundle), shellQuote(old), shellQuote(filepath.Dir(old))
+	return "mkdir -p " + d + " && mv " + b + " " + o + " && if mv " + s + " " + b + "; then :; else mv " + o + " " + b + "; exit 1; fi"
 }
 
 // ShellQuote quotes s for /bin/sh.

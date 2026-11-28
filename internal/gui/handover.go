@@ -284,6 +284,7 @@ func (ho *handover) fail(err error) bool {
 	if ferr := ho.fallback(); ferr != nil {
 		// nothing will start the new version: this one stays up
 		log.Println("update: the new version couldn't be started, this one runs on:", ferr)
+		notRestarted(ferr)
 		return false
 	}
 	return true

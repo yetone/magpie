@@ -215,6 +215,8 @@ func (u *updater) start() {
 	go u.followReplaced(backendCtx)                     // the app's or magpie web's update (visamzh on X)
 	if u.bundle != "" {
 		go update.ForgetOldStaging(u.bundle) // #3965
+		// the app the last update replaced, once nothing runs from it
+		go update.KeepRetiredClear(backendCtx, u.bundle)
 	}
 	go func() {
 		time.Sleep(5 * time.Second) // let the app settle first
@@ -1179,18 +1181,23 @@ func restartInto(web, window bool, view string, bySelf bool) bool {
 		return false
 	}
 	if err != nil {
-		// the new version is in place but nothing started it: quitting now
-		// would leave no magpie running at all (ShipInSand on X: it "often
-		// disappears by itself"). This one runs on and says so.
 		log.Println("update:", err)
-		os.Remove(filepath.Join(settings.Dir(), updatedInAppFile))
-		unmarkQuietRestart()
-		updates.mu.Lock()
-		updates.err = "the new version is installed but couldn't be started (" + err.Error() + "): quit magpie and open it again"
-		updates.mu.Unlock()
+		notRestarted(err)
 		return false
 	}
 	return true
+}
+
+// notRestarted is a restart whose new version is in place but nothing
+// started it: quitting now would leave no magpie running at all
+// (ShipInSand on X: it "often disappears by itself"). This one runs on and
+// says so.
+func notRestarted(err error) {
+	os.Remove(filepath.Join(settings.Dir(), updatedInAppFile))
+	unmarkQuietRestart()
+	updates.mu.Lock()
+	updates.err = "the new version is installed but couldn't be started (" + err.Error() + "): quit magpie and open it again"
+	updates.mu.Unlock()
 }
 
 // mainShown says whether the app's window is up, for a restart asked for

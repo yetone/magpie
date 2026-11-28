@@ -67,7 +67,8 @@ func TestSwapScript(t *testing.T) {
 		t.Skip("the swap runs as root under /bin/sh, on a Mac or Linux")
 	}
 	dir := filepath.Join(t.TempDir(), `it's "a" \ $(dir) `)
-	bundle, staged, old := filepath.Join(dir, "magpie.app"), filepath.Join(dir, "s", stagedName), filepath.Join(dir, "s", asideName)
+	bundle, staged := filepath.Join(dir, "magpie.app"), filepath.Join(dir, "s", stagedName)
+	old := retiredPath(bundle)
 	app(t, bundle, "old")
 	app(t, staged, "new")
 	if b, err := exec.Command("/bin/sh", "-c", swapScript(staged, bundle, old)).CombinedOutput(); err != nil {
@@ -76,12 +77,14 @@ func TestSwapScript(t *testing.T) {
 	if version(t, bundle) != "new" {
 		t.Error("the new app isn't in place")
 	}
-	if _, err := os.Stat(old); !os.IsNotExist(err) {
-		t.Error("the old app was left behind")
+	// the magpie running from it still starts programs (#4983)
+	if version(t, old) != "old" {
+		t.Error("the app magpie runs from was deleted")
 	}
 
 	// a failed second move puts the app back
 	os.RemoveAll(staged)
+	old = retiredPath(bundle)
 	if exec.Command("/bin/sh", "-c", swapScript(staged, bundle, old)).Run() == nil {
 		t.Error("the swap succeeded without a staged app")
 	}

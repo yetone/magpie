@@ -470,14 +470,11 @@ func team(ctx context.Context, app string) string {
 	return ""
 }
 
-// stagedName is what the new app is unpacked as in stageDir, and asideName
-// what the installed one is moved to while they are swapped. Neither ends
-// in .app, so LaunchServices never registers either as a second magpie
-// (#3965); the renames don't need the name, and stay on one volume.
-const (
-	stagedName = "payload"
-	asideName  = "old"
-)
+// stagedName is what the new app is unpacked as in stageDir. Neither it
+// nor where Install moves the installed one (retiredPath) ends in .app, so
+// LaunchServices never registers either as a second magpie (#3965); the
+// renames don't need the name, and stay on one volume.
+const stagedName = "payload"
 
 // stageDir is where an update is unpacked: beside what it replaces, so
 // installing it is a rename on one volume, or, where magpie may not write,
@@ -492,17 +489,25 @@ func stageDir(dir string) string {
 }
 
 // Install swaps the staged app in for bundle. The running copy keeps going
-// until it quits; the next launch is the new one. Where the folder is not
+// until it quits; the next launch is the new one. The copy it runs from is
+// moved aside, never deleted (retiredPath): on macOS 13 a process whose
+// program is gone can't start another, so the open of the new version and
+// the shell that relaunches it were ended before their first line, and
+// magpie quit and never came back (#2362, #4983). Where the folder is not
 // magpie's to change the error is a permission one (NeedsAdmin), and
 // InstallAsAdmin can do it instead.
 func Install(staged, bundle string) error {
-	old := filepath.Join(filepath.Dir(staged), asideName)
-	os.RemoveAll(old)
+	old := retiredPath(bundle)
+	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
+		return err
+	}
 	if err := os.Rename(bundle, old); err != nil {
+		os.Remove(filepath.Dir(old)) // only when empty
 		return err
 	}
 	if err := os.Rename(staged, bundle); err != nil {
 		os.Rename(old, bundle) // put it back
+		os.Remove(filepath.Dir(old))
 		return err
 	}
 	os.RemoveAll(filepath.Dir(staged)) // .magpie-update
@@ -510,10 +515,21 @@ func Install(staged, bundle string) error {
 }
 
 // InstallAsAdmin is Install with the administrator's password, asked for
-// by the system.
+// by the system. The running copy is moved aside on its own volume, as
+// Install does: a move to the cache, on another volume, is a copy and a
+// delete. The old copies nothing runs from any more go in the same
+// script, since magpie can't remove what the administrator moved.
 func InstallAsAdmin(staged, bundle string) error {
-	old := filepath.Join(filepath.Dir(staged), asideName)
-	err := asAdmin(swapScript(staged, bundle, old))
+	old := retiredPath(bundle)
+	script := swapScript(staged, bundle, old)
+	if stale := unusedRetired(bundle); len(stale) > 0 {
+		script = "{ " + script + "; } || exit 1; rm -rf"
+		for _, p := range stale {
+			script += " " + shellQuote(p)
+		}
+		script += " 2>/dev/null; exit 0"
+	}
+	err := asAdmin(script)
 	if err == nil {
 		os.RemoveAll(filepath.Dir(staged))
 	}
@@ -634,11 +650,47 @@ func retried(command string, waits []string) string {
 // 13 at least, the job LaunchServices runs an app in when it is opened from
 // the Dock or Finder, which magpie can't set that key on (#2362).
 func runAfterExit(pid int, command string) error {
-	script := fmt.Sprintf(`while kill -0 %d 2>/dev/null; do sleep 0.2; done; %s`, pid, command)
-	cmd := proc.Command("/bin/sh", "-c", script)
+	return startShell(fmt.Sprintf(`while kill -0 %d 2>/dev/null; do sleep 0.2; done; %s`, pid, command))
+}
+
+// shellPath is the shell startShell runs; tests stand in for it.
+var shellPath = "/bin/sh"
+
+// shellReady is how long startShell waits for its shell to say it runs.
+var shellReady = 10 * time.Second
+
+// startShell starts the shell running script in a session of its own, and
+// returns once the shell has run its first command. A started process is
+// not one that runs: on macOS 13 a magpie whose app was deleted had every
+// process it started ended before its first instruction, and Start, which
+// sees only that exec didn't fail, said nil. The handover waited 60s for a
+// new version no one had opened, the relaunch shell never wrote a line to
+// relaunch.log, and magpie quit with nothing to bring it back (#4983).
+// Now that is an error, and the caller runs on and says so.
+func startShell(script string) error {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	cmd := proc.Command(shellPath, "-c", "printf . >&3; exec 3>&-; "+script)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
+	cmd.ExtraFiles = []*os.File{w} // its fd 3, to say it runs on
 	detach(cmd)
-	return proc.StartReaped(cmd)
+	err = proc.StartReaped(cmd)
+	w.Close() // the shell's is the only end left: its end is EOF here
+	if err != nil {
+		return err
+	}
+	r.SetReadDeadline(time.Now().Add(shellReady))
+	var b [1]byte
+	if n, err := r.Read(b[:]); n == 1 {
+		return nil
+	} else if err == nil || err == io.EOF {
+		err = errors.New("it was ended before it ran")
+	}
+	cmd.Process.Kill()
+	return fmt.Errorf("the shell that opens the new version didn't run: %w", err)
 }
 
 // relaunchOpen is the open command Relaunch runs for bundle. -n asks
@@ -1601,10 +1653,7 @@ func Alive(pid int) bool { return alive(pid) }
 // window, its window; else its menu bar icon only, as Relaunch, in the
 // background as Relaunch's when quiet or with no window.
 func OpenBeside(bundle string, window, quiet bool) error {
-	cmd := proc.Command("/bin/sh", "-c", retried(openBeside(bundle, window, quiet), openWaits))
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
-	detach(cmd)
-	return proc.StartReaped(cmd)
+	return startShell(retried(openBeside(bundle, window, quiet), openWaits))
 }
 
 // openBeside is the open command OpenBeside runs for bundle.

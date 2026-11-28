@@ -66,7 +66,10 @@ func TestInstallStagesNoApp(t *testing.T) {
 	}
 }
 
-// InstallAsAdmin moves the old app aside to a name that isn't an app's.
+// InstallAsAdmin moves the old app aside to a name that isn't an app's, on
+// the app's own volume (a move to the cache is a copy and a delete, and
+// the magpie running from it is then refused every program it starts,
+// #4983), and removes there only the copies nothing runs from.
 func TestInstallAsAdminAsideIsNoApp(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("osascript")
@@ -77,14 +80,29 @@ func TestInstallAsAdminAsideIsNoApp(t *testing.T) {
 		script = args[len(args)-1]
 		return nil, nil
 	}
+	apps := filepath.Join(t.TempDir(), "Applications")
+	bundle := filepath.Join(apps, "magpie.app")
+	unused, inUse := filepath.Join(retiredDir(bundle), "1-unused"), filepath.Join(retiredDir(bundle), "2-inuse")
+	for _, p := range []string{unused, inUse} {
+		os.MkdirAll(filepath.Join(p, "Contents", "MacOS"), 0o755)
+	}
+	was := runFrom
+	runFrom = func(p string) bool { return p == inUse }
+	defer func() { runFrom = was }()
 	cache := filepath.Join(t.TempDir(), "update")
-	if err := InstallAsAdmin(filepath.Join(cache, stagedName), "/Applications/magpie.app"); err != nil {
+	if err := InstallAsAdmin(filepath.Join(cache, stagedName), bundle); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(script, appleString(shellQuote(filepath.Join(cache, asideName)))) {
-		t.Errorf("the swap doesn't move the app aside to %s: %s", asideName, script)
+	if !strings.Contains(script, "mv '"+bundle+"' '"+retiredDir(bundle)+string(filepath.Separator)) {
+		t.Errorf("the swap doesn't move the app aside beside it, to %s: %s", retiredDir(bundle), script)
 	}
-	if strings.Count(script, ".app") != strings.Count(script, "/Applications/magpie.app") {
+	if strings.Count(script, cache) != 1 { // the staged app's only
+		t.Errorf("the swap moves the app to the cache: %s", script)
+	}
+	if !strings.Contains(script, appleString(shellQuote(unused))) || strings.Contains(script, appleString(shellQuote(inUse))) {
+		t.Errorf("the swap doesn't remove just the unused copy: %s", script)
+	}
+	if strings.Count(script, ".app") != strings.Count(script, bundle) {
 		t.Errorf("the swap names another app: %s", script)
 	}
 }
