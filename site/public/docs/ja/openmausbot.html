@@ -212,6 +212,8 @@
   …
 }</pre></div>
     <p>1M のモデルには <code>[1m]</code> が付きます。OpenMausBot が受け付けないモデル ID は除きます。そうした ID が 1 つでもあると、エンジン全体が拒否されるからです。</p>
+    <h3 id="no-claude"><a class="anchor" href="#no-claude">Claude Code を入れていない場合</a></h3>
+    <p>Claude エンドポイントは claude CLI で動くため、それがないと OpenMausBot は "claude CLI not found" と表示します。OpenMausBot が claude を見つけられないとき、magpie はエンジンを OpenMausBot 自身の OpenAI 互換エンジンとして書きます。driver は openai-compat、url はゲートウェイの <code>/v1</code>、magpie のキーを使い、magpie のモデルをすべて managedModels に入れます。何もインストールする必要はありません。以前 Claude エンドポイントとして書いたエンジンは次の同期で切り替わります。magpie の Agents ページが再起動を勧めたら、OpenMausBot を再起動してください。</p>
     <h2 id="fleet"><a class="anchor" href="#fleet">既定のエンジンはそのまま</a></h2>
     <p>config.json にエンジンが保存されていないとき、OpenMausBot は既定のエンジン群で動きます。保存された instances がエンジンのすべてなので、magpie のものだけを書くとほかのエンジンが消えてしまいます。そのためファイルにエンジンがないとき、magpie は既定のエンジン群を自分のものと一緒に書きます。</p>
     <h2 id="running"><a class="anchor" href="#running">先に終了する理由</a></h2>

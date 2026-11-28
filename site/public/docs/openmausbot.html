@@ -212,6 +212,8 @@
   …
 }</pre></div>
     <p>A 1M model is marked <code>[1m]</code>. A model id OpenMausBot wouldn't take is left out, since one such id makes it refuse the whole engine.</p>
+    <h3 id="no-claude"><a class="anchor" href="#no-claude">With no Claude Code installed</a></h3>
+    <p>A Claude endpoint runs the claude CLI, so without it OpenMausBot says "claude CLI not found". When OpenMausBot has no claude to run, magpie writes the engine as OpenMausBot's own OpenAI-compatible one instead: driver openai-compat, the gateway's <code>/v1</code> as its url, magpie's key, and every magpie model in managedModels. Nothing needs installing. A Claude endpoint magpie wrote before is switched over by the next sync; restart OpenMausBot when magpie's Agents page offers it.</p>
     <h2 id="fleet"><a class="anchor" href="#fleet">The default fleet stays</a></h2>
     <p>With no engines saved in config.json, OpenMausBot runs its default fleet. A saved instances map is the whole fleet, so one holding magpie's alone would take every other engine away. When the file has none, magpie writes the default fleet beside its own.</p>
     <h2 id="running"><a class="anchor" href="#running">Why quit it first</a></h2>

@@ -212,6 +212,8 @@
   …
 }</pre></div>
     <p>1M 上下文的模型标成 <code>[1m]</code>。OpenMausBot 不接受的模型 ID 会被去掉，因为列表里只要有一个这样的 ID，它就会拒绝整个引擎。</p>
+    <h3 id="no-claude"><a class="anchor" href="#no-claude">没有安装 Claude Code 时</a></h3>
+    <p>Claude 端点要靠 claude CLI 运行，没有它时 OpenMausBot 会提示 "claude CLI not found"。OpenMausBot 找不到 claude 时，magpie 改按 OpenMausBot 自己的 OpenAI 兼容引擎来写：driver 为 openai-compat，url 是网关的 <code>/v1</code>，用 magpie 的 Key，全部 magpie 模型写在 managedModels 里。什么都不用安装。之前写成 Claude 端点的引擎会在下一次同步时换过来；magpie 的 Agents 页提示重启时，重启 OpenMausBot 即可。</p>
     <h2 id="fleet"><a class="anchor" href="#fleet">默认引擎保留</a></h2>
     <p>config.json 里没有保存引擎时，OpenMausBot 运行它的默认引擎。保存下来的 instances 就是全部引擎，只写 magpie 一个会把其他引擎都拿掉。所以文件里没有引擎时，magpie 会把默认引擎和自己的一起写进去。</p>
     <h2 id="running"><a class="anchor" href="#running">为什么要先退出</a></h2>

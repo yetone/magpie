@@ -25,6 +25,18 @@ package agent
 // user's settings nor a provider switch in OpenMausBot's environment
 // reaches it (claudeEnvironment, claudeInstanceOwnsRouting).
 //
+// A claudeAgent engine runs the claude CLI. Where OpenMausBot has none to
+// run (ombClaudeCLI), the engine listed magpie's models and answered
+// "claude CLI not found", with an install button that needs Node's npm
+// (KorwinTeo on X). There magpie's engine is OpenMausBot's own
+// OpenAI-compatible one instead (server/drivers/openai-compat.ts, as its
+// openai-compat-endpoints.ts adds one): it calls the gateway's /v1 itself,
+// with OpenMausBot's own tools, and needs no CLI. The models are magpie's
+// in managedModels, so OpenMausBot asks the gateway for no other list. A
+// claudeAgent engine with no CLI to run is written over so; one on the
+// OpenAI-compatible driver stays on it, so a bot's engine never changes
+// under it twice.
+//
 // A saved map is the whole fleet: one holding magpie's alone would take
 // every other engine away. So when the file has none, magpie writes the
 // default fleet beside its own, as OpenMausBot itself does when the user
@@ -56,6 +68,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/lazyre"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -164,6 +177,9 @@ func openMausBot(home string) *Agent {
 			if !wired() {
 				return ""
 			}
+			if ombDriver(path) == ombAPIDriver {
+				return wiringOff("OpenMausBot", path, func(k string) (string, bool) { return edit.GetJSON(path, ombInstance+".config."+k) }, "url", gateway.URL()+"/v1")
+			}
 			return wiringOff("OpenMausBot", path, func(k string) (string, bool) { return edit.GetJSON(path, ombInstance+".environment."+k) }, "ANTHROPIC_BASE_URL", gateway.URL())
 		},
 		Fields: []Field{{
@@ -225,10 +241,115 @@ func ombModels() []string {
 	return out
 }
 
+// ombAPIDriver is OpenMausBot's OpenAI-compatible driver, which calls a
+// model's API itself and needs no CLI.
+const ombAPIDriver = "openai-compat"
+
+// ombDriver is the driver of magpie's engine at path, "" with none.
+func ombDriver(path string) string {
+	d, _ := edit.GetJSON(path, ombInstance+".driver")
+	return d
+}
+
+// ombOnAPI says magpie's engine at path, in the folder dir, is to be
+// OpenAI-compatible: it is already, or OpenMausBot has no Claude Code to
+// run it as a Claude endpoint.
+func ombOnAPI(path, dir string) bool {
+	return ombDriver(path) == ombAPIDriver || !ombClaudeCLI(path, dir)
+}
+
+// ombInheritedCLI is the Claude Code the user gave OpenMausBot
+// (inheritedCli): the cli of the first claudeAgent that is no endpoint.
+func ombInheritedCLI(path string) string {
+	raw, ok := edit.GetJSON(path, "instances")
+	if !ok {
+		return ""
+	}
+	var insts map[string]struct {
+		Driver string         `json:"driver"`
+		Config map[string]any `json:"config"`
+	}
+	json.Unmarshal([]byte(raw), &insts)
+	ids := make([]string, 0, len(insts))
+	for id := range insts {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		e := insts[id]
+		if _, endpoint := e.Config["endpointModels"]; id == magpieID || e.Driver != "claudeAgent" || endpoint {
+			continue
+		}
+		if cli, _ := e.Config["cli"].(string); cli != "" {
+			return cli
+		}
+	}
+	return ""
+}
+
+// ombClaudeCLI says OpenMausBot has a claude CLI to run a claudeAgent
+// engine with, as it looks for one (server/drivers/claude.ts,
+// server/env-path.ts): the one a Claude engine of the user's names, the
+// copy it installed in its own folder (engine-install.ts: tools/npm under
+// its data folder), or claude on PATH and in the folders it adds to it
+// (~/.local/bin, npm's, bun's, Volta's, ~/.claude/local, Homebrew's). A var
+// so tests say.
+var ombClaudeCLI = func(path, dir string) bool {
+	if cli := ombInheritedCLI(path); cli != "" {
+		if filepath.IsAbs(cli) && isFile(cli) || !filepath.IsAbs(cli) && binAt(cli) != "" {
+			return true
+		}
+	}
+	own := filepath.Join(dir, "tools", "npm")
+	if runtime.GOOS != "windows" {
+		own = filepath.Join(own, "bin")
+	}
+	home, _ := os.UserHomeDir()
+	dirs := append([]string{own, filepath.Join(home, ".claude", "local")}, proc.SystemDirs("/opt/homebrew/bin", "/usr/local/bin")...)
+	return proc.ToolIn("claude", dirs) != "" || binAt("claude") != ""
+}
+
+// ombAPIModels is the magpie models OpenMausBot's picker lists for an
+// OpenAI-compatible magpie engine: as the gateway's /v1 serves them.
+func ombAPIModels() []string {
+	out := []string{}
+	for _, m := range sharedModels("openmausbot") {
+		if id := strings.TrimSpace(m.ID); id != "" && !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// ombWanted is the models magpie lists in its engine at path, in the folder
+// dir, as the engine it is to be takes them.
+func ombWanted(path, dir string) []string {
+	if ombOnAPI(path, dir) {
+		return ombAPIModels()
+	}
+	return ombModels()
+}
+
 // ombInstanceJSON is magpie's engine in OpenMausBot's config.json at path,
 // in the folder dir, on the gateway at gw, in the shape OpenMausBot's own
-// Claude endpoint has; nil with no model it would take.
+// Claude endpoint has, or its OpenAI-compatible one has where it has no
+// Claude Code to run (ombOnAPI); nil with no model it would take.
 func ombInstanceJSON(path, dir, gw string) map[string]any {
+	if ombOnAPI(path, dir) {
+		models := ombAPIModels()
+		if len(models) == 0 {
+			return nil
+		}
+		// access "custom": where OpenMausBot listed magpie's engine before
+		return map[string]any{
+			"driver": ombAPIDriver, "displayName": "magpie", "access": "custom",
+			"config": map[string]any{
+				"url":           gw + "/v1",
+				"key":           agentKeyAt("openmausbot", gw),
+				"managedModels": models,
+			},
+		}
+	}
 	models := ombModels()
 	if len(models) == 0 {
 		return nil
@@ -238,29 +359,8 @@ func ombInstanceJSON(path, dir, gw string) map[string]any {
 		"requireApiKey":  true,
 		"endpointModels": models,
 	}
-	// the Claude Code the user gave OpenMausBot (inheritedCli): the first
-	// claudeAgent with a binary that is no endpoint
-	if raw, ok := edit.GetJSON(path, "instances"); ok {
-		var insts map[string]struct {
-			Driver string         `json:"driver"`
-			Config map[string]any `json:"config"`
-		}
-		json.Unmarshal([]byte(raw), &insts)
-		ids := make([]string, 0, len(insts))
-		for id := range insts {
-			ids = append(ids, id)
-		}
-		slices.Sort(ids)
-		for _, id := range ids {
-			e := insts[id]
-			if _, endpoint := e.Config["endpointModels"]; id == magpieID || e.Driver != "claudeAgent" || endpoint {
-				continue
-			}
-			if cli, _ := e.Config["cli"].(string); cli != "" {
-				config["cli"] = cli
-				break
-			}
-		}
+	if cli := ombInheritedCLI(path); cli != "" {
+		config["cli"] = cli
 	}
 	// a key naming OpenMausBot: the Claude Code it runs sends nothing of
 	// OpenMausBot's own, so with the gateway's plain token its calls were
@@ -285,7 +385,10 @@ func ombInstanceJSON(path, dir, gw string) map[string]any {
 // the one at path: its name, colour, icon, whether it is on or hidden, the
 // keys magpie doesn't write and the environment besides the routing are
 // the user's, and so is the model picked first while magpie still lists it.
-// The routing, the Claude home and the models are magpie's.
+// The routing, the Claude home and the models are magpie's. One moved to
+// the OpenAI-compatible driver keeps only its name, colour, icon and
+// whether it is on or hidden: a Claude endpoint's config and environment
+// mean nothing to that driver.
 func ombMerged(path, dir, gw string) any {
 	want := ombInstanceJSON(path, dir, gw)
 	if want == nil {
@@ -298,6 +401,26 @@ func ombMerged(path, dir, gw string) any {
 	var have map[string]json.RawMessage
 	if json.Unmarshal([]byte(cur), &have) != nil || have == nil {
 		return want
+	}
+	var was string
+	json.Unmarshal(have["driver"], &was)
+	if was != want["driver"] {
+		for k := range have {
+			if !slices.Contains([]string{"displayName", "accentColor", "icon", "enabled", "hidden"}, k) {
+				delete(have, k)
+			}
+		}
+	}
+	if want["driver"] == ombAPIDriver {
+		b, err := json.Marshal(want)
+		var w map[string]json.RawMessage
+		if err != nil || json.Unmarshal(b, &w) != nil {
+			return want
+		}
+		if _, named := have["displayName"]; named {
+			delete(w, "displayName")
+		}
+		return mergeTheirs(have, w, nil)
 	}
 	var theirs map[string]any
 	if json.Unmarshal(have["environment"], &theirs) == nil {
@@ -329,9 +452,14 @@ func ombMerged(path, dir, gw string) any {
 }
 
 // ombSaved is the models magpie's engine at path lists in OpenMausBot's
-// picker, as the file has them.
+// picker, as the file has them: a Claude endpoint's endpointModels, an
+// OpenAI-compatible engine's managedModels.
 func ombSaved(path string) []string {
-	raw, _ := edit.GetJSON(path, ombInstance+".config.endpointModels")
+	key := ".config.endpointModels"
+	if ombDriver(path) == ombAPIDriver {
+		key = ".config.managedModels"
+	}
+	raw, _ := edit.GetJSON(path, ombInstance+key)
 	var have []string
 	json.Unmarshal([]byte(raw), &have)
 	return have
@@ -339,11 +467,17 @@ func ombSaved(path string) []string {
 
 // ombPart is what OpenMausBot reads of magpie's engine at path when it
 // starts, for a Restart while it runs on an older one (AppBehind): the
-// gateway, the model first picked and the models listed, not the key.
+// driver, the gateway, the model first picked and the models listed, not
+// the key.
 func ombPart(path string) string {
+	driver := ombDriver(path)
 	url, _ := edit.GetJSON(path, ombInstance+".environment.ANTHROPIC_BASE_URL")
 	model, _ := edit.GetJSON(path, ombInstance+".environment.ANTHROPIC_MODEL")
-	return url + "\n" + model + "\n" + strings.Join(ombSaved(path), "\n")
+	if driver == ombAPIDriver {
+		url, _ = edit.GetJSON(path, ombInstance+".config.url")
+		model = ""
+	}
+	return driver + "\n" + url + "\n" + model + "\n" + strings.Join(ombSaved(path), "\n")
 }
 
 // ombListStale says magpie's engine at path lists other models than magpie
@@ -355,12 +489,18 @@ func ombPart(path string) string {
 // (maxleebeta, 11-08: Antigravity's weren't found), and no catalog change
 // follows to write the list again.
 //
+// So is a Claude endpoint OpenMausBot has no Claude Code to run
+// (ombOnAPI): it never answered, and nothing else writes it over.
+//
 // It is not a Check drift: that reads as unwired, and a port change
 // rewires only agents without one.
-func ombListStale(path string) bool {
-	want := ombModels()
+func ombListStale(path, dir string) bool {
+	want := ombWanted(path, dir)
 	if len(want) == 0 {
 		return false
+	}
+	if ombOnAPI(path, dir) && ombDriver(path) != ombAPIDriver {
+		return true
 	}
 	have := ombSaved(path)
 	if len(have) != len(want) {
@@ -407,7 +547,7 @@ func keepOMBListed(ctx context.Context, every time.Duration) {
 func ombListedOnce() error {
 	home, _ := homes()
 	a := openMausBot(home)
-	if !a.Wired() || !ombListStale(a.Path) {
+	if !a.Wired() || !ombListStale(a.Path, a.Dir) {
 		return nil
 	}
 	return synced(a.Sync)

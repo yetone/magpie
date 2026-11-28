@@ -91,6 +91,7 @@ func ombRelay(t *testing.T) {
 // file back with none.
 func TestOpenMausBotEngine(t *testing.T) {
 	home := syncHome(t)
+	ombHasClaude(t, true)
 	stashHome(t)
 	ombRelay(t)
 	dir := filepath.Join(home, ".openmausbot")
@@ -203,6 +204,7 @@ func TestOpenMausBotEngine(t *testing.T) {
 // but for the routing, which is magpie's.
 func TestOpenMausBotKeepsTheUsers(t *testing.T) {
 	home := syncHome(t)
+	ombHasClaude(t, true)
 	stashHome(t)
 	ombRelay(t)
 	path := filepath.Join(home, ".openmausbot", "config.json")
@@ -290,6 +292,7 @@ func TestOpenMausBotKeepsTheUsers(t *testing.T) {
 // off takes magpie's engine out and leaves the rest.
 func TestOpenMausBotFleetChanged(t *testing.T) {
 	home := syncHome(t)
+	ombHasClaude(t, true)
 	stashHome(t)
 	ombRelay(t)
 	path := filepath.Join(home, ".openmausbot", "config.json")
@@ -442,6 +445,7 @@ func ombSaves(t *testing.T, path string, engine json.RawMessage) {
 func TestOpenMausBotListWrittenAgain(t *testing.T) {
 	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	home := syncHome(t)
+	ombHasClaude(t, true)
 	stashHome(t)
 	ombRelay(t)
 	a := openMausBot(home)
@@ -549,6 +553,7 @@ func TestOpenMausBotListWrittenAgain(t *testing.T) {
 // after it started doesn't.
 func TestOpenMausBotRestartOnMac(t *testing.T) {
 	home := restartSandbox(t)
+	ombHasClaude(t, true)
 	ombRelay(t)
 	apps := filepath.Join(home, "Applications")
 	bundle := macApp(t, apps, "OpenMausBot.app", "com.openmausbot.app", "OpenMausBot")
