@@ -1690,6 +1690,24 @@ func (s *Server) codexReset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
+// cindyLevels are the levels Cindy is offered of a model with levels
+// efforts: all of them but Codex's Ultra. Cindy's picker offers the
+// levels this list gives (parseModelsListResponse) and hands the one
+// picked to the Codex it runs, whose catalog for a provider's model is
+// Codex's own entry or, for one Codex doesn't know, an entry with no
+// levels (catalogWithModels, nativeCodexFallbackModel). Codex sends Ultra
+// as the multi-agent effort, max or the highest level of that entry, and
+// medium where it has none (ModelInfo::resolve_reasoning_effort), so
+// gpt-6.2-astra, which Codex knows from 0.171 and Cindy's runs 0.166 of,
+// went out at medium when Ultra was picked (Zanghaihuase6m on X). Max is
+// still offered, which is what the gateway sends for Ultra (fitEffort).
+func cindyLevels(efforts []string) []string {
+	if !slices.Contains(efforts, "ultra") {
+		return efforts
+	}
+	return slices.DeleteFunc(slices.Clone(efforts), func(e string) bool { return e == "ultra" })
+}
+
 func modelObject(e provider.Entry) map[string]any {
 	type reasoningLevel struct {
 		Effort string `json:"effort"`
@@ -2176,6 +2194,9 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 			// (claude_discovery.go)
 			discovers, who := !magpie && claudeCodeDiscovers(r), access.Caller(r.Context())
 			for i, e := range rows {
+				if agent == "cindy" {
+					e.Efforts = cindyLevels(e.Efforts)
+				}
 				m := rs.row(e, labels[i])
 				id, bare := ids[i]
 				if bare {

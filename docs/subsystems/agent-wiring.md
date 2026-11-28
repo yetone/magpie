@@ -389,6 +389,16 @@ it, by Cindy's Provider in model names, and a name the user gave kept);
 plain, three providers' GLM-5.3-Flash read the same in its picker
 (cdredfox on X, `TestCindyDiscoveryNamesModelsApart`). Another client's
 `display_name` stays the name alone.
+The same list asked with Cindy's key leaves Codex's `ultra` out of each
+model's levels (`cindyLevels`). Cindy offers the levels the list gives
+and hands the one picked to the Codex it runs (0.166 in Cindy's
+`tools/codex-package/latest.json` on 11-28), whose catalog entry for a
+model that Codex doesn't know has no levels (`nativeCodexFallbackModel`);
+Codex sends Ultra on such an entry as medium
+(`ModelInfo::resolve_reasoning_effort`), so Ultra on gpt-6.2-astra, which
+Codex knows from 0.171, went out at medium (Zanghaihuase6m on X,
+`TestCindyOfferedOnlyLevelsItsCodexSends`). Max stays, and is what the
+gateway sends for Ultra. Another client is still offered Ultra.
 Reopening the link lets Lody handle duplicates.
 Bub requires its separately installed ACP plugin.
 
